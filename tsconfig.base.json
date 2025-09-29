@@ -8,6 +8,12 @@
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+
+    "baseUrl": ".",
+    "paths": {
+      "@motor/core": ["packages/core/src/index.ts"],
+      "@motor/parser": ["packages/parser/src/index.ts"]
+    }
   }
 }
