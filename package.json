@@ -1,0 +1,20 @@
+{
+  "name": "motor-unified-stage1",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "scripts": {
+    "verify": "tsc -p tsconfig.base.json --noEmit",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "dev:web": "pnpm --filter @motor/web dev",
+    "start:cli": "pnpm --filter @motor/cli exec motor --demo"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}

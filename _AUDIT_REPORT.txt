@@ -1,0 +1,37 @@
+=== File tree ===
+.github/PULL_REQUEST_TEMPLATE.md
+.github/workflows/ci.yml
+.gitignore
+.npmrc
+.nvmrc
+README.md
+package.json
+packages/cli/package.json
+packages/cli/src/index.ts
+packages/cli/tsconfig.json
+packages/core/package.json
+packages/core/src/engine.ts
+packages/core/src/expr.ts
+packages/core/src/index.ts
+packages/core/src/rational.ts
+packages/core/tests/core.unified.test.ts
+packages/core/tsconfig.json
+packages/parser/package.json
+packages/parser/src/index.ts
+packages/parser/tests/parser.unified.test.ts
+packages/parser/tsconfig.json
+packages/web/index.html
+packages/web/package.json
+packages/web/src/main.tsx
+packages/web/src/ui/App.tsx
+packages/web/tsconfig.json
+packages/web/vite.config.ts
+pnpm-workspace.yaml
+tsconfig.base.json
+
+=== Grep checks ===
+\bFalse\b: ['packages/core/src/rational.ts']
+dist/expr\.js: []
+any\)\s*=>\s*null: []
+console\.log\(: ['packages/cli/src/index.ts']
+TODO: []

@@ -1,0 +1,4 @@
+STATUS: WARN
+
+[regex] pythonic-boolean-typo :: packages/core/src/rational.ts
+[regex] console-log-leftovers :: packages/cli/src/index.ts

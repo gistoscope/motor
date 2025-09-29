@@ -1,0 +1,19 @@
+{
+  "name": "@motor/cli",
+  "version": "0.2.0",
+  "type": "module",
+  "bin": {
+    "motor": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@motor/core": "workspace:*",
+    "@motor/parser": "workspace:*"
+  }
+}
