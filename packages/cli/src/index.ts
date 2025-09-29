@@ -1,4 +1,3 @@
-
 #!/usr/bin/env node
 import { parse, print } from '@motor/parser';
 import { createEngine } from '@motor/core';
