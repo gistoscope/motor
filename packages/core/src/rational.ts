@@ -39,7 +39,7 @@ export const powInt = (a: Rational, k: bigint): Rational => {
 };
 
 export const isPerfectSquare = (x: bigint): boolean => {
-  if (x < 0n) return False;
+  if (x < 0n) return false;
   let r = bigintSqrt(x);
   return r*r == x;
 };
