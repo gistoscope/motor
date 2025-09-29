@@ -2,9 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "paths": {
+      "@motor/core": ["../core/dist/index.d.ts"],
+      "@motor/parser": ["../parser/dist/index.d.ts"]
+    }
   },
-  "include": [
-    "src"
-  ]
+  "include": ["src"]
 }
