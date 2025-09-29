@@ -1,10 +1,12 @@
 {
-  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
-  },
-  "include": [
-    "src"
-  ]
+    "outDir": "dist",
+
+    // ВАЖНО: на сборке parser уводим @motor/core на готовые d.ts из core/dist,
+    // чтобы tsc не тянул внутрь parser чужие файлы из core/src
+    "paths": {
+      "@motor/core": ["../core/dist/index.d.ts"]
+    }
+  }
 }
