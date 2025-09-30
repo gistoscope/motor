@@ -13,24 +13,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Let pnpm/action-setup read the version from package.json: "packageManager": "pnpm@x.y.z"
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: pnpm
 
-      # allow install even if lockfile is missing or slightly out of sync
       - name: Install deps
         run: pnpm install --no-frozen-lockfile
 
-      # safest: build only the web package
-      # if your package is named "@motor/web", keep the first line
-      # otherwise uncomment the second line instead
+      # Build web package. Try by workspace name first, fallback to folder path.
       - name: Build web
         run: |
           pnpm --filter @motor/web build || pnpm -C packages/web build
