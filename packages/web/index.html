@@ -2,10 +2,32 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Motor — Stage‑1 Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Motor — Stage-1 (sandbox)</title>
+    <!-- prove-this-is-the-right-index 2025-09-30 -->
+    <!-- (optional) favicon will be added in the first Codex Cloud task -->
+    <!-- <link rel="icon" href="/favicon.svg" /> -->
+    <style>
+      /* small helper for the fixed SANDBOX label */
+      #sandbox-banner {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 9999;
+        padding: 4px 8px;
+        border: 1px dashed #999;
+        background: #ffffe0;
+        font-family: system-ui, Arial, sans-serif;
+        font-size: 12px;
+        line-height: 1;
+        pointer-events: none; /* don't capture clicks */
+        user-select: none;
+      }
+    </style>
   </head>
   <body>
+    <div id="sandbox-banner" aria-hidden="true">SANDBOX</div>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
