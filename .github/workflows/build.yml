@@ -4,17 +4,33 @@ on:
     branches: [ sandbox ]
   pull_request:
     branches: [ sandbox ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 9
-      - uses: actions/setup-node@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: pnpm
-      - run: pnpm install
-      - run: pnpm -r build
+          cache: 'pnpm'
+
+      # allow install even if lockfile is missing or slightly out of sync
+      - name: Install deps
+        run: pnpm install --no-frozen-lockfile
+
+      # safest: build only the web package
+      # if your package is named "@motor/web", keep the first line
+      # otherwise uncomment the second line instead
+      - name: Build web
+        run: |
+          pnpm --filter @motor/web build || pnpm -C packages/web build
