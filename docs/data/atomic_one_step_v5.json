@@ -1,0 +1,18 @@
+[
+  {
+    "id": "atom.decimal-to-fraction",
+    "action": "decimalToFractionMinimal",
+    "description": "Reduce a decimal-style fraction to lowest terms",
+    "tags": ["fractions", "stage1"]
+  },
+  {
+    "id": "atom.expand-mixed-number",
+    "action": "expandMixedToSum",
+    "description": "Show an improper fraction as a whole plus remainder"
+  },
+  {
+    "id": "atom.normalize-sign",
+    "action": "normalizeSign",
+    "description": "Move a negative sign to the numerator"
+  }
+]

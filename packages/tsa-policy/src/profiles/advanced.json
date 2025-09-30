@@ -1,0 +1,16 @@
+{
+  "id": "advanced",
+  "label": "Advanced",
+  "bundles": ["common"],
+  "atoms": [
+    "decimalToFractionMinimal",
+    "expandMixedToSum",
+    "divFractionsToReciprocal",
+    "mulFractionsToSingle",
+    "factorizeFractionSides",
+    "factorizeDenominatorsForAddSub",
+    "normalizeSign",
+    "dropNeutral",
+    "flattenParens"
+  ]
+}

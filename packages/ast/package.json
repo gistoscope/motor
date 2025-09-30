@@ -1,6 +1,6 @@
 {
-  "name": "@motor/parser",
-  "version": "0.2.0",
+  "name": "@motor/ast",
+  "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -15,11 +15,9 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run --run"
   },
   "dependencies": {
-    "@motor/core": "workspace:*",
-    "@motor/ast": "workspace:*",
     "@motor/types": "workspace:*"
   }
 }

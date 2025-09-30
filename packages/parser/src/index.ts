@@ -1,6 +1,6 @@
 
-import { AST } from '@motor/core';
-import type { Expr } from '@motor/core';
+import * as AST from '@motor/ast';
+import type { Expr } from '@motor/types';
 import { print } from '@motor/core';
 
 export { print };

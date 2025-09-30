@@ -1,0 +1,8 @@
+{
+  "id": "common",
+  "label": "Common fraction skills",
+  "steps": [
+    "decimalToFractionMinimal",
+    "normalizeSign"
+  ]
+}

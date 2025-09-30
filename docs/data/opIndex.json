@@ -1,0 +1,37 @@
+{
+  "atom.decimal-to-fraction": {
+    "action": "decimalToFractionMinimal",
+    "source": "atomic",
+    "description": "Reduce a decimal-style fraction to lowest terms",
+    "tags": [
+      "fractions",
+      "stage1"
+    ]
+  },
+  "atom.expand-mixed-number": {
+    "action": "expandMixedToSum",
+    "source": "atomic",
+    "description": "Show an improper fraction as a whole plus remainder"
+  },
+  "atom.normalize-sign": {
+    "action": "normalizeSign",
+    "source": "atomic",
+    "description": "Move a negative sign to the numerator"
+  },
+  "plan.normalize-and-clean": {
+    "plan": [
+      "normalizeSign",
+      "dropNeutral"
+    ],
+    "source": "multistep",
+    "description": "Normalize signs and drop neutral terms"
+  },
+  "plan.expand-and-factor": {
+    "plan": [
+      "expandMixedToSum",
+      "factorizeFractionSides"
+    ],
+    "source": "multistep",
+    "description": "Expand and combine fractional parts"
+  }
+}
