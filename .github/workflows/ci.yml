@@ -25,24 +25,23 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # единая конфигурация реестра, чтобы не ловить 403
+      # единая конфигурация реестра
       - name: Configure npm registry
         run: |
           npm config set registry https://registry.npmjs.org/
           pnpm config set registry https://registry.npmjs.org/
           pnpm config set auto-install-peers true
 
-      # Для PR в sandbox и пушей в sandbox — быстрая установка без заморозки
+      # Для PR в sandbox и пушей в sandbox — быстрая установка
       - name: Install deps (sandbox fast)
         if: ${{ (github.event_name == 'pull_request' && github.base_ref == 'sandbox') || (github.event_name != 'pull_request' && github.ref_name == 'sandbox') }}
         run: pnpm install --no-frozen-lockfile
 
-      # Для всех остальных веток — строгая установка
+      # Остальные ветки — строго
       - name: Install deps (strict)
         if: ${{ !((github.event_name == 'pull_request' && github.base_ref == 'sandbox') || (github.event_name != 'pull_request' && github.ref_name == 'sandbox')) }}
         run: pnpm install --frozen-lockfile
 
-      # Нежёстные проверки: если скриптов нет — шаги не валят сборку
       - name: Typecheck
         run: pnpm -r typecheck || pnpm -r -w typecheck || true
 
