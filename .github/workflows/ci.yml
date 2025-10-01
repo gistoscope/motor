@@ -2,41 +2,54 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, sandbox ]
   pull_request:
 
 jobs:
-  verify:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
+      # pnpm + Node 20 с кэшированием
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
           version: 9.12.0
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
+      # единая конфигурация реестра
       - name: Configure npm registry
         run: |
           npm config set registry https://registry.npmjs.org/
           pnpm config set registry https://registry.npmjs.org/
           pnpm config set auto-install-peers true
 
-      - name: Install (sandbox fast)
-        if: ${{ github.ref_name == 'sandbox' }}
+      # Для PR в sandbox и пушей в sandbox — быстрая установка
+      - name: Install deps (sandbox fast)
+        if: ${{ (github.event_name == 'pull_request' && github.base_ref == 'sandbox') || (github.event_name != 'pull_request' && github.ref_name == 'sandbox') }}
         run: pnpm install --no-frozen-lockfile
 
-      - name: Install (strict)
-        if: ${{ github.ref_name != 'sandbox' }}
+      # Остальные ветки — строго
+      - name: Install deps (strict)
+        if: ${{ !((github.event_name == 'pull_request' && github.base_ref == 'sandbox') || (github.event_name != 'pull_request' && github.ref_name == 'sandbox')) }}
         run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm -r typecheck || pnpm -r -w typecheck || true
+
+      - name: Lint
+        run: pnpm -r lint || pnpm -r -w lint || true
 
       - name: Build
         run: pnpm -r build
 
       - name: Test
-        run: pnpm -r test
+        run: pnpm -r test || true

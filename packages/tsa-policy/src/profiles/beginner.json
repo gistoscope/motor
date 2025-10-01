@@ -1,0 +1,9 @@
+{
+  "id": "beginner",
+  "label": "Beginner",
+  "bundles": ["common"],
+  "atoms": [
+    "decimalToFractionMinimal",
+    "integerToOverOneOnOperatorClick"
+  ]
+}

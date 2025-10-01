@@ -9,11 +9,16 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
+    "resolveJsonModule": true,
 
     "baseUrl": ".",
     "paths": {
       "@motor/core": ["packages/core/src/index.ts"],
-      "@motor/parser": ["packages/parser/src/index.ts"]
+      "@motor/parser": ["packages/parser/src/index.ts"],
+      "@motor/ast": ["packages/ast/src/index.ts"],
+      "@motor/types": ["packages/types/src/index.ts"],
+      "@motor/tsa": ["packages/tsa/src/index.ts"],
+      "@motor/tsa-policy": ["packages/tsa-policy/src/index.ts"]
     }
   }
 }

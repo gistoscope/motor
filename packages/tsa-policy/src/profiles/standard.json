@@ -1,0 +1,12 @@
+{
+  "id": "standard",
+  "label": "Standard",
+  "bundles": ["common"],
+  "atoms": [
+    "decimalToFractionMinimal",
+    "expandMixedToSum",
+    "divFractionsToReciprocal",
+    "dropNeutral",
+    "flattenParens"
+  ]
+}
