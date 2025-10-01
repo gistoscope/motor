@@ -29,6 +29,29 @@ importers:
 
   packages/core: {}
 
+  packages/ast:
+    dependencies:
+      '@motor/types':
+        specifier: workspace:*
+        version: link:../types
+
+  packages/types: {}
+
+  packages/tsa:
+    dependencies:
+      '@motor/ast':
+        specifier: workspace:*
+        version: link:../ast
+      '@motor/types':
+        specifier: workspace:*
+        version: link:../types
+
+  packages/tsa-policy:
+    dependencies:
+      '@motor/tsa':
+        specifier: workspace:*
+        version: link:../tsa
+
   packages/parser:
     dependencies:
       '@motor/core':

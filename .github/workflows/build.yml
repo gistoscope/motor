@@ -6,52 +6,37 @@ on:
     branches: [ sandbox ]
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Reads pnpm version from package.json "packageManager": "pnpm@x.y.z"
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: pnpm
 
-      - name: Print env
+      - name: Configure npm registry
         run: |
-          node -v
-          pnpm -v
-          echo "packageManager: $(node -p "require('./package.json').packageManager || ''")"
-          echo "workspace file present?"; ls -la pnpm-workspace.yaml || true
-          echo "web package present?"; ls -la packages/web || true
-          echo "web package.json exists?"; ls -la packages/web/package.json || true
-          echo "web scripts:"; node -e "try{console.log(require('./packages/web/package.json').scripts)}catch(e){console.log('no web package.json')}" || true
+          npm config set registry https://registry.npmjs.org/
+          pnpm config set registry https://registry.npmjs.org/
+          pnpm config set auto-install-peers true
 
-      # Install deps (workspace-aware; won't fail if lockfile is out of sync)
-      - name: Install deps (workspace or web)
-        run: |
-          if [ -f pnpm-workspace.yaml ]; then
-            pnpm install --no-frozen-lockfile
-          else
-            pnpm -C packages/web install --no-frozen-lockfile
-          fi
+      - name: Install (sandbox fast)
+        if: ${{ github.ref_name == 'sandbox' }}
+        run: pnpm install --no-frozen-lockfile
 
-      # Build only if a build script exists; try several strategies
-      - name: Build web (best-effort)
-        shell: bash
-        run: |
-          set -e
-          if [ -f packages/web/package.json ] && node -e "process.exit(!(require('./packages/web/package.json').scripts||{}).build)" ; then
-            echo "-> using packages/web build script"
-            pnpm -C packages/web build
-          else
-            echo "No build script in packages/web. Trying fallbacks..."
-            # Try common defaults. If none work, skip with success to keep CI green.
-            (pnpm --filter @motor/web build || pnpm -C packages/web run build || npx --yes vite build --cwd packages/web) || echo "Skipping build (no script)."
-          fi
+      - name: Install (strict)
+        if: ${{ github.ref_name != 'sandbox' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Test
+        run: pnpm -r test
