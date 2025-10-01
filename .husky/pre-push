@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "[husky] pre-push: running tests and token policy"
+pnpm -r test || exit 1
+node scripts/forbidden-tokens.cjs || exit 1

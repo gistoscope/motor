@@ -1,0 +1,18 @@
+# Enforce LF for scripts and yaml to keep CI/Husky happy on Windows
+*.sh text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Treat binaries as binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.zip binary
+*.pdf binary
