@@ -1,0 +1,27 @@
+# EditorConfig helps developers define and maintain consistent
+# coding styles between different editors and IDEs.
+# Place this file at the repository root.
+root = true
+
+[*]
+charset = utf-8
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+end_of_line = lf
+
+# Shell-like scripts: enforce LF
+[*.{sh,bash}]
+end_of_line = lf
+
+# Windows scripts keep CRLF to avoid execution issues
+[*.ps1]
+end_of_line = crlf
+
+[*.bat]
+end_of_line = crlf
+
+# Keep trailing spaces in markdown when needed for line breaks
+[*.md]
+trim_trailing_whitespace = false
