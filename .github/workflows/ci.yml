@@ -11,6 +11,8 @@ permissions:
 
 jobs:
   build-test:
+    env:
+      ROLLUP_SKIP_NODEJS_NATIVE: 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
