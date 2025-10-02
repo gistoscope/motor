@@ -14,4 +14,6 @@ Remember that the route remains gated behind `VITE_EXPERIMENTAL_M0`.
 
 ## Local Dev
 
-Local Dev / Vite points `@motor/*` aliases to the explicit `src/index.ts` entry files, adds wildcard subpath fallbacks into each `src` directory, and keeps those packages excluded from `optimizeDeps`.
+Vite uses aliases to monorepo source; optimizeDeps excludes @motor/* packages.
+Vite points `@motor/*` aliases to the explicit `src/index.ts` entry files, adds wildcard subpath fallbacks into each `src` directory, and keeps those packages excluded from `optimizeDeps`.
+**Vite uses a single alias array with POSIX-normalized paths for `@motor/*`.**
