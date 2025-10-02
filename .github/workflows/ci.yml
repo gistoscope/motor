@@ -6,21 +6,22 @@ on:
   pull_request:
     branches: [sandbox]
 
+permissions:
+  contents: read
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node (reads .nvmrc) + cache pnpm
+      - name: Setup Node from .nvmrc
         uses: actions/setup-node@v4
         with:
           node-version-file: '.nvmrc'
-          cache: 'pnpm'
 
-      - name: Enable Corepack & activate pnpm
+      - name: Enable Corepack and activate pnpm
         run: |
           corepack enable
           corepack prepare pnpm@9.12.0 --activate
