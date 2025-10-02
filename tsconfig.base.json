@@ -13,7 +13,8 @@
     "baseUrl": ".",
     "paths": {
       "@motor/core": ["packages/core/src/index.ts"],
-      "@motor/parser": ["packages/parser/src/index.ts"]
+      "@motor/parser": ["packages/parser/src/index.ts"],
+      "@motor/tsa": ["packages/tsa/src/index.ts"]
     }
   }
 }
