@@ -1,35 +1,28 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
-  chooseFirstStep,
-  divFractionsToReciprocal,
-  mulFractionsToSingle,
-  normalizeSigns,
-  reduceFraction
+  applyNextRule,
+  evaluateExpression,
+  formatRational,
+  formatStage1,
+  parseStage1Expression
 } from '@motor/tsa';
-import type { Result } from '@motor/tsa';
+import type { AST } from '@motor/tsa';
 import styles from './StepDevRoute.module.css';
 
-type AtomId =
-  | 'divFractionsToReciprocal'
-  | 'mulFractionsToSingle'
-  | 'reduceFraction'
-  | 'normalizeSigns';
+export type TraceStep = {
+  rule: string;
+  rationale: string[];
+  expression: string;
+};
 
 export type StepOutcome =
   | { kind: 'idle' }
-  | { kind: 'plan-success'; planId: AtomId; rationale: string[]; nextExpr: string }
-  | { kind: 'plan-failure'; reasons: { code: string }[] };
-
-const ATOM_EXECUTORS: Record<AtomId, (expr: string) => Result<{ expr: string }>> = {
-  divFractionsToReciprocal,
-  mulFractionsToSingle,
-  reduceFraction,
-  normalizeSigns
-};
+  | { kind: 'trace'; steps: TraceStep[]; finalExpression: string; finalValue: string }
+  | { kind: 'error'; message: string };
 
 const EXAMPLES: string[] = [
   '((2/3) ÷ (5/7))',
-  '((2/3) × (5/7))',
+  '((3/4) × (8/9))',
   '(6/8)',
   '(-2)/(-3)',
   '(5/11)'
@@ -155,29 +148,59 @@ function ExpressionDisplay({ value, ...rest }: { value: string; 'aria-label': st
   );
 }
 
-export function evaluateFirstStep(expression: string): StepOutcome {
+function applyTrace(ast: AST): { steps: TraceStep[]; finalExpression: string; finalValue: string } | { error: string } {
+  const steps: TraceStep[] = [];
+  let current: AST = ast;
+
+  while (true) {
+    const result = applyNextRule(current);
+    if (!result) {
+      break;
+    }
+    current = result.ast;
+    steps.push({
+      rule: result.rule,
+      rationale: result.rationale,
+      expression: formatStage1(current)
+    });
+  }
+
+  const evaluated = evaluateExpression(current);
+  if ('error' in evaluated) {
+    return { error: evaluated.error };
+  }
+
+  return {
+    steps,
+    finalExpression: formatStage1(current),
+    finalValue: formatRational(evaluated)
+  };
+}
+
+export function evaluateTrace(expression: string): StepOutcome {
   const source = expression.trim();
   if (source === '') {
-    return { kind: 'plan-failure', reasons: [{ code: 'PRECONDITION_FAILED' }] };
+    return { kind: 'error', message: 'Expression is empty.' };
   }
 
-  const planResult = chooseFirstStep(source);
-  if (!planResult.ok) {
-    return { kind: 'plan-failure', reasons: planResult.reasons };
+  try {
+    const ast = parseStage1Expression(source);
+    const trace = applyTrace(ast);
+    if ('error' in trace) {
+      return { kind: 'error', message: trace.error };
+    }
+    return {
+      kind: 'trace',
+      steps: trace.steps,
+      finalExpression: trace.finalExpression,
+      finalValue: trace.finalValue
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      return { kind: 'error', message: error.message };
+    }
+    return { kind: 'error', message: 'Unknown error' };
   }
-
-  const plan = planResult.value;
-  const executor = ATOM_EXECUTORS[plan.id as AtomId];
-  if (!executor) {
-    return { kind: 'plan-failure', reasons: [{ code: 'UNKNOWN_ATOM' }] };
-  }
-
-  const next = executor(source);
-  if (!next.ok) {
-    return { kind: 'plan-failure', reasons: next.reasons };
-  }
-
-  return { kind: 'plan-success', planId: plan.id as AtomId, rationale: plan.rationale, nextExpr: next.value.expr };
 }
 
 export function resolveTextareaKey(event: {
@@ -213,7 +236,7 @@ export default function StepDevRoute() {
   const enabled = isDevRouteEnabled();
 
   const handleApply = useCallback(() => {
-    setOutcome(evaluateFirstStep(expression));
+    setOutcome(evaluateTrace(expression));
   }, [expression]);
 
   const handleClear = useCallback(() => {
@@ -261,29 +284,36 @@ export default function StepDevRoute() {
         <div className={styles.displayPanel} data-testid="display-panel">
           <ExpressionDisplay value={expression} aria-label="Rendered expression" />
         </div>
-        {outcome.kind === 'plan-success' && (
+        {outcome.kind === 'trace' && (
           <div className={styles.resultPanel} data-testid="result-panel">
-            <div className={styles.resultTitle}>First step: {outcome.planId}</div>
-            <div>Rationale:</div>
-            <ul className={styles.reasonList}>
-              {outcome.rationale.map((item) => (
-                <li key={item}>{item}</li>
+            <div className={styles.resultTitle}>Trace</div>
+            <ol className={styles.traceList}>
+              {outcome.steps.map((step, index) => (
+                <li key={`${step.rule}-${index}`} className={styles.traceItem}>
+                  <div className={styles.traceHeading}>
+                    <span className={styles.traceIndex}>Step {index + 1}:</span>
+                    <span className={styles.traceRule}>{step.rule}</span>
+                  </div>
+                  <div className={styles.traceExpression}>{step.expression}</div>
+                  <ul className={styles.reasonList}>
+                    {step.rationale.map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                  </ul>
+                </li>
               ))}
-            </ul>
-            <div className={styles.resultExpression} aria-label="Transformed expression">
-              {outcome.nextExpr}
+            </ol>
+            <div className={styles.finalSummary}>
+              <div className={styles.resultTitle}>Final expression</div>
+              <div className={styles.resultExpression}>{outcome.finalExpression}</div>
+              <div className={styles.finalValue}>Normalized value: {outcome.finalValue}</div>
             </div>
           </div>
         )}
-        {outcome.kind === 'plan-failure' && (
+        {outcome.kind === 'error' && (
           <div className={styles.resultPanel} data-testid="result-panel">
-            <div className={styles.resultTitle}>No step available</div>
-            <div>Reasons:</div>
-            <ul className={styles.reasonList}>
-              {outcome.reasons.map((reason) => (
-                <li key={reason.code}>{reason.code}</li>
-              ))}
-            </ul>
+            <div className={styles.resultTitle}>Unable to compute</div>
+            <div className={styles.errorMessage}>{outcome.message}</div>
           </div>
         )}
         <div className={styles.inputPanel} data-testid="input-panel">
@@ -300,10 +330,20 @@ export default function StepDevRoute() {
             style={{ resize: 'vertical' }}
           />
           <div className={styles.buttonRow}>
-            <button type="button" className={styles.primaryButton} onClick={handleApply}>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={handleApply}
+              data-testid="apply-button"
+            >
               Apply
             </button>
-            <button type="button" className={styles.secondaryButton} onClick={handleClear}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleClear}
+              data-testid="clear-button"
+            >
               Clear
             </button>
           </div>

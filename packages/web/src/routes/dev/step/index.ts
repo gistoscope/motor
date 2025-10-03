@@ -1,2 +1,2 @@
-export { default as StepDevRoute, evaluateFirstStep, resolveTextareaKey } from './StepDevRoute';
-export type { StepOutcome } from './StepDevRoute';
+export { default as StepDevRoute, evaluateTrace, resolveTextareaKey } from './StepDevRoute';
+export type { StepOutcome, TraceStep } from './StepDevRoute';
