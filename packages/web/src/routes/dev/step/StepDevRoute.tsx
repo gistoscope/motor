@@ -4,9 +4,11 @@ import {
   evaluateExpression,
   formatRational,
   formatStage2,
-  parseStage2Expression
+  listRuleApplications,
+  parseStage2Expression,
+  type AST,
+  type StepApplication
 } from '@motor/tsa';
-import type { AST } from '@motor/tsa';
 import styles from './StepDevRoute.module.css';
 
 export type TraceStep = {
@@ -38,6 +40,20 @@ type DisplayNode =
       right: DisplayNode;
       wrap: boolean;
     };
+
+type TraceSnapshot = {
+  ast: AST;
+  expression: string;
+  rule: string | null;
+  rationale: string[];
+};
+
+type TraceSession = {
+  history: TraceSnapshot[];
+  index: number;
+};
+
+type RuleOption = StepApplication & { preview: string };
 
 function hasOuterParentheses(source: string): boolean {
   if (!source.startsWith('(') || !source.endsWith(')')) {
@@ -250,19 +266,84 @@ function isDevRouteEnabled(): boolean {
   return import.meta.env?.VITE_EXPERIMENTAL_M0 === 'true';
 }
 
+function createSnapshot(ast: AST, rule: string | null, rationale: string[]): TraceSnapshot {
+  return {
+    ast,
+    expression: formatStage2(ast),
+    rule,
+    rationale
+  };
+}
+
 export default function StepDevRoute() {
   const [expression, setExpression] = useState<string>(EXAMPLES[0]);
-  const [outcome, setOutcome] = useState<StepOutcome>({ kind: 'idle' });
+  const [session, setSession] = useState<TraceSession | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const enabled = isDevRouteEnabled();
 
+  const currentSnapshot = session ? session.history[session.index] : null;
+  const currentAst = currentSnapshot?.ast ?? null;
+  const displayExpression = currentSnapshot?.expression ?? expression;
+
+  const ruleOptions = useMemo<RuleOption[]>(() => {
+    if (!currentAst) {
+      return [];
+    }
+    return listRuleApplications(currentAst).map((option) => ({
+      ...option,
+      preview: formatStage2(option.ast)
+    }));
+  }, [currentAst]);
+
+  const evaluation = useMemo(() => {
+    if (!currentAst) {
+      return null;
+    }
+    return evaluateExpression(currentAst);
+  }, [currentAst]);
+
+  const normalizedValue = useMemo(() => {
+    if (!evaluation || 'error' in evaluation) {
+      return null;
+    }
+    return formatRational(evaluation);
+  }, [evaluation]);
+
+  const evaluationError = useMemo(() => {
+    if (!evaluation || !('error' in evaluation)) {
+      return null;
+    }
+    return evaluation.error;
+  }, [evaluation]);
+
   const handleApply = useCallback(() => {
-    setOutcome(evaluateTrace(expression));
+    const source = expression.trim();
+    if (source === '') {
+      setError('Expression is empty.');
+      setSession(null);
+      return;
+    }
+
+    try {
+      const ast = parseStage2Expression(source);
+      const snapshot = createSnapshot(ast, null, []);
+      setSession({ history: [snapshot], index: 0 });
+      setError(null);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Unknown error');
+      }
+      setSession(null);
+    }
   }, [expression]);
 
   const handleClear = useCallback(() => {
     setExpression('');
-    setOutcome({ kind: 'idle' });
+    setSession(null);
+    setError(null);
   }, []);
 
   const handleTextareaKey = useCallback(
@@ -279,9 +360,88 @@ export default function StepDevRoute() {
     [handleApply, handleClear]
   );
 
+  const handleApplyRule = useCallback(
+    (option: RuleOption) => {
+      setSession((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const base = prev.history.slice(0, prev.index + 1);
+        base.push(createSnapshot(option.ast, option.rule, option.rationale));
+        return {
+          history: base,
+          index: base.length - 1
+        };
+      });
+      setError(null);
+    },
+    []
+  );
+
+  const handleUndo = useCallback(() => {
+    setSession((prev) => {
+      if (!prev || prev.index === 0) {
+        return prev;
+      }
+      return {
+        history: prev.history,
+        index: prev.index - 1
+      };
+    });
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    setSession((prev) => {
+      if (!prev || prev.index >= prev.history.length - 1) {
+        return prev;
+      }
+      return {
+        history: prev.history,
+        index: prev.index + 1
+      };
+    });
+  }, []);
+
+  const handleAutoComplete = useCallback(() => {
+    setSession((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const base = prev.history.slice(0, prev.index + 1);
+      let workingAst = base[base.length - 1]?.ast;
+      if (!workingAst) {
+        return prev;
+      }
+      while (true) {
+        const [next] = listRuleApplications(workingAst);
+        if (!next) {
+          break;
+        }
+        workingAst = next.ast;
+        base.push(createSnapshot(next.ast, next.rule, next.rationale));
+      }
+      return {
+        history: base,
+        index: base.length - 1
+      };
+    });
+    setError(null);
+  }, []);
+
+  const canUndo = !!session && session.index > 0;
+  const canRedo = !!session && session.index < session.history.length - 1;
+  const canAuto = !!session && ruleOptions.length > 0;
+
   if (!enabled) {
     return null;
   }
+
+  const steps = session ? session.history.slice(1) : [];
+  const stepBadge = session
+    ? session.index === 0
+      ? 'Original expression'
+      : `Step ${session.index} of ${session.history.length - 1}`
+    : null;
 
   return (
     <div className={styles.container} data-testid="dev-step-container">
@@ -294,7 +454,8 @@ export default function StepDevRoute() {
             className={styles.exampleButton}
             onClick={() => {
               setExpression(item);
-              setOutcome({ kind: 'idle' });
+              setSession(null);
+              setError(null);
             }}
           >
             {item}
@@ -303,40 +464,121 @@ export default function StepDevRoute() {
       </aside>
       <div className={styles.mainColumn} data-testid="dev-step-stack">
         <div className={styles.displayPanel} data-testid="display-panel">
-          <ExpressionDisplay value={expression} aria-label="Rendered expression" />
+          <ExpressionDisplay value={displayExpression} aria-label="Rendered expression" />
+          <div className={styles.displayMeta}>
+            {stepBadge ? <span className={styles.badge}>{stepBadge}</span> : <span className={styles.hint}>Enter an expression and press Apply.</span>}
+            {normalizedValue ? (
+              <span className={styles.valueBadge}>Normalized value: {normalizedValue}</span>
+            ) : evaluationError ? (
+              <span className={styles.errorMessage}>Unable to normalize: {evaluationError}</span>
+            ) : null}
+          </div>
         </div>
-        {outcome.kind === 'trace' && (
-          <div className={styles.resultPanel} data-testid="result-panel">
-            <div className={styles.resultTitle}>Trace</div>
-            <ol className={styles.traceList}>
-              {outcome.steps.map((step, index) => (
-                <li key={`${step.rule}-${index}`} className={styles.traceItem}>
-                  <div className={styles.traceHeading}>
-                    <span className={styles.traceIndex}>Step {index + 1}:</span>
-                    <span className={styles.traceRule}>{step.rule}</span>
-                  </div>
-                  <div className={styles.traceExpression}>{step.expression}</div>
-                  <ul className={styles.reasonList}>
-                    {step.rationale.map((reason) => (
-                      <li key={reason}>{reason}</li>
+        {session ? (
+          <div className={styles.workspace} data-testid="workspace-panel">
+            <section className={styles.ruleColumn} aria-label="Rule options">
+              <div className={styles.panelHeader}>Rule options</div>
+              <div className={styles.controlsRow}>
+                <button
+                  type="button"
+                  className={styles.controlButton}
+                  onClick={handleUndo}
+                  disabled={!canUndo}
+                  data-testid="undo-button"
+                >
+                  Undo
+                </button>
+                <button
+                  type="button"
+                  className={styles.controlButton}
+                  onClick={handleRedo}
+                  disabled={!canRedo}
+                  data-testid="redo-button"
+                >
+                  Redo
+                </button>
+                <button
+                  type="button"
+                  className={styles.controlButton}
+                  onClick={handleAutoComplete}
+                  disabled={!canAuto}
+                  data-testid="auto-button"
+                >
+                  Auto-run
+                </button>
+              </div>
+              <div className={styles.rulePanel} data-testid="rules-panel">
+                {ruleOptions.length > 0 ? (
+                  <ul className={styles.ruleList}>
+                    {ruleOptions.map((option, index) => (
+                      <li key={`${option.rule}-${index}`} className={styles.ruleCard}>
+                        <div className={styles.ruleHeader}>
+                          <span className={styles.ruleName}>{option.rule}</span>
+                          <button
+                            type="button"
+                            className={styles.ruleApplyButton}
+                            onClick={() => handleApplyRule(option)}
+                          >
+                            Apply
+                          </button>
+                        </div>
+                        <div className={styles.rulePreview}>{option.preview}</div>
+                        {option.rationale.length > 0 && (
+                          <ul className={styles.ruleRationale}>
+                            {option.rationale.map((reason) => (
+                              <li key={reason}>{reason}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </li>
                     ))}
                   </ul>
-                </li>
-              ))}
-            </ol>
-            <div className={styles.finalSummary}>
-              <div className={styles.resultTitle}>Final expression</div>
-              <div className={styles.resultExpression}>{outcome.finalExpression}</div>
-              <div className={styles.finalValue}>Normalized value: {outcome.finalValue}</div>
-            </div>
+                ) : (
+                  <div className={styles.emptyState}>No further rules apply.</div>
+                )}
+              </div>
+            </section>
+            <section className={styles.traceColumn} data-testid="result-panel">
+              <div className={styles.panelHeader}>Trace</div>
+              <ol className={styles.traceList}>
+                {steps.length === 0 ? (
+                  <li className={styles.emptyState}>No steps applied yet.</li>
+                ) : (
+                  steps.map((step, index) => (
+                    <li key={`${step.rule ?? 'start'}-${index}`} className={styles.traceItem}>
+                      <div className={styles.traceHeading}>
+                        <span className={styles.traceIndex}>Step {index + 1}</span>
+                        <span className={styles.traceRule}>{step.rule}</span>
+                      </div>
+                      <div className={styles.traceExpression}>{step.expression}</div>
+                      {step.rationale.length > 0 && (
+                        <ul className={styles.reasonList}>
+                          {step.rationale.map((reason) => (
+                            <li key={reason}>{reason}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))
+                )}
+              </ol>
+              <div className={styles.finalSummary}>
+                <div className={styles.resultTitle}>Current expression</div>
+                <div className={styles.resultExpression}>{currentSnapshot?.expression}</div>
+                {normalizedValue ? (
+                  <div className={styles.finalValue}>Normalized value: {normalizedValue}</div>
+                ) : evaluationError ? (
+                  <div className={styles.errorMessage}>Unable to normalize: {evaluationError}</div>
+                ) : null}
+              </div>
+            </section>
           </div>
-        )}
-        {outcome.kind === 'error' && (
+        ) : error ? (
           <div className={styles.resultPanel} data-testid="result-panel">
             <div className={styles.resultTitle}>Unable to compute</div>
-            <div className={styles.errorMessage}>{outcome.message}</div>
+            <div className={styles.errorMessage}>{error}</div>
           </div>
-        )}
+        ) : null}
         <div className={styles.inputPanel} data-testid="input-panel">
           <label htmlFor="dev-step-input" style={{ fontWeight: 600 }}>
             Expression input

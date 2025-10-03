@@ -1,6 +1,6 @@
 export type { AST, StepApplication } from './types';
 export type { Rational } from '@motor/core';
-export { applyNextRule } from './rules';
+export { applyNextRule, listRuleApplications } from './rules';
 export { evaluateExpression } from './evaluate';
 export { reduceAndNormalize } from './reduce';
 export {

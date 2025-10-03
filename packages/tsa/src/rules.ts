@@ -19,90 +19,87 @@ const RULES: RuleHandler[] = [
 ];
 
 export function applyNextRule(ast: AST): StepApplication | null {
-  return applyRecursive(ast);
+  const options = listRuleApplications(ast);
+  return options.length > 0 ? options[0] ?? null : null;
 }
 
-function applyRecursive(node: AST): StepApplication | null {
+export function listRuleApplications(ast: AST): StepApplication[] {
+  return collectApplications(ast);
+}
+
+function collectApplications(node: AST): StepApplication[] {
+  const collected: StepApplication[] = [];
+
   for (const rule of RULES) {
     const result = rule(node);
     if (result) {
-      return result;
+      collected.push(result);
     }
   }
 
   if (node.type === 'Add') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: addNode(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
+    for (const option of collectApplications(node.left)) {
+      collected.push({
+        ast: addNode(option.ast, node.right),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: addNode(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
+    for (const option of collectApplications(node.right)) {
+      collected.push({
+        ast: addNode(node.left, option.ast),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
   } else if (node.type === 'Sub') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: subNode(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
+    for (const option of collectApplications(node.left)) {
+      collected.push({
+        ast: subNode(option.ast, node.right),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: subNode(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
+    for (const option of collectApplications(node.right)) {
+      collected.push({
+        ast: subNode(node.left, option.ast),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
-  }
-
-  if (node.type === 'Mul') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: mul(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
+  } else if (node.type === 'Mul') {
+    for (const option of collectApplications(node.left)) {
+      collected.push({
+        ast: mul(option.ast, node.right),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: mul(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
+    for (const option of collectApplications(node.right)) {
+      collected.push({
+        ast: mul(node.left, option.ast),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
   } else if (node.type === 'Div') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: div(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
+    for (const option of collectApplications(node.left)) {
+      collected.push({
+        ast: div(option.ast, node.right),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: div(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
+    for (const option of collectApplications(node.right)) {
+      collected.push({
+        ast: div(node.left, option.ast),
+        rule: option.rule,
+        rationale: option.rationale
+      });
     }
   }
 
-  return null;
+  return collected;
 }
 
 function rationale(rule: string): string[] {
