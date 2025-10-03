@@ -4,6 +4,7 @@ import {
   evaluateExpression,
   formatRational,
   formatStage2,
+  listRuleApplications,
   parseStage2Expression
 } from '../src';
 
@@ -38,14 +39,26 @@ describe('Stage2 TSA pipeline', () => {
     expect(formatStage2(subAst)).toBe('((2/3) - (5/7))');
   });
 
+  it('lists only shallowest rules for division of fractions', () => {
+    const ast = parseStage2Expression('((2/3) ÷ (5/7))');
+    const rules = listRuleApplications(ast).map((application) => application.rule);
+    expect(rules).toEqual(['divFractionsToReciprocal']);
+  });
+
+  it('lists only shallowest rules for addition of fractions', () => {
+    const ast = parseStage2Expression('((2/3) + (5/7))');
+    const rules = listRuleApplications(ast).map((application) => application.rule);
+    expect(rules).toEqual(['addFractionsToCommonDenominator']);
+  });
+
   it('performs a full rational reduction trace for addition', () => {
     const { finalExpr, rules, rational } = collectRules('((2/3) + (5/7))');
     expect(rules).toEqual([
       'addFractionsToCommonDenominator',
       'multiplyLiterals',
       'multiplyLiterals',
-      'addLiterals',
       'multiplyLiterals',
+      'addLiterals',
       'divideLiterals'
     ]);
     expect(finalExpr).toBe('(29/21)');
@@ -58,8 +71,8 @@ describe('Stage2 TSA pipeline', () => {
       'subFractionsToCommonDenominator',
       'multiplyLiterals',
       'multiplyLiterals',
-      'subtractLiterals',
       'multiplyLiterals',
+      'subtractLiterals',
       'divideLiterals'
     ]);
     expect(finalExpr).toBe('(-1/21)');
