@@ -48,6 +48,24 @@ describe('dev step route layout and apply', () => {
     }
   });
 
+  it('generates a multi-step trace for addition', () => {
+    const outcome = evaluateTrace('((2/3) + (5/7))');
+    expect(outcome.kind).toBe('trace');
+    if (outcome.kind === 'trace') {
+      const rules = outcome.steps.map((step) => step.rule);
+      expect(rules).toEqual([
+        'addFractionsToCommonDenominator',
+        'multiplyLiterals',
+        'multiplyLiterals',
+        'addLiterals',
+        'multiplyLiterals',
+        'divideLiterals'
+      ]);
+      expect(outcome.finalValue).toBe('29/21');
+      expect(outcome.finalExpression).toBe('(29/21)');
+    }
+  });
+
   it('surfaces parser errors', () => {
     const outcome = evaluateTrace('((2/3) ÷)');
     expect(outcome).toMatchObject({ kind: 'error', message: expect.stringContaining('Expected number') });

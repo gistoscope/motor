@@ -1,6 +1,6 @@
 import { R } from '@motor/core';
 import type { AST, StepApplication } from './types';
-import { div, literal, mul } from './types';
+import { add as addNode, div, literal, mul, sub as subNode } from './types';
 import { reduceAndNormalize } from './reduce';
 
 const BASE_RATIONALE = ['AST_PREORDER', 'ID_LEX'] as const;
@@ -8,8 +8,12 @@ const BASE_RATIONALE = ['AST_PREORDER', 'ID_LEX'] as const;
 type RuleHandler = (node: AST) => StepApplication | null;
 
 const RULES: RuleHandler[] = [
+  addFractionsToCommonDenominator,
+  subFractionsToCommonDenominator,
   divFractionsToReciprocal,
   mulFractionsToSingle,
+  addLiterals,
+  subtractLiterals,
   multiplyLiterals,
   divideLiterals
 ];
@@ -23,6 +27,42 @@ function applyRecursive(node: AST): StepApplication | null {
     const result = rule(node);
     if (result) {
       return result;
+    }
+  }
+
+  if (node.type === 'Add') {
+    const left = applyRecursive(node.left);
+    if (left) {
+      return {
+        ast: addNode(left.ast, node.right),
+        rule: left.rule,
+        rationale: left.rationale
+      };
+    }
+    const right = applyRecursive(node.right);
+    if (right) {
+      return {
+        ast: addNode(node.left, right.ast),
+        rule: right.rule,
+        rationale: right.rationale
+      };
+    }
+  } else if (node.type === 'Sub') {
+    const left = applyRecursive(node.left);
+    if (left) {
+      return {
+        ast: subNode(left.ast, node.right),
+        rule: left.rule,
+        rationale: left.rationale
+      };
+    }
+    const right = applyRecursive(node.right);
+    if (right) {
+      return {
+        ast: subNode(node.left, right.ast),
+        rule: right.rule,
+        rationale: right.rationale
+      };
     }
   }
 
@@ -69,6 +109,48 @@ function rationale(rule: string): string[] {
   return [`PRIORITY:${rule}`, ...BASE_RATIONALE];
 }
 
+function addFractionsToCommonDenominator(node: AST): StepApplication | null {
+  if (node.type !== 'Add') {
+    return null;
+  }
+  if (node.left.type !== 'Div' || node.right.type !== 'Div') {
+    return null;
+  }
+
+  return {
+    ast: div(
+      addNode(
+        mul(node.left.left, node.right.right),
+        mul(node.right.left, node.left.right)
+      ),
+      mul(node.left.right, node.right.right)
+    ),
+    rule: 'addFractionsToCommonDenominator',
+    rationale: rationale('addFractionsToCommonDenominator')
+  };
+}
+
+function subFractionsToCommonDenominator(node: AST): StepApplication | null {
+  if (node.type !== 'Sub') {
+    return null;
+  }
+  if (node.left.type !== 'Div' || node.right.type !== 'Div') {
+    return null;
+  }
+
+  return {
+    ast: div(
+      subNode(
+        mul(node.left.left, node.right.right),
+        mul(node.right.left, node.left.right)
+      ),
+      mul(node.left.right, node.right.right)
+    ),
+    rule: 'subFractionsToCommonDenominator',
+    rationale: rationale('subFractionsToCommonDenominator')
+  };
+}
+
 function divFractionsToReciprocal(node: AST): StepApplication | null {
   if (node.type !== 'Div') {
     return null;
@@ -96,6 +178,36 @@ function mulFractionsToSingle(node: AST): StepApplication | null {
     ast: div(mul(node.left.left, node.right.left), mul(node.left.right, node.right.right)),
     rule: 'mulFractionsToSingle',
     rationale: rationale('mulFractionsToSingle')
+  };
+}
+
+function addLiterals(node: AST): StepApplication | null {
+  if (node.type !== 'Add') {
+    return null;
+  }
+  if (node.left.type !== 'Literal' || node.right.type !== 'Literal') {
+    return null;
+  }
+  const value = reduceAndNormalize(R.add(node.left.value, node.right.value));
+  return {
+    ast: literal(value),
+    rule: 'addLiterals',
+    rationale: rationale('addLiterals')
+  };
+}
+
+function subtractLiterals(node: AST): StepApplication | null {
+  if (node.type !== 'Sub') {
+    return null;
+  }
+  if (node.left.type !== 'Literal' || node.right.type !== 'Literal') {
+    return null;
+  }
+  const value = reduceAndNormalize(R.sub(node.left.value, node.right.value));
+  return {
+    ast: literal(value),
+    rule: 'subtractLiterals',
+    rationale: rationale('subtractLiterals')
   };
 }
 
