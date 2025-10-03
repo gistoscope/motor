@@ -18,91 +18,82 @@ const RULES: RuleHandler[] = [
   divideLiterals
 ];
 
-export function applyNextRule(ast: AST): StepApplication | null {
-  return applyRecursive(ast);
+type StepWrapper = (application: StepApplication) => StepApplication;
+
+export function listRuleApplications(ast: AST): StepApplication[] {
+  const candidates: { depth: number; application: StepApplication }[] = [];
+  let minDepth: number | null = null;
+
+  const traverse = (node: AST, depth: number, wrap: StepWrapper): void => {
+    for (const rule of RULES) {
+      const result = rule(node);
+      if (result) {
+        const wrapped = wrap(result);
+        candidates.push({ depth, application: wrapped });
+        if (minDepth === null || depth < minDepth) {
+          minDepth = depth;
+        }
+      }
+    }
+
+    switch (node.type) {
+      case 'Literal':
+        return;
+      case 'Add':
+      case 'Sub':
+      case 'Mul':
+      case 'Div':
+        traverse(node.left, depth + 1, (childApplication) =>
+          wrap({
+            ast: rebuildWithChild(node, 'left', childApplication.ast),
+            rule: childApplication.rule,
+            rationale: childApplication.rationale
+          })
+        );
+        traverse(node.right, depth + 1, (childApplication) =>
+          wrap({
+            ast: rebuildWithChild(node, 'right', childApplication.ast),
+            rule: childApplication.rule,
+            rationale: childApplication.rationale
+          })
+        );
+        return;
+      default: {
+        const neverNode: never = node;
+        return neverNode;
+      }
+    }
+  };
+
+  traverse(ast, 0, (application) => application);
+
+  if (minDepth === null) {
+    return [];
+  }
+
+  return candidates
+    .filter((candidate) => candidate.depth === minDepth)
+    .map((candidate) => candidate.application);
 }
 
-function applyRecursive(node: AST): StepApplication | null {
-  for (const rule of RULES) {
-    const result = rule(node);
-    if (result) {
-      return result;
-    }
-  }
+export function applyNextRule(ast: AST): StepApplication | null {
+  const [next] = listRuleApplications(ast);
+  return next ?? null;
+}
 
-  if (node.type === 'Add') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: addNode(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
-    }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: addNode(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
-    }
-  } else if (node.type === 'Sub') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: subNode(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
-    }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: subNode(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
-    }
+function rebuildWithChild(node: AST, side: 'left' | 'right', childAst: AST): AST {
+  switch (node.type) {
+    case 'Add':
+      return side === 'left' ? addNode(childAst, node.right) : addNode(node.left, childAst);
+    case 'Sub':
+      return side === 'left' ? subNode(childAst, node.right) : subNode(node.left, childAst);
+    case 'Mul':
+      return side === 'left' ? mul(childAst, node.right) : mul(node.left, childAst);
+    case 'Div':
+      return side === 'left' ? div(childAst, node.right) : div(node.left, childAst);
+    default:
+      return node;
   }
-
-  if (node.type === 'Mul') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: mul(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
-    }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: mul(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
-    }
-  } else if (node.type === 'Div') {
-    const left = applyRecursive(node.left);
-    if (left) {
-      return {
-        ast: div(left.ast, node.right),
-        rule: left.rule,
-        rationale: left.rationale
-      };
-    }
-    const right = applyRecursive(node.right);
-    if (right) {
-      return {
-        ast: div(node.left, right.ast),
-        rule: right.rule,
-        rationale: right.rationale
-      };
-    }
-  }
-
-  return null;
 }
 
 function rationale(rule: string): string[] {

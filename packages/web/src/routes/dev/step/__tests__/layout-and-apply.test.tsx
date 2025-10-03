@@ -57,8 +57,8 @@ describe('dev step route layout and apply', () => {
         'addFractionsToCommonDenominator',
         'multiplyLiterals',
         'multiplyLiterals',
-        'addLiterals',
         'multiplyLiterals',
+        'addLiterals',
         'divideLiterals'
       ]);
       expect(outcome.finalValue).toBe('29/21');
