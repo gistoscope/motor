@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Motor Gear</title>
+  <defs>
+    <linearGradient id="gearGradient" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#6bff54" />
+      <stop offset="100%" stop-color="#19c94a" />
+    </linearGradient>
+  </defs>
+  <g fill="url(#gearGradient)" stroke="#0c5926" stroke-width="1.5" stroke-linejoin="round">
+    <circle cx="32" cy="32" r="18" />
+    <g fill="url(#gearGradient)">
+      <rect x="30" y="4" width="4" height="12" rx="1.5" />
+      <rect x="30" y="48" width="4" height="12" rx="1.5" />
+      <rect x="48" y="30" width="12" height="4" rx="1.5" />
+      <rect x="4" y="30" width="12" height="4" rx="1.5" />
+      <rect x="44" y="11" width="10" height="4" rx="1.5" transform="rotate(45 49 13)" />
+      <rect x="44" y="49" width="10" height="4" rx="1.5" transform="rotate(135 49 51)" />
+      <rect x="10" y="49" width="10" height="4" rx="1.5" transform="rotate(45 15 51)" />
+      <rect x="10" y="11" width="10" height="4" rx="1.5" transform="rotate(135 15 13)" />
+    </g>
+  </g>
+  <circle cx="32" cy="32" r="12" fill="#0d3b1b" />
+  <text x="32" y="39" text-anchor="middle" font-size="20" font-family="'Futura', 'Arial', sans-serif" font-weight="700" fill="#adffb0">
+    M
+  </text>
+</svg>

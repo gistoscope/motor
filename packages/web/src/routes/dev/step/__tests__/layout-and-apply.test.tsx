@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import ReactDOMServer from 'react-dom/server';
-import { StepDevRoute, evaluateFirstStep, resolveTextareaKey } from '..';
+import { StepDevRoute, evaluateTrace, resolveTextareaKey } from '..';
 
 describe('dev step route layout and apply', () => {
   beforeEach(() => {
@@ -31,22 +31,25 @@ describe('dev step route layout and apply', () => {
     expect(resolveTextareaKey({ key: 'Escape' })).toBe('clear');
   });
 
-  it('applies the first rational step', () => {
-    const outcome = evaluateFirstStep('((2/3) ÷ (5/7))');
-    expect(outcome).toEqual({
-      kind: 'plan-success',
-      planId: 'divFractionsToReciprocal',
-      rationale: ['PRIORITY:divFractionsToReciprocal', 'AST_PREORDER', 'ID_LEX'],
-      nextExpr: '((2/3) × (7/5))'
-    });
+  it('generates a full trace with normalized result', () => {
+    const outcome = evaluateTrace('((2/3) ÷ (5/7))');
+    expect(outcome.kind).toBe('trace');
+    if (outcome.kind === 'trace') {
+      const rules = outcome.steps.map((step) => step.rule);
+      expect(rules).toEqual([
+        'divFractionsToReciprocal',
+        'mulFractionsToSingle',
+        'multiplyLiterals',
+        'multiplyLiterals',
+        'divideLiterals'
+      ]);
+      expect(outcome.finalValue).toBe('14/15');
+      expect(outcome.finalExpression).toBe('(14/15)');
+    }
   });
 
-  it('shows reasons when chooser fails', () => {
-    const outcome = evaluateFirstStep('(5/11)');
-    expect(outcome.kind).toBe('plan-failure');
-    if (outcome.kind === 'plan-failure') {
-      const codes = outcome.reasons.map((reason) => reason.code);
-      expect(codes).toContain('PRECONDITION_FAILED');
-    }
+  it('surfaces parser errors', () => {
+    const outcome = evaluateTrace('((2/3) ÷)');
+    expect(outcome).toMatchObject({ kind: 'error', message: expect.stringContaining('Expected number') });
   });
 });
