@@ -10,3 +10,9 @@ export {
   formatRational,
   tokenizeStage1
 } from './stage1';
+export {
+  Stage2ParseError,
+  tokenizeStage2,
+  parseStage2Expression,
+  formatStage2
+} from './stage2';

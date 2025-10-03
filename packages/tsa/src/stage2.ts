@@ -1,27 +1,18 @@
 import type { Rational } from '@motor/core';
-import { literal, mul, div, type AST } from './types';
+import { add, div, literal, mul, sub, type AST } from './types';
 import { reduceAndNormalize } from './reduce';
 
 const MUL_TOKENS = new Set(['×', '*']);
 const DIV_TOKENS = new Set(['÷', '/']);
 
-export class Stage1ParseError extends Error {}
+export class Stage2ParseError extends Error {}
 
-interface TokenBase<T extends string> {
-  type: T;
-}
+type Token =
+  | { type: 'number'; value: Rational }
+  | { type: 'add' | 'sub' | 'mul' | 'div' }
+  | { type: 'lpar' | 'rpar' };
 
-interface NumberToken extends TokenBase<'number'> {
-  value: Rational;
-}
-
-interface OpToken extends TokenBase<'mul' | 'div'> {}
-
-interface PunctuationToken extends TokenBase<'lpar' | 'rpar'> {}
-
-type Token = NumberToken | OpToken | PunctuationToken;
-
-export function tokenizeStage1(source: string): Token[] {
+export function tokenizeStage2(source: string): Token[] {
   const tokens: Token[] = [];
   let index = 0;
   while (index < source.length) {
@@ -50,13 +41,33 @@ export function tokenizeStage1(source: string): Token[] {
       index += 1;
       continue;
     }
-    if (char === '-' || isDigit(char)) {
+    if (char === '+') {
+      tokens.push({ type: 'add' });
+      index += 1;
+      continue;
+    }
+    if (char === '-') {
+      const previous = tokens[tokens.length - 1];
+      const canBeUnary =
+        !previous || previous.type === 'add' || previous.type === 'sub' || previous.type === 'mul' || previous.type === 'div' || previous.type === 'lpar';
+      const nextChar = source[index + 1];
+      if (canBeUnary && nextChar !== undefined && isDigit(nextChar)) {
+        const { nextIndex, value } = readNumber(source, index);
+        tokens.push({ type: 'number', value });
+        index = nextIndex;
+        continue;
+      }
+      tokens.push({ type: 'sub' });
+      index += 1;
+      continue;
+    }
+    if (isDigit(char)) {
       const { nextIndex, value } = readNumber(source, index);
       tokens.push({ type: 'number', value });
       index = nextIndex;
       continue;
     }
-    throw new Stage1ParseError(`Unexpected character '${char}' at ${index}`);
+    throw new Stage2ParseError(`Unexpected character '${char}' at ${index}`);
   }
   return tokens;
 }
@@ -73,7 +84,7 @@ function readNumber(source: string, start: number): { nextIndex: number; value: 
     index += 1;
   }
   if (index >= source.length || !isDigit(source[index]!)) {
-    throw new Stage1ParseError(`Expected digit at ${index}`);
+    throw new Stage2ParseError(`Expected digit at ${index}`);
   }
   let digits = '';
   while (index < source.length && isDigit(source[index]!)) {
@@ -85,8 +96,8 @@ function readNumber(source: string, start: number): { nextIndex: number; value: 
   return { nextIndex: index, value };
 }
 
-export function parseStage1Expression(source: string): AST {
-  const tokens = tokenizeStage1(source);
+export function parseStage2Expression(source: string): AST {
+  const tokens = tokenizeStage2(source);
   let position = 0;
 
   const peek = () => tokens[position];
@@ -95,29 +106,47 @@ export function parseStage1Expression(source: string): AST {
   const expect = (type: Token['type']) => {
     const token = take();
     if (!token || token.type !== type) {
-      throw new Stage1ParseError(`Expected token ${type}`);
+      throw new Stage2ParseError(`Expected token ${type}`);
     }
     return token;
   };
 
   function parseExpression(): AST {
-    let node = parseFactor();
+    return parseAdditive();
+  }
+
+  function parseAdditive(): AST {
+    let node = parseMultiplicative();
+    while (true) {
+      const token = peek();
+      if (!token || (token.type !== 'add' && token.type !== 'sub')) {
+        break;
+      }
+      take();
+      const right = parseMultiplicative();
+      node = token.type === 'add' ? add(node, right) : sub(node, right);
+    }
+    return node;
+  }
+
+  function parseMultiplicative(): AST {
+    let node = parsePrimary();
     while (true) {
       const token = peek();
       if (!token || (token.type !== 'mul' && token.type !== 'div')) {
         break;
       }
       take();
-      const right = parseFactor();
+      const right = parsePrimary();
       node = token.type === 'mul' ? mul(node, right) : div(node, right);
     }
     return node;
   }
 
-  function parseFactor(): AST {
+  function parsePrimary(): AST {
     const token = peek();
     if (!token) {
-      throw new Stage1ParseError('Unexpected end of input');
+      throw new Stage2ParseError('Unexpected end of input');
     }
     if (token.type === 'number') {
       take();
@@ -129,17 +158,17 @@ export function parseStage1Expression(source: string): AST {
       expect('rpar');
       return node;
     }
-    throw new Stage1ParseError('Expected number or (');
+    throw new Stage2ParseError('Expected number or (');
   }
 
   const ast = parseExpression();
   if (position !== tokens.length) {
-    throw new Stage1ParseError('Trailing input');
+    throw new Stage2ParseError('Trailing input');
   }
   return ast;
 }
 
-export function formatStage1(ast: AST): string {
+export function formatStage2(ast: AST): string {
   switch (ast.type) {
     case 'Literal': {
       const value = ast.value;
@@ -149,20 +178,22 @@ export function formatStage1(ast: AST): string {
       return `(${value.n.toString()}/${value.d.toString()})`;
     }
     case 'Mul': {
-      return `(${formatStage1(ast.left)} × ${formatStage1(ast.right)})`;
+      return `(${formatStage2(ast.left)} × ${formatStage2(ast.right)})`;
     }
     case 'Div': {
+      const left = formatStage2(ast.left);
+      const right = formatStage2(ast.right);
       const rightSymbol = ast.right.type === 'Div' ? '÷' : '/';
       if (rightSymbol === '/') {
-        return `(${formatStage1(ast.left)}/${formatStage1(ast.right)})`;
+        return `(${left}/${right})`;
       }
-      return `(${formatStage1(ast.left)} ${rightSymbol} ${formatStage1(ast.right)})`;
+      return `(${left} ${rightSymbol} ${right})`;
     }
     case 'Add': {
-      return `(${formatStage1(ast.left)} + ${formatStage1(ast.right)})`;
+      return `(${formatStage2(ast.left)} + ${formatStage2(ast.right)})`;
     }
     case 'Sub': {
-      return `(${formatStage1(ast.left)} - ${formatStage1(ast.right)})`;
+      return `(${formatStage2(ast.left)} - ${formatStage2(ast.right)})`;
     }
     default: {
       const neverAst: never = ast;
@@ -171,10 +202,3 @@ export function formatStage1(ast: AST): string {
   }
 }
 
-export function formatRational(value: Rational): string {
-  const normalized = reduceAndNormalize(value);
-  if (normalized.d === 1n) {
-    return normalized.n.toString();
-  }
-  return `${normalized.n.toString()}/${normalized.d.toString()}`;
-}

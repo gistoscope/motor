@@ -32,6 +32,16 @@ function evaluate(ast: AST): Rational {
       }
       return R.div(left, right);
     }
+    case 'Add': {
+      const left = evaluate(ast.left);
+      const right = evaluate(ast.right);
+      return R.add(left, right);
+    }
+    case 'Sub': {
+      const left = evaluate(ast.left);
+      const right = evaluate(ast.right);
+      return R.sub(left, right);
+    }
     default: {
       const neverAst: never = ast;
       return neverAst;

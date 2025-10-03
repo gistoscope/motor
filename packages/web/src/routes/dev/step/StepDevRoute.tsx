@@ -3,8 +3,8 @@ import {
   applyNextRule,
   evaluateExpression,
   formatRational,
-  formatStage1,
-  parseStage1Expression
+  formatStage2,
+  parseStage2Expression
 } from '@motor/tsa';
 import type { AST } from '@motor/tsa';
 import styles from './StepDevRoute.module.css';
@@ -23,15 +23,21 @@ export type StepOutcome =
 const EXAMPLES: string[] = [
   '((2/3) ÷ (5/7))',
   '((3/4) × (8/9))',
-  '(6/8)',
-  '(-2)/(-3)',
-  '(5/11)'
+  '((2/3) + (5/7))',
+  '((2/3) - (5/7))',
+  '(-2)/(-3)'
 ];
 
 type DisplayNode =
   | { kind: 'literal'; value: string; wrap: boolean }
   | { kind: 'fraction'; numerator: DisplayNode; denominator: DisplayNode; wrap: boolean }
-  | { kind: 'operation'; operator: '×' | '÷'; left: DisplayNode; right: DisplayNode; wrap: boolean };
+  | {
+      kind: 'operation';
+      operator: '×' | '÷' | '+' | '-';
+      left: DisplayNode;
+      right: DisplayNode;
+      wrap: boolean;
+    };
 
 function hasOuterParentheses(source: string): boolean {
   if (!source.startsWith('(') || !source.endsWith(')')) {
@@ -61,6 +67,9 @@ function findTopLevelOperator(source: string, targets: string[]): number {
     } else if (char === ')') {
       depth -= 1;
     } else if (depth === 0 && targets.includes(char)) {
+      if ((char === '+' || char === '-') && index === 0) {
+        continue;
+      }
       return index;
     }
   }
@@ -76,6 +85,18 @@ function parseExpression(source: string): DisplayNode {
   if (hasOuterParentheses(trimmed)) {
     const inner = parseExpression(trimmed.slice(1, -1));
     return { ...inner, wrap: true };
+  }
+
+  const addIndex = findTopLevelOperator(trimmed, ['+', '-']);
+  if (addIndex > 0) {
+    const operator = trimmed[addIndex] as '+' | '-';
+    return {
+      kind: 'operation',
+      operator,
+      left: parseExpression(trimmed.slice(0, addIndex)),
+      right: parseExpression(trimmed.slice(addIndex + 1)),
+      wrap: false
+    };
   }
 
   const opIndex = findTopLevelOperator(trimmed, ['×', '÷']);
@@ -161,7 +182,7 @@ function applyTrace(ast: AST): { steps: TraceStep[]; finalExpression: string; fi
     steps.push({
       rule: result.rule,
       rationale: result.rationale,
-      expression: formatStage1(current)
+      expression: formatStage2(current)
     });
   }
 
@@ -172,7 +193,7 @@ function applyTrace(ast: AST): { steps: TraceStep[]; finalExpression: string; fi
 
   return {
     steps,
-    finalExpression: formatStage1(current),
+    finalExpression: formatStage2(current),
     finalValue: formatRational(evaluated)
   };
 }
@@ -184,7 +205,7 @@ export function evaluateTrace(expression: string): StepOutcome {
   }
 
   try {
-    const ast = parseStage1Expression(source);
+    const ast = parseStage2Expression(source);
     const trace = applyTrace(ast);
     if ('error' in trace) {
       return { kind: 'error', message: trace.error };
