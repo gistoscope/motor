@@ -1,4 +1,4 @@
-import type { Rational } from '@motor/core';
+import type { Rational } from './types';
 import { add, div, literal, mul, sub, type AST } from './types';
 import { reduceAndNormalize } from './reduce';
 
@@ -49,7 +49,12 @@ export function tokenizeStage2(source: string): Token[] {
     if (char === '-') {
       const previous = tokens[tokens.length - 1];
       const canBeUnary =
-        !previous || previous.type === 'add' || previous.type === 'sub' || previous.type === 'mul' || previous.type === 'div' || previous.type === 'lpar';
+        !previous ||
+        previous.type === 'add' ||
+        previous.type === 'sub' ||
+        previous.type === 'mul' ||
+        previous.type === 'div' ||
+        previous.type === 'lpar';
       const nextChar = source[index + 1];
       if (canBeUnary && nextChar !== undefined && isDigit(nextChar)) {
         const { nextIndex, value } = readNumber(source, index);
@@ -201,4 +206,3 @@ export function formatStage2(ast: AST): string {
     }
   }
 }
-

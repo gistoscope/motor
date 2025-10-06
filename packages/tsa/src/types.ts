@@ -1,4 +1,4 @@
-import type { Rational } from '@motor/core';
+export type Rational = import('@motor/core').R.Rational;
 
 export type AST =
   | { type: 'Literal'; value: Rational }

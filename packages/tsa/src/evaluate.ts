@@ -1,6 +1,5 @@
 import { R } from '@motor/core';
-import type { Rational } from '@motor/core';
-import type { AST } from './types';
+import type { AST, Rational } from './types';
 import { reduceAndNormalize } from './reduce';
 
 export function evaluateExpression(ast: AST): Rational | { error: string } {

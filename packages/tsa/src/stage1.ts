@@ -1,4 +1,4 @@
-import type { Rational } from '@motor/core';
+import type { Rational } from './types';
 import { literal, mul, div, type AST } from './types';
 import { reduceAndNormalize } from './reduce';
 
