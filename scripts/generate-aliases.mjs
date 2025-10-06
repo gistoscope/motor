@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,18 +9,19 @@ const tsconfigPath = path.join(aliasRootDir, 'tsconfig.base.json');
 const outFile = path.join(aliasRootDir, 'scripts/aliases.generated.ts');
 const isCheck = process.argv.includes('--check');
 
-function readJSON(p){ return JSON.parse(fs.readFileSync(p, 'utf8')); }
-const paths = readJSON(tsconfigPath)?.compilerOptions?.paths ?? {};
-
-// Нормализуем цель: "src/engine/*" или "src/engine/index.ts" -> "src/engine"
+function readJSON(p){
+  const raw = fs.readFileSync(p, 'utf8').replace(/^\uFEFF/, '');
+  return JSON.parse(raw);
+}
 function normalizeTarget(t) {
   let v = String(t);
-  v = v.replace(/\/\*$/,'');                         // убираем /* в конце
-  v = v.replace(/\/index\.(ts|tsx|js|jsx)$/,'');     // убираем /index.*
-  return v.replace(/\/$/,'');                        // убираем конечный /
+  v = v.replace(/\/\*$/,'');                      // remove trailing /*
+  v = v.replace(/\/index\.(ts|tsx|js|jsx)$/,'');  // remove /index.*
+  return v.replace(/\/$/,'');                     // remove trailing /
 }
 
-// Группируем по базовому алиасу, напр. "@motor/engine" (без /*)
+// Merge @motor/x and @motor/x/* and prefer folder targets
+const paths = readJSON(tsconfigPath)?.compilerOptions?.paths ?? {};
 const byBase = new Map();
 for (const key of Object.keys(paths).sort()) {
   const base = key.replace(/\/\*$/,'');
@@ -31,12 +32,8 @@ for (const key of Object.keys(paths).sort()) {
   arr.push(candidate);
   byBase.set(base, arr);
 }
-
-// Выбираем лучшую директорию для каждого базового алиаса (предпочитаем папку)
 const entries = Array.from(byBase.entries()).map(([find, candidates]) => {
-  const chosen =
-    candidates.find(c => !/\.(ts|tsx|js|jsx)$/.test(c))    // папка
-    ?? normalizeTarget(candidates[0]);                      // запасной вариант
+  const chosen = candidates.find(c => !/\.(ts|tsx|js|jsx)$/.test(c)) ?? normalizeTarget(candidates[0]);
   return { find, repl: `path.resolve(aliasRootDir, ${JSON.stringify(chosen)})` };
 });
 
@@ -50,7 +47,8 @@ export const viteAliases = [
 ${entries.map(e => `  { find: ${JSON.stringify(e.find)}, replacement: ${e.repl} }`).join(',\n')}
 ] as const;
 
-export const vitestAliases = Object.fromEntries(viteAliases.map(e => [e.find, e.replacement])) as const;
+export const vitestAliases: Record<string, string> =
+  Object.fromEntries(viteAliases.map(e => [e.find, e.replacement]));
 `;
 
 if (isCheck) {
@@ -62,3 +60,7 @@ if (isCheck) {
 
 fs.writeFileSync(outFile, content);
 console.log('Wrote ' + path.relative(aliasRootDir, outFile));
+
+
+
+

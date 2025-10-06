@@ -5,14 +5,10 @@ import { fileURLToPath } from 'node:url';
 export const aliasRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const viteAliases = [
-  { find: "@motor/adapters", replacement: path.resolve(aliasRootDir, "src/adapters") },
-  { find: "@motor/analyze", replacement: path.resolve(aliasRootDir, "src/analyze") },
-  { find: "@motor/core", replacement: path.resolve(aliasRootDir, "src/core") },
-  { find: "@motor/engine", replacement: path.resolve(aliasRootDir, "src/engine") },
-  { find: "@motor/public", replacement: path.resolve(aliasRootDir, "src/public.ts") },
-  { find: "@motor/rules", replacement: path.resolve(aliasRootDir, "src/rules") },
-  { find: "@motor/types", replacement: path.resolve(aliasRootDir, "src/types") },
-  { find: "@motor/ui-rich", replacement: path.resolve(aliasRootDir, "ui-rich/src") }
+  { find: "@motor/core", replacement: path.resolve(aliasRootDir, "packages/core/src") },
+  { find: "@motor/parser", replacement: path.resolve(aliasRootDir, "packages/parser/src") },
+  { find: "@motor/tsa", replacement: path.resolve(aliasRootDir, "packages/tsa/src") }
 ] as const;
 
-export const vitestAliases = Object.fromEntries(viteAliases.map(e => [e.find, e.replacement])) as const;
+export const vitestAliases: Record<string, string> =
+  Object.fromEntries(viteAliases.map(e => [e.find, e.replacement]));
