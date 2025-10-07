@@ -21,10 +21,19 @@ describe('TSA Golden Set 02b — no consecutive signs; parentheses required', ()
     expect(evalToString('2.5*(-1)')).toBe('-5/2');
   });
 
-  // Pending: will be enabled in CD2 when tokenizer starts rejecting these.
-  it.todo('rejects "3--2" (must be 3-(-2))');
-  it.todo('rejects "2*-3" (must be 2*(-3))');
-  it.todo('rejects "10/-5" (must be 10/(-5))');
-  it.todo('rejects "--3" (must be -(3))');
-  it.todo('rejects "2.5*-1" (must be 2.5*(-1))');
+  it('rejects "3--2" (must be 3-(-2))', () => {
+    expect(() => parseStage2Expression('3--2')).toThrow();
+  });
+  it('rejects "2*-3" (must be 2*(-3))', () => {
+    expect(() => parseStage2Expression('2*-3')).toThrow();
+  });
+  it('rejects "10/-5" (must be 10/(-5))', () => {
+    expect(() => parseStage2Expression('10/-5')).toThrow();
+  });
+  it('rejects "--3" (must be -(3))', () => {
+    expect(() => parseStage2Expression('--3')).toThrow();
+  });
+  it('rejects "2.5*-1" (must be 2.5*(-1))', () => {
+    expect(() => parseStage2Expression('2.5*-1')).toThrow();
+  });
 });
