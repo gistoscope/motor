@@ -56,7 +56,11 @@ export function tokenizeStage2(source: string): Token[] {
         previous.type === 'div' ||
         previous.type === 'lpar';
       const nextChar = source[index + 1];
-      if (canBeUnary && nextChar !== undefined && isDigit(nextChar)) {
+      if (
+        canBeUnary &&
+        nextChar !== undefined &&
+        (isDigit(nextChar) || nextChar === '.')
+      ) {
         const { nextIndex, value } = readNumber(source, index);
         tokens.push({ type: 'number', value });
         index = nextIndex;
@@ -66,7 +70,7 @@ export function tokenizeStage2(source: string): Token[] {
       index += 1;
       continue;
     }
-    if (isDigit(char)) {
+    if (isDigit(char) || char === '.') {
       const { nextIndex, value } = readNumber(source, index);
       tokens.push({ type: 'number', value });
       index = nextIndex;
@@ -88,16 +92,43 @@ function readNumber(source: string, start: number): { nextIndex: number; value: 
     sign = -1n;
     index += 1;
   }
-  if (index >= source.length || !isDigit(source[index]!)) {
-    throw new Stage2ParseError(`Expected digit at ${index}`);
-  }
-  let digits = '';
+
+  const integerStart = index;
+  let integerDigits = '';
   while (index < source.length && isDigit(source[index]!)) {
-    digits += source[index];
+    integerDigits += source[index]!;
     index += 1;
   }
-  const magnitude = BigInt(digits);
-  const value: Rational = reduceAndNormalize({ n: magnitude * sign, d: 1n });
+
+  let fractionalDigits = '';
+  if (index < source.length && source[index] === '.') {
+    index += 1; // skip '.'
+    const fracStart = index;
+    while (index < source.length && isDigit(source[index]!)) {
+      fractionalDigits += source[index]!;
+      index += 1;
+    }
+    if (index === fracStart) {
+      throw new Stage2ParseError(`Expected digit after decimal point at ${fracStart}`);
+    }
+  }
+
+  if (integerDigits.length === 0 && fractionalDigits.length === 0) {
+    throw new Stage2ParseError(`Expected digit at ${integerStart}`);
+  }
+
+  let denominator = 1n;
+  let numerator: bigint;
+
+  if (fractionalDigits.length > 0) {
+    denominator = 10n ** BigInt(fractionalDigits.length);
+    const numeratorText = (integerDigits.length === 0 ? '0' : integerDigits) + fractionalDigits;
+    numerator = BigInt(numeratorText) * sign;
+  } else {
+    numerator = BigInt(integerDigits) * sign;
+  }
+
+  const value: Rational = reduceAndNormalize({ n: numerator, d: denominator });
   return { nextIndex: index, value };
 }
 
