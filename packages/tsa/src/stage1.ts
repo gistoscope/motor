@@ -50,7 +50,7 @@ export function tokenizeStage1(source: string): Token[] {
       index += 1;
       continue;
     }
-    if (char === '-' || isDigit(char)) {
+    if (char === '-' || char === '.' || isDigit(char)) {
       const { nextIndex, value } = readNumber(source, index);
       tokens.push({ type: 'number', value });
       index = nextIndex;
@@ -72,16 +72,43 @@ function readNumber(source: string, start: number): { nextIndex: number; value: 
     sign = -1n;
     index += 1;
   }
-  if (index >= source.length || !isDigit(source[index]!)) {
-    throw new Stage1ParseError(`Expected digit at ${index}`);
-  }
-  let digits = '';
+
+  const integerStart = index;
+  let integerDigits = '';
   while (index < source.length && isDigit(source[index]!)) {
-    digits += source[index];
+    integerDigits += source[index]!;
     index += 1;
   }
-  const magnitude = BigInt(digits);
-  const value: Rational = reduceAndNormalize({ n: magnitude * sign, d: 1n });
+
+  let fractionalDigits = '';
+  if (index < source.length && source[index] === '.') {
+    index += 1; // skip '.'
+    const fracStart = index;
+    while (index < source.length && isDigit(source[index]!)) {
+      fractionalDigits += source[index]!;
+      index += 1;
+    }
+    if (index === fracStart) {
+      throw new Stage1ParseError(`Expected digit after decimal point at ${fracStart}`);
+    }
+  }
+
+  if (integerDigits.length === 0 && fractionalDigits.length === 0) {
+    throw new Stage1ParseError(`Expected digit at ${integerStart}`);
+  }
+
+  let denominator = 1n;
+  let numerator: bigint;
+
+  if (fractionalDigits.length > 0) {
+    denominator = 10n ** BigInt(fractionalDigits.length);
+    const numeratorText = (integerDigits.length === 0 ? '0' : integerDigits) + fractionalDigits;
+    numerator = BigInt(numeratorText) * sign;
+  } else {
+    numerator = BigInt(integerDigits) * sign;
+  }
+
+  const value: Rational = reduceAndNormalize({ n: numerator, d: denominator });
   return { nextIndex: index, value };
 }
 
