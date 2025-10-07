@@ -51,3 +51,5 @@ pnpm --filter @motor/web dev
 
 
 CLI tip: use `pnpm --filter @motor/cli exec motor -- --ast "1/2+1/3"` to print the AST before the result.
+
+Stage2 grammar: [packages/tsa/docs/grammar.stage2.md](packages/tsa/docs/grammar.stage2.md)
