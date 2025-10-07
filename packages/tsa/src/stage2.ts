@@ -4,6 +4,7 @@ import { reduceAndNormalize } from './reduce';
 
 const MUL_TOKENS = new Set(['×', '*']);
 const DIV_TOKENS = new Set(['÷', '/']);
+const NEGATIVE_ONE = reduceAndNormalize({ n: -1n, d: 1n });
 
 export class Stage2ParseError extends Error {}
 
@@ -55,11 +56,30 @@ export function tokenizeStage2(source: string): Token[] {
       const nextLooksNumeric =
         nextChar !== undefined && (isDigit(nextChar) || nextChar === '.');
 
-      if (isUnaryAllowedContext && nextLooksNumeric) {
-        const { nextIndex, value } = readNumber(source, index);
-        tokens.push({ type: 'number', value });
-        index = nextIndex;
-        continue;
+      if (isUnaryAllowedContext) {
+        if (nextLooksNumeric) {
+          const { nextIndex, value } = readNumber(source, index);
+          tokens.push({ type: 'number', value });
+          index = nextIndex;
+          continue;
+        }
+
+        let lookaheadIndex = index + 1;
+        while (
+          lookaheadIndex < source.length &&
+          (source[lookaheadIndex] === ' ' ||
+            source[lookaheadIndex] === '\t' ||
+            source[lookaheadIndex] === '\n')
+        ) {
+          lookaheadIndex += 1;
+        }
+        const lookaheadChar = source[lookaheadIndex];
+        if (lookaheadChar === '(') {
+          tokens.push({ type: 'number', value: NEGATIVE_ONE });
+          tokens.push({ type: 'mul' });
+          index += 1;
+          continue;
+        }
       }
 
       // Otherwise it's a binary subtraction operator.
