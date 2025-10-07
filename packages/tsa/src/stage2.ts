@@ -83,44 +83,51 @@ function isDigit(char: string): boolean {
 
 function readNumber(source: string, start: number): { nextIndex: number; value: Rational } {
   let index = start;
+
+  // опциональный знак (учитывается унарный минус выше по стеку)
   let sign = 1n;
   if (source[index] === '-') {
     sign = -1n;
     index += 1;
   }
+
+  // минимум одна цифра в целой части
   if (index >= source.length || !isDigit(source[index]!)) {
     throw new Stage2ParseError(`Expected digit at ${index}`);
   }
+
+  // целая часть
   let integerDigits = '';
   while (index < source.length && isDigit(source[index]!)) {
-    integerDigits += source[index];
+    integerDigits += source[index]!;
     index += 1;
   }
 
+  // дробная часть (необязательна)
   let fractionalDigits = '';
   if (index < source.length && source[index] === '.') {
-    index += 1; // Skip the decimal point
-    if (index >= source.length || !isDigit(source[index]!)) {
-      throw new Stage2ParseError(`Expected digit after decimal point at ${index}`);
-    }
+    index += 1;
+    const fractionalStart = index;
     while (index < source.length && isDigit(source[index]!)) {
-      fractionalDigits += source[index];
+      fractionalDigits += source[index]!;
       index += 1;
     }
-  }
-
-  let numerator = BigInt(integerDigits);
-  let denominator = 1n;
-  if (fractionalDigits.length > 0) {
-    denominator = 1n;
-    for (let i = 0; i < fractionalDigits.length; i += 1) {
-      denominator *= 10n;
+    if (index === fractionalStart) {
+      throw new Stage2ParseError(`Expected digit at ${fractionalStart}`);
     }
-    numerator = numerator * denominator + BigInt(fractionalDigits);
   }
-  numerator *= sign;
 
-  const value: Rational = reduceAndNormalize({ n: numerator, d: denominator });
+  // n/d: склеиваем цифры и выставляем 10^k в знаменателе
+  const denominator = fractionalDigits.length > 0 ? 10n ** BigInt(fractionalDigits.length) : 1n;
+  const numeratorText = integerDigits + (fractionalDigits.length > 0 ? fractionalDigits : '');
+  const numerator = BigInt(numeratorText) * sign;
+
+  return {
+    nextIndex: index,
+    value: reduceAndNormalize({ n: numerator, d: denominator }),
+  };
+}
+
   return { nextIndex: index, value };
 }
 
