@@ -31,5 +31,7 @@ describe('TSA Golden Set 02 — stage2: precedence, parentheses, negatives', () 
     expect(evalToString('(2+8)/(3-1)')).toBe('5'); // 10/2
   });
 
-  it.todo('decimals: 2.5 + 1.25 -> 3.75 (expected 15/4), pending decimal parser');
+  it('parses decimal literals', () => {
+    expect(evalToString('2.5 + 1.25')).toBe('15/4');
+  });
 });

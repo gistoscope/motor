@@ -91,13 +91,36 @@ function readNumber(source: string, start: number): { nextIndex: number; value: 
   if (index >= source.length || !isDigit(source[index]!)) {
     throw new Stage2ParseError(`Expected digit at ${index}`);
   }
-  let digits = '';
+  let integerDigits = '';
   while (index < source.length && isDigit(source[index]!)) {
-    digits += source[index];
+    integerDigits += source[index];
     index += 1;
   }
-  const magnitude = BigInt(digits);
-  const value: Rational = reduceAndNormalize({ n: magnitude * sign, d: 1n });
+
+  let fractionalDigits = '';
+  if (index < source.length && source[index] === '.') {
+    index += 1; // Skip the decimal point
+    if (index >= source.length || !isDigit(source[index]!)) {
+      throw new Stage2ParseError(`Expected digit after decimal point at ${index}`);
+    }
+    while (index < source.length && isDigit(source[index]!)) {
+      fractionalDigits += source[index];
+      index += 1;
+    }
+  }
+
+  let numerator = BigInt(integerDigits);
+  let denominator = 1n;
+  if (fractionalDigits.length > 0) {
+    denominator = 1n;
+    for (let i = 0; i < fractionalDigits.length; i += 1) {
+      denominator *= 10n;
+    }
+    numerator = numerator * denominator + BigInt(fractionalDigits);
+  }
+  numerator *= sign;
+
+  const value: Rational = reduceAndNormalize({ n: numerator, d: denominator });
   return { nextIndex: index, value };
 }
 
