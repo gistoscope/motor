@@ -47,25 +47,22 @@ export function tokenizeStage2(source: string): Token[] {
       continue;
     }
     if (char === '-') {
-      const previous = tokens[tokens.length - 1];
-      const canBeUnary =
-        !previous ||
-        previous.type === 'add' ||
-        previous.type === 'sub' ||
-        previous.type === 'mul' ||
-        previous.type === 'div' ||
-        previous.type === 'lpar';
+      const previous = tokens[tokens.length - 1] as Token | undefined;
       const nextChar = source[index + 1];
-      if (
-        canBeUnary &&
-        nextChar !== undefined &&
-        (isDigit(nextChar) || nextChar === '.')
-      ) {
+
+      // Unary minus is allowed ONLY at expression start or right after '('
+      const isUnaryAllowedContext = !previous || previous.type === 'lpar';
+      const nextLooksNumeric =
+        nextChar !== undefined && (isDigit(nextChar) || nextChar === '.');
+
+      if (isUnaryAllowedContext && nextLooksNumeric) {
         const { nextIndex, value } = readNumber(source, index);
         tokens.push({ type: 'number', value });
         index = nextIndex;
         continue;
       }
+
+      // Otherwise it's a binary subtraction operator.
       tokens.push({ type: 'sub' });
       index += 1;
       continue;
