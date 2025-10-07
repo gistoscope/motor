@@ -83,21 +83,51 @@ function isDigit(char: string): boolean {
 
 function readNumber(source: string, start: number): { nextIndex: number; value: Rational } {
   let index = start;
+
+  // опциональный знак (учитывается унарный минус выше по стеку)
   let sign = 1n;
   if (source[index] === '-') {
     sign = -1n;
     index += 1;
   }
+
+  // минимум одна цифра в целой части
   if (index >= source.length || !isDigit(source[index]!)) {
     throw new Stage2ParseError(`Expected digit at ${index}`);
   }
-  let digits = '';
+
+  // целая часть
+  let integerDigits = '';
   while (index < source.length && isDigit(source[index]!)) {
-    digits += source[index];
+    integerDigits += source[index]!;
     index += 1;
   }
-  const magnitude = BigInt(digits);
-  const value: Rational = reduceAndNormalize({ n: magnitude * sign, d: 1n });
+
+  // дробная часть (необязательна)
+  let fractionalDigits = '';
+  if (index < source.length && source[index] === '.') {
+    index += 1;
+    const fractionalStart = index;
+    while (index < source.length && isDigit(source[index]!)) {
+      fractionalDigits += source[index]!;
+      index += 1;
+    }
+    if (index === fractionalStart) {
+      throw new Stage2ParseError(`Expected digit at ${fractionalStart}`);
+    }
+  }
+
+  // n/d: склеиваем цифры и выставляем 10^k в знаменателе
+  const denominator = fractionalDigits.length > 0 ? 10n ** BigInt(fractionalDigits.length) : 1n;
+  const numeratorText = integerDigits + (fractionalDigits.length > 0 ? fractionalDigits : '');
+  const numerator = BigInt(numeratorText) * sign;
+
+  return {
+    nextIndex: index,
+    value: reduceAndNormalize({ n: numerator, d: denominator }),
+  };
+}
+
   return { nextIndex: index, value };
 }
 
