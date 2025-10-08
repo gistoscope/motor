@@ -6,6 +6,6 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "vitest": "workspace:*"
+    "vitest": "^3.2.4"
   }
 }
