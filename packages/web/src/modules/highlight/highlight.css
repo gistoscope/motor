@@ -1,0 +1,168 @@
+:root {
+  --highlight-primary: hsla(188, 82%, 44%, 0.92);
+  --highlight-primary-soft: hsla(188, 82%, 54%, 0.4);
+  --highlight-muted: hsla(285, 72%, 58%, 0.9);
+  --highlight-muted-soft: hsla(285, 72%, 62%, 0.35);
+  --highlight-glow: hsla(187, 100%, 65%, 0.25);
+  --highlight-shadow: rgba(0, 0, 0, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --highlight-primary: hsla(188, 100%, 72%, 0.95);
+    --highlight-primary-soft: hsla(188, 100%, 64%, 0.42);
+    --highlight-muted: hsla(285, 100%, 78%, 0.88);
+    --highlight-muted-soft: hsla(285, 90%, 68%, 0.36);
+    --highlight-glow: hsla(190, 100%, 72%, 0.35);
+    --highlight-shadow: rgba(0, 0, 0, 0.65);
+  }
+}
+
+.highlight-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  contain: paint;
+  z-index: 3;
+}
+
+.highlight-layer__ring {
+  position: absolute;
+  will-change: transform, opacity;
+  padding: 0;
+}
+
+.highlight-layer__halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  pointer-events: none;
+  --entry-duration: 320ms;
+  --glow-duration: 600ms;
+  --shake-duration: 55ms;
+  --halo-color: var(--highlight-primary);
+  --halo-soft: var(--highlight-primary-soft);
+  --halo-glow: var(--highlight-glow);
+  --halo-shadow: var(--highlight-shadow);
+}
+
+.highlight-layer__ring[data-accent='muted'] .highlight-layer__halo {
+  --halo-color: var(--highlight-muted);
+  --halo-soft: var(--highlight-muted-soft);
+}
+
+.highlight-layer__halo::before,
+.highlight-layer__halo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.highlight-layer__halo::before {
+  border: 1.5px solid var(--halo-color);
+  box-shadow:
+    0 0 0 1.5px var(--halo-soft),
+    0 0 12px 2px var(--halo-glow),
+    0 4px 16px -8px var(--halo-shadow);
+  opacity: 0;
+  animation:
+    highlight-micro-shake var(--shake-duration) ease-out,
+    highlight-breath var(--entry-duration) cubic-bezier(0.33, 0, 0.12, 1) forwards,
+    highlight-afterglow var(--glow-duration) ease-out var(--entry-duration) forwards;
+}
+
+.highlight-layer__halo::after {
+  inset: -6px;
+  border: 1px solid color-mix(in srgb, var(--halo-color) 65%, transparent);
+  opacity: 0;
+  animation:
+    highlight-breath-outline calc(var(--entry-duration) + 80ms) ease-out forwards,
+    highlight-afterglow var(--glow-duration) ease-out calc(var(--entry-duration) + 80ms) forwards;
+}
+
+.highlight-layer__tether {
+  position: absolute;
+  height: 0;
+  border-bottom: 1px dotted color-mix(in srgb, var(--highlight-primary) 70%, transparent);
+  opacity: 0;
+  transform-origin: left center;
+  animation:
+    highlight-micro-shake 45ms ease-out,
+    highlight-tether-rise 220ms ease-out forwards,
+    highlight-afterglow 520ms ease-out 220ms forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .highlight-layer__halo::before,
+  .highlight-layer__halo::after,
+  .highlight-layer__tether {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+@keyframes highlight-breath {
+  0% {
+    opacity: 0.05;
+    transform: scale3d(0.96, 0.96, 1);
+  }
+  45% {
+    opacity: 1;
+    transform: scale3d(1, 1, 1);
+  }
+  100% {
+    opacity: 0.32;
+    transform: scale3d(1.035, 1.035, 1);
+  }
+}
+
+@keyframes highlight-breath-outline {
+  0% {
+    opacity: 0.1;
+    transform: scale3d(0.94, 0.94, 1);
+  }
+  60% {
+    opacity: 0.5;
+    transform: scale3d(1, 1, 1);
+  }
+  100% {
+    opacity: 0.12;
+    transform: scale3d(1.05, 1.05, 1);
+  }
+}
+
+@keyframes highlight-afterglow {
+  0% {
+    opacity: 0.28;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes highlight-tether-rise {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scaleX(0.9);
+  }
+  100% {
+    opacity: 0.7;
+    transform: translate3d(0, 0, 0) scaleX(1);
+  }
+}
+
+@keyframes highlight-micro-shake {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  40% {
+    transform: translate3d(0.45px, -0.45px, 0);
+  }
+  70% {
+    transform: translate3d(-0.35px, 0.38px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
