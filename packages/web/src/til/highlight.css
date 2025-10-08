@@ -1,0 +1,11 @@
+[data-ast-id] {
+  position: relative;
+}
+
+.t-hover {
+  outline: 1px solid var(--til-hover-color, rgba(100, 150, 250, 0.6));
+}
+
+.t-selected {
+  background: var(--til-selected-color, rgba(100, 150, 250, 0.2));
+}
