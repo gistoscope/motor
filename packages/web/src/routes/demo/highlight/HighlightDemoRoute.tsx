@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { createHighlightController } from '../../../modules/highlight/controller';
 import { HighlightLayer, useHighlightSnapshot } from '../../../modules/highlight/HighlightLayer';
 import type { HighlightControllerLike, HighlightId } from '../../../modules/highlight/types';
@@ -38,8 +38,8 @@ const EXPRESSIONS: DemoExpression[] = [
         id: 'series-sum',
         text: (
           <span className="math-operator-block">
-            ∑<sub>n=0</sub>
-            <sup>∞</sup>
+            âˆ‘<sub>n=0</sub>
+            <sup>âˆž</sup>
           </span>
         ),
         role: 'operator',
@@ -276,7 +276,7 @@ function MathToken({ token, controller, pinned, hasActive, isActive }: MathToken
     if (!interactive || !ref.current) return;
     return controller.register(ref.current, {
       id: token.id,
-      role: token.role,
+      role: token.role as import("../../../modules/highlight/types").HighlightRole,
       accent: token.accent,
       bracketGroup: token.bracketGroup,
     });
@@ -368,14 +368,14 @@ export default function HighlightDemoRoute() {
         </div>
         <div className="highlight-demo__controls">
           <button type="button" onClick={handlePrev}>
-            ◀ Step
+            â—€ Step
           </button>
           <div className="highlight-demo__step">
             <strong>{step?.label}</strong>
             <span>{step?.description}</span>
           </div>
           <button type="button" onClick={handleNext}>
-            Step ▶
+            Step â–¶
           </button>
         </div>
       </header>
@@ -411,3 +411,4 @@ export default function HighlightDemoRoute() {
     </div>
   );
 }
+
