@@ -7,6 +7,12 @@ export type TILOptions = {
   onAction?: (payload: any) => void;
 };
 
+export type TILExecuteOptions = {
+  listActions: (focus: NodeId[]) => string[];
+  canApply: (rule: string, focus: NodeId[]) => boolean;
+  onExecute?: (payload: { rule: string; focus: NodeId[] }) => void;
+};
+
 export type TILHandle = {
   detach(): void;
   getSelection(): NodeId[];
