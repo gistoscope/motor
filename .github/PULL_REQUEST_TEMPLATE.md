@@ -1,10 +1,9 @@
-## Summary
-- [ ] Purpose of this PR
-- [ ] Scope (which packages): core / parser / tsa / cli / web
+﻿## Summary
+- Что меняем и почему (коротко)
 
-## Checks
-- [ ] `pnpm install --frozen-lockfile`
-- [ ] `node scripts/generate-aliases.mjs` + `--check`
-- [ ] `pnpm verify` (green)
-- [ ] `pnpm -r test` (green)
-- [ ] No artifacts in diff (`node_modules`, `dist`, `build`, `coverage`, `.cache`, `*.log`)
+## Checklist
+- [ ] `pnpm verify` локально зелёный
+- [ ] Обновил `docs/ROUTING.md` / `ARCHITECTURE.md` (если затронуто)
+- [ ] Публичные API/типы имеют TSDoc
+- [ ] Тесты/Golden обновлены при изменении логики
+- [ ] Для UI-экранов есть ссылка/доступ с `/dev`
