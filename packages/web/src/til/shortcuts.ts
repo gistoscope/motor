@@ -20,6 +20,76 @@ function shouldClearSelection(
   return currentId === id || (!!ownerId && currentId === ownerId);
 }
 
+function getClosestAstElement(target: EventTarget | null): HTMLElement | null {
+  if (!target || !(target instanceof Node)) return null;
+  const base = target instanceof Element ? target : target.parentElement;
+  return (base?.closest?.('[data-ast-id]') as HTMLElement | null) ?? null;
+}
+
+function findOperatorInSpan(ast: AST, span: NodeId[] | undefined): NodeId | null {
+  if (!Array.isArray(span)) return null;
+  for (const tokenId of span) {
+    if (isOperatorChar(getTokenText(ast, tokenId))) {
+      return tokenId;
+    }
+  }
+  return null;
+}
+
+export function findOperatorInSelection(ast: AST, selection: NodeId[] | undefined): NodeId | null {
+  if (!selection || selection.length === 0) {
+    return null;
+  }
+
+  for (const id of selection) {
+    if (isOperatorChar(getTokenText(ast, id))) {
+      return id;
+    }
+  }
+
+  if (selection.length !== 1) {
+    return null;
+  }
+
+  const ownerId = selection[0];
+  if (!ownerId) {
+    return null;
+  }
+
+  const ownerNode = (ast as any)?.nodes?.[ownerId];
+  if (!ownerNode) {
+    return null;
+  }
+
+  const fromSpan = findOperatorInSpan(ast, ownerNode?.span);
+  if (fromSpan) {
+    return fromSpan;
+  }
+
+  const tokens = (ast as any)?.tokens;
+  if (tokens && ownerId in tokens) {
+    if (isOperatorChar(getTokenText(ast, ownerId))) {
+      return ownerId;
+    }
+  }
+
+  const ownerMap = (ast as any)?.owner;
+  if (ownerMap) {
+    for (const tokenId of Object.keys(ownerMap)) {
+      if (ownerMap[tokenId] === ownerId && isOperatorChar(getTokenText(ast, tokenId))) {
+        return tokenId as NodeId;
+      }
+    }
+  }
+
+  return null;
+}
+
+function flashExecute(root: HTMLElement) {
+  root.classList.add('til-exec-flash');
+  setTimeout(() => root.classList.remove('til-exec-flash'), 220);
+}
+
 export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
   let clickTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -29,8 +99,7 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
       clickTimeout = null;
     }
 
-    const target = event.target as Element | null;
-    const el = target?.closest?.('[data-ast-id]') as HTMLElement | null;
+    const el = getClosestAstElement(event.target);
     if (!el) return;
 
     const id = el.getAttribute('data-ast-id') as NodeId | null;
@@ -45,11 +114,11 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
 
     api.setSelection([selectionId]);
     api.exec([id]);
+    flashExecute(root);
   };
 
   const onClick = (event: MouseEvent) => {
-    const target = event.target as Element | null;
-    const el = target?.closest?.('[data-ast-id]') as HTMLElement | null;
+    const el = getClosestAstElement(event.target);
     if (!el) return;
 
     const id = el.getAttribute('data-ast-id') as NodeId | null;
@@ -80,14 +149,13 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== 'Enter') return;
 
-    const selection = api.getSelection();
-    if (!selection?.length) return;
-
     const ast = api.getAst();
-    const hasOperator = selection.some((id) => isOperatorChar(getTokenText(ast, id)));
-    if (!hasOperator) return;
+    const selection = api.getSelection();
+    const opId = findOperatorInSelection(ast, selection);
+    if (!opId) return;
 
-    api.exec(selection);
+    api.exec([opId]);
+    flashExecute(root);
   };
 
   root.addEventListener('click', onClick);

@@ -12,3 +12,8 @@
   outline-offset: 2px;
   background: transparent;
 }
+
+.til-exec-flash {
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.85) inset;
+  transition: box-shadow 180ms ease-out;
+}
