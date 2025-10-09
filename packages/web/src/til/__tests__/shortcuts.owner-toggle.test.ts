@@ -69,7 +69,7 @@ describe('wireExecuteShortcuts owner toggle', () => {
     root.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
     expect(exec).toHaveBeenCalledTimes(1);
-    expect(exec).toHaveBeenLastCalledWith(['x', 'op']);
+    expect(exec).toHaveBeenLastCalledWith(['op']);
 
     cleanup();
   });
