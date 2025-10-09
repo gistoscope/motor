@@ -1,0 +1,9 @@
+/* Disable native text selection inside the math display area */
+.til-no-select,
+.til-no-select * {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  caret-color: transparent; /* no blinking caret inside display */
+}

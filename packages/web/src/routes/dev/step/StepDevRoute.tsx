@@ -6,8 +6,14 @@ import {
   formatStage2,
   parseStage2Expression
 } from '@motor/tsa';
-import type { AST } from '@motor/tsa';
+import type { AST as StageAst } from '@motor/tsa';
 import styles from './StepDevRoute.module.css';
+
+import { wireExecuteShortcuts } from '../../../til/shortcuts';
+import { wireAltClickExpand } from '../../../til/events.expand';
+import type { AST, NodeId } from '../../../til/opTokens';
+import '../../../til/highlight.no-select.css';
+import '../../../til/highlight.css';
 
 export type TraceStep = {
   rule: string;
@@ -29,17 +35,27 @@ const EXAMPLES: string[] = [
 ];
 
 type DisplayNode =
-  | { kind: 'literal'; value: string; wrap: boolean }
-  | { kind: 'fraction'; numerator: DisplayNode; denominator: DisplayNode; wrap: boolean }
+  | { kind: 'literal'; value: string }
+  | { kind: 'fraction'; numerator: DisplayNode; denominator: DisplayNode }
   | {
       kind: 'operation';
       operator: '×' | '÷' | '+' | '-';
       left: DisplayNode;
       right: DisplayNode;
-      wrap: boolean;
-    };
+    }
+  | { kind: 'group'; inner: DisplayNode };
 
 type PairMap = Map<string, string>;
+
+type SyntheticAst = {
+  linear: NodeId[];
+  tokens: Record<NodeId, { text: string }>;
+  owner: Record<NodeId, NodeId>;
+  byId: Record<NodeId, { type: string }>;
+  nodes: Record<NodeId, { span: NodeId[]; type: string }>;
+  pairs: Record<NodeId, [NodeId, NodeId]>;
+  parent: Record<NodeId, NodeId | null>;
+};
 
 function hasOuterParentheses(source: string): boolean {
   if (!source.startsWith('(') || !source.endsWith(')')) {
@@ -81,12 +97,11 @@ function findTopLevelOperator(source: string, targets: string[]): number {
 function parseExpression(source: string): DisplayNode {
   const trimmed = source.trim();
   if (trimmed === '') {
-    return { kind: 'literal', value: '', wrap: false };
+    return { kind: 'literal', value: '' };
   }
 
   if (hasOuterParentheses(trimmed)) {
-    const inner = parseExpression(trimmed.slice(1, -1));
-    return { ...inner, wrap: true };
+    return { kind: 'group', inner: parseExpression(trimmed.slice(1, -1)) };
   }
 
   const addIndex = findTopLevelOperator(trimmed, ['+', '-']);
@@ -96,8 +111,7 @@ function parseExpression(source: string): DisplayNode {
       kind: 'operation',
       operator,
       left: parseExpression(trimmed.slice(0, addIndex)),
-      right: parseExpression(trimmed.slice(addIndex + 1)),
-      wrap: false
+      right: parseExpression(trimmed.slice(addIndex + 1))
     };
   }
 
@@ -107,8 +121,7 @@ function parseExpression(source: string): DisplayNode {
       kind: 'operation',
       operator: trimmed[opIndex] as '×' | '÷',
       left: parseExpression(trimmed.slice(0, opIndex)),
-      right: parseExpression(trimmed.slice(opIndex + 1)),
-      wrap: false
+      right: parseExpression(trimmed.slice(opIndex + 1))
     };
   }
 
@@ -117,89 +130,206 @@ function parseExpression(source: string): DisplayNode {
     return {
       kind: 'fraction',
       numerator: parseExpression(trimmed.slice(0, slashIndex)),
-      denominator: parseExpression(trimmed.slice(slashIndex + 1)),
-      wrap: false
+      denominator: parseExpression(trimmed.slice(slashIndex + 1))
     };
   }
 
-  return { kind: 'literal', value: trimmed, wrap: false };
+  return { kind: 'literal', value: trimmed };
 }
 
-function wrapContent(content: React.ReactNode, path: string, pairMap: PairMap): React.ReactNode {
-  const wrapBase = `${path}.wrap`;
-  const openId = `${wrapBase}.open`;
-  const closeId = `${wrapBase}.close`;
-  pairMap.set(openId, closeId);
-  pairMap.set(closeId, openId);
-  return (
-    <span className={styles.group} data-ast-id={`${wrapBase}.group`}>
-      <span className={styles.paren} data-ast-id={openId} data-ast-role="paren-open">
-        (
-      </span>
-      <span className={styles.groupInner} data-ast-id={`${wrapBase}.inner`}>
-        {content}
-      </span>
-      <span className={styles.paren} data-ast-id={closeId} data-ast-role="paren-close">
-        )
-      </span>
-    </span>
-  );
+type BuildContext = {
+  pairMap: PairMap;
+  ast: SyntheticAst;
+};
+
+function createBuildContext(): BuildContext {
+  return {
+    pairMap: new Map<string, string>(),
+    ast: {
+      linear: [],
+      tokens: {},
+      owner: {},
+      byId: {},
+      nodes: {},
+      pairs: {},
+      parent: {}
+    }
+  };
 }
 
-function renderNode(node: DisplayNode, path: string, pairMap: PairMap): React.ReactNode {
+function registerToken(
+  context: BuildContext,
+  id: NodeId,
+  text: string,
+  ownerId: NodeId | null,
+  parentId: NodeId | null
+): void {
+  context.ast.linear.push(id);
+  context.ast.tokens[id] = { text };
+  if (ownerId) {
+    context.ast.owner[id] = ownerId;
+  }
+  context.ast.parent[id] = parentId ?? ownerId ?? null;
+}
+
+function finalizeNode(
+  context: BuildContext,
+  nodeId: NodeId,
+  type: string,
+  startIndex: number,
+  parentId: NodeId | null
+): void {
+  const span = context.ast.linear.slice(startIndex);
+  context.ast.nodes[nodeId] = { span: span.slice(), type };
+  context.ast.byId[nodeId] = { type };
+  context.ast.owner[nodeId] = nodeId;
+  context.ast.parent[nodeId] = parentId ?? null;
+}
+
+function renderNode(
+  node: DisplayNode,
+  path: string,
+  context: BuildContext,
+  ownerId: NodeId | null,
+  parentId: NodeId | null
+): React.ReactNode {
+  if (node.kind === 'group') {
+    const wrapBase = `${path}.wrap`;
+    const groupId = `${wrapBase}.group`;
+    const openId = `${wrapBase}.open`;
+    const closeId = `${wrapBase}.close`;
+    const innerId = `${wrapBase}.inner`;
+
+    const start = context.ast.linear.length;
+
+    context.pairMap.set(openId, closeId);
+    context.pairMap.set(closeId, openId);
+    context.ast.pairs[openId] = [openId, closeId];
+    context.ast.pairs[closeId] = [openId, closeId];
+
+    registerToken(context, openId, '(', groupId, groupId);
+    context.ast.owner[groupId] = groupId;
+    context.ast.parent[groupId] = parentId ?? null;
+    context.ast.owner[innerId] = groupId;
+    context.ast.parent[innerId] = groupId;
+
+    const inner = renderNode(node.inner, `${path}.inner`, context, groupId, groupId);
+
+    registerToken(context, closeId, ')', groupId, groupId);
+    finalizeNode(context, groupId, 'Paren', start, parentId);
+
+    return (
+      <span className={styles.group} data-ast-id={groupId}>
+        <span className={styles.paren} data-ast-id={openId} data-ast-role="paren-open">
+          (
+        </span>
+        <span className={styles.groupInner} data-ast-id={innerId}>
+          {inner}
+        </span>
+        <span className={styles.paren} data-ast-id={closeId} data-ast-role="paren-close">
+          )
+        </span>
+      </span>
+    );
+  }
+
   if (node.kind === 'literal') {
-    const literal = (
-      <span className={styles.literal} data-ast-id={`${path}.literal`}>
+    const id = `${path}.literal`;
+    registerToken(context, id, node.value, ownerId, parentId);
+    return (
+      <span className={styles.literal} data-ast-id={id}>
         {node.value}
       </span>
     );
-    return node.wrap ? wrapContent(literal, path, pairMap) : literal;
   }
 
   if (node.kind === 'fraction') {
-    const fraction = (
-      <span className={styles.fraction} data-ast-id={`${path}.fraction`}>
-        <span className={styles.fracPart} data-ast-id={`${path}.numerator.part`}>
-          {renderNode(node.numerator, `${path}.numerator`, pairMap)}
+    const nodeId = `${path}.fraction`;
+    const start = context.ast.linear.length;
+
+    context.ast.owner[nodeId] = nodeId;
+    context.ast.parent[nodeId] = parentId ?? null;
+
+    const numeratorPartId = `${path}.numerator.part`;
+    const denominatorPartId = `${path}.denominator.part`;
+    context.ast.owner[numeratorPartId] = nodeId;
+    context.ast.owner[denominatorPartId] = nodeId;
+    context.ast.parent[numeratorPartId] = nodeId;
+    context.ast.parent[denominatorPartId] = nodeId;
+
+    const childOwner = ownerId ?? nodeId;
+    const numerator = renderNode(node.numerator, `${path}.numerator`, context, childOwner, nodeId);
+    const barId = `${path}.bar`;
+    registerToken(context, barId, '/', ownerId ?? nodeId, nodeId);
+    const denominator = renderNode(node.denominator, `${path}.denominator`, context, childOwner, nodeId);
+
+    finalizeNode(context, nodeId, 'Fraction', start, parentId);
+
+    return (
+      <span className={styles.fraction} data-ast-id={nodeId}>
+        <span className={styles.fracPart} data-ast-id={numeratorPartId}>
+          {numerator}
         </span>
-        <span className={styles.fracBar} data-ast-id={`${path}.bar`} />
-        <span className={styles.fracPart} data-ast-id={`${path}.denominator.part`}>
-          {renderNode(node.denominator, `${path}.denominator`, pairMap)}
+        <span className={styles.fracBar} data-ast-id={barId} />
+        <span className={styles.fracPart} data-ast-id={denominatorPartId}>
+          {denominator}
         </span>
       </span>
     );
-    return node.wrap ? wrapContent(fraction, path, pairMap) : fraction;
   }
 
-  const operation = (
-    <span className={styles.operation} data-ast-id={`${path}.operation`}>
-      {renderNode(node.left, `${path}.left`, pairMap)}
-      <span className={styles.operatorSymbol} data-ast-id={`${path}.operator`}>
+  const nodeId = `${path}.operation`;
+  const start = context.ast.linear.length;
+
+  context.ast.owner[nodeId] = nodeId;
+  context.ast.parent[nodeId] = parentId ?? null;
+
+  const childOwner = ownerId ?? nodeId;
+  const left = renderNode(node.left, `${path}.left`, context, childOwner, nodeId);
+  const operatorId = `${path}.operator`;
+  registerToken(context, operatorId, node.operator, ownerId ?? nodeId, nodeId);
+  const right = renderNode(node.right, `${path}.right`, context, childOwner, nodeId);
+
+  finalizeNode(context, nodeId, 'Operation', start, parentId);
+
+  return (
+    <span className={styles.operation} data-ast-id={nodeId}>
+      {left}
+      <span className={styles.operatorSymbol} data-ast-id={operatorId}>
         {node.operator}
       </span>
-      {renderNode(node.right, `${path}.right`, pairMap)}
+      {right}
     </span>
   );
-  return node.wrap ? wrapContent(operation, path, pairMap) : operation;
 }
 
 type ExpressionDisplayProps = {
   value: string;
   'aria-label': string;
   onPairMapChange?: (pairMap: PairMap) => void;
+  onAstChange?: (ast: SyntheticAst) => void;
 };
 
-function ExpressionDisplay({ value, onPairMapChange, ...rest }: ExpressionDisplayProps) {
-  const { rendered, pairMap } = useMemo(() => {
-    const parsed = parseExpression(value);
-    const map: PairMap = new Map();
-    const node = renderNode(parsed, 'root', map);
-    return { rendered: node, pairMap: map };
+function ExpressionDisplay({ value, onPairMapChange, onAstChange, ...rest }: ExpressionDisplayProps) {
+  const { rendered, pairMap, ast } = useMemo(() => {
+    try {
+      const parsed = parseExpression(value);
+      const context = createBuildContext();
+      const element = renderNode(parsed, 'root', context, null, null);
+      return { rendered: element, pairMap: context.pairMap, ast: context.ast };
+    } catch {
+      const context = createBuildContext();
+      return { rendered: <span data-ast-id="root.empty" />, pairMap: context.pairMap, ast: context.ast };
+    }
   }, [value]);
 
   useEffect(() => {
     onPairMapChange?.(pairMap);
   }, [onPairMapChange, pairMap]);
+
+  useEffect(() => {
+    onAstChange?.(ast);
+  }, [onAstChange, ast]);
 
   return (
     <div {...rest} className={styles.katexWrap}>
@@ -208,161 +338,153 @@ function ExpressionDisplay({ value, onPairMapChange, ...rest }: ExpressionDispla
   );
 }
 
-type AttachOptions = {
-  getPairMap?: () => PairMap | null;
-};
+function escapeAstId(id: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(id);
+  }
+  return id.replace(/"/g, '\\"');
+}
 
-type AttachHandle = {
-  detach(): void;
-};
-
-function attachTIL(
-  container: HTMLElement,
-  getAst: () => AST | null,
-  options?: AttachOptions
-): AttachHandle {
-  void getAst();
-  const hoverClass = 't-hover';
-  const selectedClass = 't-selected';
-  let hovered: HTMLElement[] = [];
-  let selectedIds = new Set<string>();
-
-  const getIdsForToken = (id: string | null): string[] => {
-    if (!id) {
-      return [];
+function computeDragSpan(ast: SyntheticAst, startId: NodeId, endId: NodeId): NodeId[] {
+  if (startId === endId) {
+    const span = ast.nodes[startId]?.span;
+    if (span?.length) {
+      return span.slice();
     }
-    const pairMap = options?.getPairMap?.() ?? null;
-    if (!pairMap) {
-      return [id];
-    }
-    const ids = new Set<string>([id]);
-    const counterpart = pairMap.get(id);
-    if (counterpart) {
-      ids.add(counterpart);
-    }
-    return Array.from(ids);
-  };
+    return [startId];
+  }
 
-  const queryElements = (ids: string[]): HTMLElement[] => {
-    const elements: HTMLElement[] = [];
-    ids.forEach((tokenId) => {
-      const escaped = typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(tokenId) : tokenId;
-      container
-        .querySelectorAll<HTMLElement>(`[data-ast-id="${escaped}"]`)
-        .forEach((element) => {
-          elements.push(element);
-        });
-    });
-    return elements;
-  };
-
-  const applyHover = (ids: string[]) => {
-    hovered.forEach((element) => {
-      element.classList.remove(hoverClass);
-    });
-    const next = queryElements(ids);
-    next.forEach((element) => {
-      element.classList.add(hoverClass);
-    });
-    hovered = next;
-  };
-
-  const syncSelection = () => {
-    container.querySelectorAll<HTMLElement>('[data-ast-id]').forEach((element) => {
-      const id = element.getAttribute('data-ast-id');
-      if (!id) {
-        return;
+  const getAncestors = (seed: NodeId): NodeId[] => {
+    const list: NodeId[] = [];
+    const seen = new Set<NodeId>();
+    let current: NodeId | null = seed;
+    while (current && !seen.has(current)) {
+      list.push(current);
+      seen.add(current);
+      const parent: NodeId | null = ast.parent[current] ?? null;
+      if (parent === current) {
+        break;
       }
-      if (selectedIds.has(id)) {
-        element.classList.add(selectedClass);
-      } else {
-        element.classList.remove(selectedClass);
+      current = parent;
+    }
+    return list;
+  };
+
+  const startAnc = new Set(getAncestors(startId));
+  const endAncestors = getAncestors(endId);
+  let lca: NodeId | null = null;
+  for (const candidate of endAncestors) {
+    if (startAnc.has(candidate)) {
+      lca = candidate;
+      break;
+    }
+  }
+
+  if (lca) {
+    const lcaSpan = ast.nodes[lca]?.span;
+    if (lcaSpan?.length) {
+      return lcaSpan.slice();
+    }
+    if (ast.tokens[lca]) {
+      return [lca];
+    }
+  }
+
+  const startSpan = ast.nodes[startId]?.span ?? [startId];
+  const endSpan = ast.nodes[endId]?.span ?? [endId];
+  const startToken = startSpan[0];
+  const endToken = endSpan[endSpan.length - 1];
+  const order = ast.linear ?? [];
+  const a = order.indexOf(startToken);
+  const b = order.indexOf(endToken);
+  if (a < 0 || b < 0) {
+    return [];
+  }
+  const from = Math.min(a, b);
+  const to = Math.max(a, b);
+  return order.slice(from, to + 1);
+}
+
+function wireDragSelectLCA(
+  root: HTMLElement,
+  api: {
+    getAst(): SyntheticAst;
+    getSelection(): NodeId[];
+    setSelection(ids: NodeId[]): void;
+  }
+): () => void {
+  let startId: NodeId | null = null;
+  let pointerId: number | null = null;
+  let captured: HTMLElement | null = null;
+
+  const getIdFromEvent = (event: Event): NodeId | null => {
+    const element = (event.target as Element | null)?.closest('[data-ast-id]') as HTMLElement | null;
+    if (!element) {
+      return null;
+    }
+    return (element.getAttribute('data-ast-id') ?? null) as NodeId | null;
+  };
+
+  const clear = () => {
+    if (pointerId !== null && captured && typeof captured.releasePointerCapture === 'function') {
+      try {
+        captured.releasePointerCapture(pointerId);
+      } catch {
+        // ignore
       }
-    });
+    }
+    startId = null;
+    pointerId = null;
+    captured = null;
   };
 
-  const toggleSelection = (ids: string[]) => {
-    if (ids.length === 0) {
+  const handlePointerDown = (event: PointerEvent) => {
+    if (event.button !== 0) {
       return;
     }
-    const shouldDeselect = ids.every((id) => selectedIds.has(id));
-    const next = new Set(selectedIds);
-    ids.forEach((id) => {
-      if (shouldDeselect) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-    });
-    selectedIds = next;
-    syncSelection();
-  };
-
-  const handlePointerOver = (event: PointerEvent) => {
-    const target = event.target as HTMLElement | null;
-    if (!target) {
-      return;
-    }
-    const token = target.closest<HTMLElement>('[data-ast-id]');
-    if (!token || !container.contains(token)) {
-      applyHover([]);
-      return;
-    }
-    const id = token.getAttribute('data-ast-id');
-    if (!id) {
-      applyHover([]);
-      return;
-    }
-    applyHover(getIdsForToken(id));
-  };
-
-  const handlePointerOut = (event: PointerEvent) => {
-    const nextTarget = event.relatedTarget as Node | null;
-    if (nextTarget && container.contains(nextTarget)) {
-      return;
-    }
-    applyHover([]);
-  };
-
-  const handleClick = (event: MouseEvent) => {
-    const target = event.target as HTMLElement | null;
-    if (!target) {
-      return;
-    }
-    const token = target.closest<HTMLElement>('[data-ast-id]');
-    if (!token || !container.contains(token)) {
-      return;
-    }
-    event.preventDefault();
-    const id = token.getAttribute('data-ast-id');
+    const id = getIdFromEvent(event);
     if (!id) {
       return;
     }
-    toggleSelection(getIdsForToken(id));
+    startId = id;
+    pointerId = event.pointerId;
+    captured = (event.target as HTMLElement | null)?.closest('[data-ast-id]') as HTMLElement | null;
+    captured?.setPointerCapture?.(event.pointerId);
   };
 
-  container.addEventListener('pointerover', handlePointerOver);
-  container.addEventListener('pointerout', handlePointerOut);
-  container.addEventListener('click', handleClick);
-
-  return {
-    detach() {
-      hovered.forEach((element) => {
-        element.classList.remove(hoverClass);
-      });
-      hovered = [];
-      selectedIds = new Set();
-      container.removeEventListener('pointerover', handlePointerOver);
-      container.removeEventListener('pointerout', handlePointerOut);
-      container.removeEventListener('click', handleClick);
-      syncSelection();
+  const handlePointerUp = (event: PointerEvent) => {
+    if (pointerId !== null && event.pointerId !== pointerId) {
+      return;
     }
+    const endId = getIdFromEvent(event);
+    if (startId && endId) {
+      const ast = api.getAst();
+      const span = computeDragSpan(ast, startId, endId);
+      if (span.length > 0) {
+        api.setSelection(span);
+      }
+    }
+    clear();
+  };
+
+  const handlePointerCancel = () => {
+    clear();
+  };
+
+  root.addEventListener('pointerdown', handlePointerDown);
+  root.addEventListener('pointerup', handlePointerUp);
+  root.addEventListener('pointercancel', handlePointerCancel);
+
+  return () => {
+    root.removeEventListener('pointerdown', handlePointerDown);
+    root.removeEventListener('pointerup', handlePointerUp);
+    root.removeEventListener('pointercancel', handlePointerCancel);
   };
 }
 
-function applyTrace(ast: AST): { steps: TraceStep[]; finalExpression: string; finalValue: string } | { error: string } {
+function applyTrace(ast: StageAst): { steps: TraceStep[]; finalExpression: string; finalValue: string } | { error: string } {
   const steps: TraceStep[] = [];
-  let current: AST = ast;
+  let current: StageAst = ast;
 
   while (true) {
     const result = applyNextRule(current);
@@ -449,52 +571,176 @@ export default function StepDevRoute() {
 
   const displayContainerRef = useRef<HTMLDivElement | null>(null);
   const pairMapRef = useRef<PairMap>(new Map());
-  const astRef = useRef<AST | null>(null);
+  const astRef = useRef<SyntheticAst>({
+    linear: [],
+    tokens: {},
+    owner: {},
+    byId: {},
+    nodes: {},
+    pairs: {},
+    parent: {}
+  });
+  const selectionRef = useRef<NodeId[]>([]);
+  const hoveredElementsRef = useRef<HTMLElement[]>([]);
+  const selectedElementsRef = useRef<HTMLElement[]>([]);
 
-  const ast = useMemo(() => {
-    try {
-      return parseStage2Expression(expression);
-    } catch {
-      return null;
+  const getIdsForToken = useCallback((id: NodeId | null): NodeId[] => {
+    if (!id) {
+      return [];
     }
-  }, [expression]);
+    const pairMap = pairMapRef.current;
+    const ids = new Set<NodeId>([id]);
+    const counterpart = pairMap.get(id);
+    if (counterpart) {
+      ids.add(counterpart);
+    }
+    return Array.from(ids);
+  }, []);
 
-  astRef.current = ast;
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
+  const applyHover = useCallback((ids: NodeId[]) => {
+    const root = displayContainerRef.current;
+    if (!root) {
       return;
     }
-    const styleId = 'til-highlight-styles';
-    if (document.getElementById(styleId)) {
+    hoveredElementsRef.current.forEach((element) => {
+      element.classList.remove('t-hover');
+    });
+    const next: HTMLElement[] = [];
+    ids.forEach((tokenId) => {
+      const escaped = escapeAstId(tokenId);
+      root.querySelectorAll<HTMLElement>(`[data-ast-id="${escaped}"]`).forEach((element) => {
+        element.classList.add('t-hover');
+        next.push(element);
+      });
+    });
+    hoveredElementsRef.current = next;
+  }, []);
+
+  const setSelection = useCallback((ids: NodeId[]) => {
+    const root = displayContainerRef.current;
+    if (!root) {
       return;
     }
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = `
-      [data-ast-id].t-hover { background-color: rgba(180, 213, 255, 0.6); }
-      [data-ast-id].t-selected { background-color: rgba(99, 102, 241, 0.35); }
-    `;
-    document.head.appendChild(style);
-    return () => {
-      if (style.parentNode) {
-        style.parentNode.removeChild(style);
-      }
-    };
+    const unique = Array.isArray(ids) ? Array.from(new Set(ids)) : [];
+    selectedElementsRef.current.forEach((element) => {
+      element.classList.remove('t-selected');
+    });
+    const next: HTMLElement[] = [];
+    unique.forEach((tokenId) => {
+      const escaped = escapeAstId(tokenId);
+      root.querySelectorAll<HTMLElement>(`[data-ast-id="${escaped}"]`).forEach((element) => {
+        element.classList.add('t-selected');
+        next.push(element);
+      });
+    });
+    selectedElementsRef.current = next;
+    selectionRef.current = unique;
+  }, []);
+
+  const emptyAst = useMemo<SyntheticAst>(() => ({
+    linear: [],
+    tokens: {},
+    owner: {},
+    byId: {},
+    nodes: {},
+    pairs: {},
+    parent: {}
+  }), []);
+
+  const getSyntheticAst = useCallback((): SyntheticAst => {
+    return astRef.current ?? emptyAst;
+  }, [emptyAst]);
+
+  const getAstForEvents = useCallback((): AST => {
+    return (astRef.current ?? emptyAst) as unknown as AST;
+  }, [emptyAst]);
+
+  const getSelection = useCallback((): NodeId[] => {
+    return [...selectionRef.current];
+  }, []);
+
+  const exec = useCallback((focus: NodeId[]) => {
+    // eslint-disable-next-line no-console
+    console.log('[TIL exec]', focus);
   }, []);
 
   useEffect(() => {
-    const container = displayContainerRef.current;
-    if (!container || typeof window === 'undefined') {
+    const root = displayContainerRef.current;
+    if (!root) {
       return;
     }
-    const handle = attachTIL(container, () => astRef.current, {
-      getPairMap: () => pairMapRef.current
-    });
-    return () => {
-      handle.detach();
+
+    if (!root.hasAttribute('tabindex')) {
+      root.setAttribute('tabindex', '0');
+    }
+    setTimeout(() => {
+      try {
+        root.focus();
+      } catch {
+        // ignore
+      }
+    }, 0);
+
+    const handlePointerOver = (event: PointerEvent) => {
+      const token = (event.target as HTMLElement | null)?.closest('[data-ast-id]') as HTMLElement | null;
+      if (!token || !root.contains(token)) {
+        applyHover([]);
+        return;
+      }
+      const id = (token.getAttribute('data-ast-id') ?? null) as NodeId | null;
+      applyHover(getIdsForToken(id));
     };
-  }, [expression]);
+
+    const handlePointerOut = (event: PointerEvent) => {
+      const nextTarget = event.relatedTarget as HTMLElement | null;
+      if (nextTarget && root.contains(nextTarget)) {
+        return;
+      }
+      applyHover([]);
+    };
+
+    root.addEventListener('pointerover', handlePointerOver);
+    root.addEventListener('pointerout', handlePointerOut);
+
+    const unShortcuts = wireExecuteShortcuts(root, {
+      getAst: getAstForEvents,
+      getSelection,
+      setSelection,
+      exec
+    });
+    const unAlt = wireAltClickExpand(root, {
+      getAst: getAstForEvents,
+      getSelection,
+      setSelection
+    });
+    const unDrag = wireDragSelectLCA(root, {
+      getAst: getSyntheticAst,
+      getSelection,
+      setSelection
+    });
+
+    return () => {
+      applyHover([]);
+      setSelection(selectionRef.current);
+      root.removeEventListener('pointerover', handlePointerOver);
+      root.removeEventListener('pointerout', handlePointerOut);
+      unShortcuts?.();
+      unAlt?.();
+      unDrag?.();
+    };
+  }, [
+    applyHover,
+    getAstForEvents,
+    getIdsForToken,
+    getSelection,
+    getSyntheticAst,
+    setSelection,
+    exec
+  ]);
+
+  useEffect(() => {
+    setSelection(selectionRef.current);
+  }, [expression, setSelection]);
 
   const handleApply = useCallback(() => {
     setOutcome(evaluateTrace(expression));
@@ -543,7 +789,7 @@ export default function StepDevRoute() {
       </aside>
       <div className={styles.mainColumn} data-testid="dev-step-stack">
         <div
-          className={styles.displayPanel}
+          className={`${styles.displayPanel} til-no-select`}
           data-testid="display-panel"
           ref={displayContainerRef}
         >
@@ -552,6 +798,9 @@ export default function StepDevRoute() {
             aria-label="Rendered expression"
             onPairMapChange={(map) => {
               pairMapRef.current = map;
+            }}
+            onAstChange={(synthetic) => {
+              astRef.current = synthetic;
             }}
           />
         </div>
