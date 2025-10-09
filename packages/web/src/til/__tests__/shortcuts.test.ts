@@ -12,7 +12,7 @@ function makeAst(linear: NodeId[], text: Record<NodeId, string>): AST {
 }
 
 describe('wireExecuteShortcuts', () => {
-  it('double-clicking an operator sets selection and executes with neighbors', () => {
+  it('double-clicking an operator sets owner selection and executes operator', () => {
     const root = document.createElement('div');
     const token = document.createElement('span');
     token.setAttribute('data-ast-id', 'op');
@@ -36,8 +36,8 @@ describe('wireExecuteShortcuts', () => {
 
     token.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
 
-    expect(selectionSet).toEqual(['left', 'op', 'right']);
-    expect(executed).toEqual(['left', 'op', 'right']);
+    expect(selectionSet).toEqual(['op']);
+    expect(executed).toEqual(['op']);
 
     cleanup();
   });
