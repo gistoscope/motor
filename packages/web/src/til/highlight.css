@@ -2,6 +2,13 @@
   position: relative;
 }
 
+.operatorSymbol,
+[data-ast-role='paren-open'],
+[data-ast-role='paren-close'] {
+  padding: 0 6px;
+  margin: 0 2px;
+}
+
 .t-hover {
   outline: 2px solid rgba(180, 213, 255, 0.9);
   outline-offset: 2px;

@@ -1,5 +1,5 @@
 import type { AST, NodeId } from './opTokens';
-import { isOperatorChar, getTokenText, getOwnerId } from './opTokens';
+import { isOperatorChar, getTokenText, getOwnerId, isParenRole } from './opTokens';
 
 const SINGLE_CLICK_DELAY = 220;
 
@@ -18,6 +18,25 @@ function shouldClearSelection(
   if (!current || current.length !== 1) return false;
   const currentId = current[0];
   return currentId === id || (!!ownerId && currentId === ownerId);
+}
+
+function ownerLooksLikeParen(ast: AST, ownerId: NodeId | null): boolean {
+  if (!ownerId) return false;
+  try {
+    // @ts-ignore
+    const node = ast?.nodes?.[ownerId] ?? ast?.byId?.[ownerId];
+    const type = node?.type ?? node?.kind ?? node?.nodeType ?? null;
+    if (typeof type === 'string' && type.toLowerCase().includes('paren')) {
+      return true;
+    }
+  } catch {
+    // ignore lookup failures
+  }
+  return false;
+}
+
+function isParenToken(token: string): boolean {
+  return token === '(' || token === ')';
 }
 
 function getClosestAstElement(target: EventTarget | null): HTMLElement | null {
@@ -90,14 +109,33 @@ function flashExecute(root: HTMLElement) {
   setTimeout(() => root.classList.remove('til-exec-flash'), 220);
 }
 
+function resolveOwnerId(
+  ast: AST,
+  element: Element | null,
+  id: NodeId,
+  token: string,
+): NodeId | null {
+  if (isOperatorChar(token)) {
+    return getOwnerId(ast, id);
+  }
+  if (isParenToken(token) || isParenRole(element)) {
+    return getOwnerId(ast, id);
+  }
+  return null;
+}
+
 export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
   let clickTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  const onDblClick = (event: MouseEvent) => {
+  const clearClickTimeout = () => {
     if (clickTimeout) {
       clearTimeout(clickTimeout);
       clickTimeout = null;
     }
+  };
+
+  const onDblClick = (event: MouseEvent) => {
+    clearClickTimeout();
 
     const el = getClosestAstElement(event.target);
     if (!el) return;
@@ -107,9 +145,22 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
 
     const ast = api.getAst();
     const token = getTokenText(ast, id);
+    const ownerId = getOwnerId(ast, id);
+
+    const targetElement = event.target instanceof Element ? event.target : null;
+    if (
+      isParenRole(targetElement) ||
+      isParenRole(el) ||
+      isParenToken(token) ||
+      ownerLooksLikeParen(ast, ownerId)
+    ) {
+      const selectionId = ownerId ?? id;
+      api.setSelection(selectionId ? [selectionId] : []);
+      return;
+    }
+
     if (!isOperatorChar(token)) return;
 
-    const ownerId = getOwnerId(ast, id);
     const selectionId = ownerId ?? id;
 
     api.setSelection([selectionId]);
@@ -118,22 +169,48 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
   };
 
   const onClick = (event: MouseEvent) => {
+    if (event.altKey) {
+      return;
+    }
+
     const el = getClosestAstElement(event.target);
     if (!el) return;
 
     const id = el.getAttribute('data-ast-id') as NodeId | null;
     if (!id) return;
 
-    if (clickTimeout) {
-      clearTimeout(clickTimeout);
+    clearClickTimeout();
+
+    const ast = api.getAst();
+    const token = getTokenText(ast, id);
+    const ownerId = resolveOwnerId(ast, el, id, token);
+    const selectionId = ownerId ?? id;
+
+    if (event.ctrlKey || event.metaKey) {
+      const current = api.getSelection() ?? [];
+      const next: NodeId[] = [];
+      let removed = false;
+
+      for (const existing of current) {
+        if (existing === selectionId) {
+          removed = true;
+          continue;
+        }
+        if (!next.includes(existing)) {
+          next.push(existing);
+        }
+      }
+
+      if (!removed) {
+        next.push(selectionId);
+      }
+
+      api.setSelection(next);
+      return;
     }
 
     clickTimeout = setTimeout(() => {
       clickTimeout = null;
-
-      const ast = api.getAst();
-      const token = getTokenText(ast, id);
-      const ownerId = isOperatorChar(token) ? getOwnerId(ast, id) : null;
 
       const current = api.getSelection();
       if (shouldClearSelection(current, id, ownerId)) {
@@ -141,7 +218,6 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
         return;
       }
 
-      const selectionId = ownerId ?? id;
       api.setSelection([selectionId]);
     }, SINGLE_CLICK_DELAY);
   };
@@ -163,11 +239,7 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
   root.addEventListener('keydown', onKeyDown);
 
   return () => {
-    if (clickTimeout) {
-      clearTimeout(clickTimeout);
-      clickTimeout = null;
-    }
-
+    clearClickTimeout();
     root.removeEventListener('click', onClick);
     root.removeEventListener('dblclick', onDblClick);
     root.removeEventListener('keydown', onKeyDown);

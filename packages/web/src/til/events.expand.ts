@@ -9,18 +9,26 @@ export function wireAltClickExpand(
     setSelection(ids: NodeId[]): void;
   }
 ): () => void {
-  const onClick = (e: MouseEvent) => {
-    if (!e.altKey) return;
-    const el = (e.target as Element | null)?.closest?.('[data-ast-id]') as HTMLElement | null;
+  const onClick = (event: MouseEvent) => {
+    if (!event.altKey) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === 'function') {
+      event.stopImmediatePropagation();
+    }
+
+    const el = (event.target as Element | null)?.closest?.('[data-ast-id]') as HTMLElement | null;
     if (!el) return;
     const id = el.getAttribute('data-ast-id') as NodeId | null;
     if (!id) return;
 
     const ast = api.getAst();
     const span = expandToNode(ast, id);
-    if (span?.length) api.setSelection(span);
+    const ids = Array.isArray(span) ? span.slice() : [];
+    api.setSelection(ids);
   };
 
-  root.addEventListener('click', onClick);
-  return () => root.removeEventListener('click', onClick);
+  root.addEventListener('click', onClick, true);
+  return () => root.removeEventListener('click', onClick, true);
 }
