@@ -26,3 +26,12 @@ export function getNeighbors(ast: AST, id: NodeId): { left?: NodeId; right?: Nod
     return {};
   }
 }
+
+export function getOwnerId(ast: any, id: NodeId): NodeId | null {
+  try {
+    const o = (ast as any)?.owner?.[id];
+    return typeof o === 'string' ? o : null;
+  } catch {
+    return null;
+  }
+}

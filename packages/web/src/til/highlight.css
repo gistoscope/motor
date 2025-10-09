@@ -3,9 +3,12 @@
 }
 
 .t-hover {
-  outline: 1px solid var(--til-hover-color, rgba(100, 150, 250, 0.6));
+  outline: 2px solid rgba(180, 213, 255, 0.9);
+  outline-offset: 2px;
 }
 
 .t-selected {
-  background: var(--til-selected-color, rgba(100, 150, 250, 0.2));
+  outline: 2px solid rgba(99, 102, 241, 0.9);
+  outline-offset: 2px;
+  background: transparent;
 }
