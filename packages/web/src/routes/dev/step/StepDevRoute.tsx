@@ -1,17 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  applyNextRule,
-  evaluateExpression,
-  formatRational,
-  formatStage2,
-  parseStage2Expression
-} from '@motor/tsa';
-import type { AST as StageAst } from '@motor/tsa';
 import styles from './StepDevRoute.module.css';
+
+// TSA formatting helpers if present:
+import type { AST as StageAst } from '@motor/tsa';
+import * as tsaModule from '@motor/tsa';
+let tsa: any = tsaModule;
+try {
+  const maybeRequire = (globalThis as { require?: (id: string) => any }).require;
+  if (typeof maybeRequire === 'function') {
+    tsa = maybeRequire('@motor/tsa');
+  }
+} catch {
+  tsa = tsaModule;
+}
 
 import { wireExecuteShortcuts } from '../../../til/shortcuts';
 import { wireAltClickExpand } from '../../../til/events.expand';
+import { makeExecutor } from '../../../til/executor';
 import type { AST, NodeId } from '../../../til/opTokens';
+import { listActions, canApply, applyOne, RULE_MAP } from '../../../til/tsaAdapter';
 import '../../../til/highlight.no-select.css';
 import '../../../til/highlight.css';
 
@@ -483,11 +490,20 @@ function wireDragSelectLCA(
 }
 
 function applyTrace(ast: StageAst): { steps: TraceStep[]; finalExpression: string; finalValue: string } | { error: string } {
+  const applyNext = typeof tsa.applyNextRule === 'function' ? tsa.applyNextRule : null;
+  const formatStage = typeof tsa.formatStage2 === 'function' ? tsa.formatStage2 : null;
+  const evaluate = typeof tsa.evaluateExpression === 'function' ? tsa.evaluateExpression : null;
+  const formatValue = typeof tsa.formatRational === 'function' ? tsa.formatRational : null;
+
+  if (!applyNext || !formatStage || !evaluate || !formatValue) {
+    return { error: 'Tracing unavailable: TSA helpers missing.' };
+  }
+
   const steps: TraceStep[] = [];
   let current: StageAst = ast;
 
   while (true) {
-    const result = applyNextRule(current);
+    const result = applyNext(current);
     if (!result) {
       break;
     }
@@ -495,30 +511,35 @@ function applyTrace(ast: StageAst): { steps: TraceStep[]; finalExpression: strin
     steps.push({
       rule: result.rule,
       rationale: result.rationale,
-      expression: formatStage2(current)
+      expression: formatStage(current)
     });
   }
 
-  const evaluated = evaluateExpression(current);
+  const evaluated = evaluate(current);
   if ('error' in evaluated) {
     return { error: evaluated.error };
   }
 
   return {
     steps,
-    finalExpression: formatStage2(current),
-    finalValue: formatRational(evaluated)
+    finalExpression: formatStage(current),
+    finalValue: formatValue(evaluated)
   };
 }
 
 export function evaluateTrace(expression: string): StepOutcome {
+  const parse = typeof tsa.parseStage2Expression === 'function' ? tsa.parseStage2Expression : null;
   const source = expression.trim();
   if (source === '') {
     return { kind: 'error', message: 'Expression is empty.' };
   }
 
+  if (!parse) {
+    return { kind: 'error', message: 'Parser unavailable.' };
+  }
+
   try {
-    const ast = parseStage2Expression(source);
+    const ast = parse(source);
     const trace = applyTrace(ast);
     if ('error' in trace) {
       return { kind: 'error', message: trace.error };
@@ -580,6 +601,7 @@ export default function StepDevRoute() {
     pairs: {},
     parent: {}
   });
+  const stageAstRef = useRef<StageAst | null>(null);
   const selectionRef = useRef<NodeId[]>([]);
   const hoveredElementsRef = useRef<HTMLElement[]>([]);
   const selectedElementsRef = useRef<HTMLElement[]>([]);
@@ -659,10 +681,61 @@ export default function StepDevRoute() {
     return [...selectionRef.current];
   }, []);
 
-  const exec = useCallback((focus: NodeId[]) => {
-    // eslint-disable-next-line no-console
-    console.log('[TIL exec]', focus);
-  }, []);
+  useEffect(() => {
+    if (typeof tsa.parseStage2Expression === 'function') {
+      try {
+        stageAstRef.current = tsa.parseStage2Expression(expression);
+      } catch {
+        stageAstRef.current = null;
+      }
+    } else {
+      stageAstRef.current = null;
+    }
+  }, [expression]);
+
+  const exec = useMemo(() => {
+    const executor = makeExecutor(getAstForEvents, {
+      listActions: (focus) => {
+        const stageAst = stageAstRef.current;
+        if (!stageAst) {
+          return [];
+        }
+        return listActions(stageAst, focus);
+      },
+      canApply: (rule, focus) => {
+        const stageAst = stageAstRef.current;
+        if (!stageAst) {
+          return false;
+        }
+        return canApply(stageAst, rule, focus);
+      },
+      onExecute: ({ rule, focus }) => {
+        const stageAst = stageAstRef.current;
+        if (!stageAst) {
+          return;
+        }
+        const result = applyOne(stageAst, rule, focus);
+        if (result.ok) {
+          stageAstRef.current = result.ast;
+          setExpression((prev) => {
+            if (typeof tsa.formatStage2 === 'function') {
+              try {
+                return tsa.formatStage2(result.ast);
+              } catch {
+                return prev;
+              }
+            }
+            return prev;
+          });
+        } else {
+          // eslint-disable-next-line no-console
+          console.warn('[TIL] applyOne failed:', result.reason);
+        }
+      },
+      opRuleMap: RULE_MAP
+    });
+    return (focus: NodeId[]) => executor(focus);
+  }, [getAstForEvents, setExpression]);
 
   useEffect(() => {
     const root = displayContainerRef.current;
