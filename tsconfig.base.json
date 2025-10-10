@@ -6,6 +6,7 @@
     "outDir": "dist",
     "declaration": true,
     "strict": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "jsx": "react-jsx",
@@ -22,6 +23,21 @@
       ],
       "@motor/tsa/*": [
         "packages/tsa/src/*"
+      ],
+      "@til/core": [
+        "packages/til-core/src/index.ts"
+      ],
+      "@til/policy": [
+        "packages/til-policy/src/index.ts"
+      ],
+      "@til/adapter-engine": [
+        "packages/til-adapter-engine/src/index.ts"
+      ],
+      "@til/adapter-ui": [
+        "packages/til-adapter-ui/src/index.ts"
+      ],
+      "@til/observe": [
+        "packages/til-observe/src/index.ts"
       ]
     }
   },

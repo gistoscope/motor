@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://til.dev/schemas/action-plan.schema.json",
+  "title": "Til Action Plan",
+  "description": "A structured list of steps the engine will take to satisfy an intent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "type",
+    "id",
+    "intentId",
+    "createdAt",
+    "steps"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": "til/1.0"
+    },
+    "type": {
+      "const": "action_plan"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "title"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "done"
+            ]
+          },
+          "command": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "protocolVersion": "til/1.0",
+      "type": "action_plan",
+      "id": "plan-42",
+      "intentId": "intent-123",
+      "createdAt": "2024-01-01T00:00:05.000Z",
+      "steps": [
+        {
+          "id": "step-1",
+          "title": "Select matching command",
+          "status": "pending"
+        }
+      ]
+    }
+  ]
+}

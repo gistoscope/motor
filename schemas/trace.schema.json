@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://til.dev/schemas/trace.schema.json",
+  "title": "Til Trace",
+  "description": "Observability timeline generated while executing an action plan.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "type",
+    "id",
+    "createdAt",
+    "entries"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": "til/1.0"
+    },
+    "type": {
+      "const": "trace"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "timestamp",
+          "message",
+          "level"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warn",
+              "error"
+            ]
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "protocolVersion": "til/1.0",
+      "type": "trace",
+      "id": "trace-1",
+      "createdAt": "2024-01-01T00:00:10.000Z",
+      "entries": [
+        {
+          "id": "event-1",
+          "timestamp": "2024-01-01T00:00:10.000Z",
+          "message": "Received intent",
+          "level": "info"
+        }
+      ]
+    }
+  ]
+}
