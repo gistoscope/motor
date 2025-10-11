@@ -22,6 +22,36 @@
       ],
       "@motor/tsa/*": [
         "packages/tsa/src/*"
+      ],
+      "@til/core": [
+        "packages/til-core/src/index.ts"
+      ],
+      "@til/core/*": [
+        "packages/til-core/src/*"
+      ],
+      "@til/policy": [
+        "packages/til-policy/src/index.ts"
+      ],
+      "@til/policy/*": [
+        "packages/til-policy/src/*"
+      ],
+      "@til/adapter-engine": [
+        "packages/til-adapter-engine/src/index.ts"
+      ],
+      "@til/adapter-engine/*": [
+        "packages/til-adapter-engine/src/*"
+      ],
+      "@til/adapter-ui": [
+        "packages/til-adapter-ui/src/index.ts"
+      ],
+      "@til/adapter-ui/*": [
+        "packages/til-adapter-ui/src/*"
+      ],
+      "@til/observe": [
+        "packages/til-observe/src/index.ts"
+      ],
+      "@til/observe/*": [
+        "packages/til-observe/src/*"
       ]
     }
   },

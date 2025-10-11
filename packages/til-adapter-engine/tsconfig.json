@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": "../../",
+    "outDir": "dist",
+    "rootDir": "src",
+    "rootDirs": ["src", "../til-core/src"]
+  },
+  "include": ["src/**/*"]
+}
