@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TIL Intent",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocolVersion": {
+      "const": "til/1.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object",
+      "description": "Intent specific parameters.",
+      "additionalProperties": true
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "id",
+    "createdAt",
+    "kind"
+  ],
+  "examples": [
+    {
+      "protocolVersion": "til/1.0",
+      "id": "intent-1",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "kind": "Select",
+      "actor": "user:123",
+      "payload": {
+        "targets": ["node-1"]
+      }
+    }
+  ]
+}

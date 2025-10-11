@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TIL Error",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocolVersion": {
+      "const": "til/1.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "code": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+(?:_[A-Z0-9]+)*(?:/[A-Z0-9]+(?:_[A-Z0-9]+)*)?$"
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hint": {
+      "type": "string"
+    },
+    "nextSelections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" }
+        },
+        "required": ["id", "title"]
+      }
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "id",
+    "createdAt",
+    "code",
+    "message"
+  ],
+  "examples": [
+    {
+      "protocolVersion": "til/1.0",
+      "id": "err-1",
+      "createdAt": "2024-01-01T00:00:03.000Z",
+      "code": "SELECT/INVALID_TARGET",
+      "message": "Target node cannot be selected.",
+      "hint": "Choose a visible node first.",
+      "nextSelections": [
+        { "id": "root", "title": "Root node" }
+      ]
+    }
+  ]
+}

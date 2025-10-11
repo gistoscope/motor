@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TIL Trace",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "protocolVersion": {
+      "const": "til/1.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "planId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "at": { "type": "string", "format": "date-time" },
+          "type": { "type": "string", "minLength": 1 },
+          "status": { "type": "string", "enum": ["ok", "error"] },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["id", "at", "type", "status"]
+      }
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "id",
+    "planId",
+    "intentId",
+    "createdAt",
+    "events"
+  ],
+  "examples": [
+    {
+      "protocolVersion": "til/1.0",
+      "id": "trace-1",
+      "planId": "plan-1",
+      "intentId": "intent-1",
+      "createdAt": "2024-01-01T00:00:02.000Z",
+      "events": [
+        { "id": "event-1", "at": "2024-01-01T00:00:02.000Z", "type": "highlight", "status": "ok" }
+      ]
+    }
+  ]
+}
