@@ -1,7 +1,7 @@
 import { R } from '@motor/core';
-import type { AST, StepApplication } from './types';
-import { add as addNode, div, literal, mul, sub as subNode } from './types';
-import { reduceAndNormalize } from './reduce';
+import type { AST, StepApplication } from './types.js';
+import { add as addNode, div, literal, mul, sub as subNode } from './types.js';
+import { reduceAndNormalize } from './reduce.js';
 
 const BASE_RATIONALE = ['AST_PREORDER', 'ID_LEX'] as const;
 
@@ -58,10 +58,8 @@ export function listRuleApplications(ast: AST): StepApplication[] {
           })
         );
         return;
-      default: {
-        const neverNode: never = node;
-        return neverNode;
-      }
+      default:
+        throw new Error(`UNHANDLED_AST_TYPE:${(node as { type: string }).type}`);
     }
   };
 

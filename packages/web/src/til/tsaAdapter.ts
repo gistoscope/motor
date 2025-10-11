@@ -1,4 +1,4 @@
-import type { NodeId } from './opTokens';
+import type { NodeId } from './opTokens.js';
 import * as tsaModule from '@motor/tsa';
 
 // Prefer real TSA types if available; fall back to any to keep strict mode.

@@ -1,0 +1,34 @@
+name: CI (TIL)
+
+on:
+  push:
+    branches: [TIL]
+  pull_request:
+    branches: [TIL]
+
+permissions:
+  contents: read
+
+jobs:
+  til-packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+      - name: Enable Corepack and pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.12.0 --activate
+          pnpm -v
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Generate aliases
+        run: |
+          node scripts/generate-aliases.mjs
+          node scripts/generate-aliases.mjs --check
+      - name: Build @til/*
+        run: pnpm -w -F "@til/*" -r build
+      - name: Test @til/*
+        run: pnpm -w -F "@til/*" test

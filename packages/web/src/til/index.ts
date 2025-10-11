@@ -1,11 +1,11 @@
 import './highlight.css';
 
-import { handleCommand } from './commands';
-import { attachEventDelegates } from './events';
-import { listActions } from './adapter';
-import { registerPairMap } from './pairMap';
-import { clear, get, hover, select } from './selectionStore';
-import { AST, NodeId, TILHandle, TILOptions } from './types';
+import { handleCommand } from './commands.js';
+import { attachEventDelegates } from './events.js';
+import { listActions } from './adapter.js';
+import { registerPairMap } from './pairMap.js';
+import { clear, get, hover, select } from './selectionStore.js';
+import { AST, NodeId, TILHandle, TILOptions } from './types.js';
 
 function notifyFocusChange(options: TILOptions | undefined, ids: NodeId[]): void {
   options?.onFocusChange?.([...ids]);
@@ -19,15 +19,15 @@ export function attachTIL(
   registerPairMap(options?.getPairMap ?? null);
 
   const detachEvents = attachEventDelegates(container, {
-    onHover: (id) => {
+    onHover: (id: NodeId | null) => {
       hover(id);
     },
-    onSelect: (id, event) => {
+    onSelect: (id: NodeId, event: MouseEvent) => {
       event.preventDefault();
       select([id]);
       notifyFocusChange(options, get().selectedIds);
     },
-    onKeyDown: (event) => {
+    onKeyDown: (event: KeyboardEvent, id: NodeId | null) => {
       handleCommand(event, {
         selection: get().selectedIds,
         clearSelection: () => {
@@ -36,6 +36,7 @@ export function attachTIL(
         },
         tryAction: () => {
           const selection = get().selectedIds;
+          void id;
           const ast = getAst();
           void ast;
           const actions = listActions(selection);

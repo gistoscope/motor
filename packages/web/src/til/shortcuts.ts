@@ -1,5 +1,5 @@
-import type { AST, NodeId } from './opTokens';
-import { isOperatorChar, getTokenText, getOwnerId } from './opTokens';
+import type { AST, NodeId } from './opTokens.js';
+import { isOperatorChar, getTokenText, getOwnerId } from './opTokens.js';
 
 const SINGLE_CLICK_DELAY = 220;
 

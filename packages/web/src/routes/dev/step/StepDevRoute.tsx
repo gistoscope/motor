@@ -14,11 +14,11 @@ try {
   tsa = tsaModule;
 }
 
-import { wireExecuteShortcuts } from '../../../til/shortcuts';
-import { wireAltClickExpand } from '../../../til/events.expand';
-import { makeExecutor } from '../../../til/executor';
-import type { AST, NodeId } from '../../../til/opTokens';
-import { listActions, canApply, applyOne, RULE_MAP } from '../../../til/tsaAdapter';
+import { wireExecuteShortcuts } from '../../../til/shortcuts.js';
+import { wireAltClickExpand } from '../../../til/events.expand.js';
+import { makeExecutor } from '../../../til/executor.js';
+import type { AST, NodeId } from '../../../til/opTokens.js';
+import { listActions, canApply, applyOne, RULE_MAP } from '../../../til/tsaAdapter.js';
 import '../../../til/highlight.no-select.css';
 import '../../../til/highlight.css';
 

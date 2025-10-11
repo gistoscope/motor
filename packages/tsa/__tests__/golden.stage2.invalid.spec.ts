@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseStage2Expression } from '../src';
+import { parseStage2Expression } from '../src/index.js';
 
 describe('TSA Golden Set 03 — invalid Stage2 forms', () => {
   it('rejects leading operators (+,*,/)', () => {

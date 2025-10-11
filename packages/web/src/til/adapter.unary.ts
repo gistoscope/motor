@@ -1,5 +1,5 @@
-import { classifyMinus, hostOfVirtual, isVirtual } from './unary';
-import type { NodeId, AST } from './types';
+import { classifyMinus, hostOfVirtual, isVirtual } from './unary.js';
+import type { NodeId, AST } from './types.js';
 
 export function toEngineFocus(_ast: AST, focus: NodeId[]): NodeId[] {
   const result: NodeId[] = [];

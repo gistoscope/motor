@@ -1,4 +1,4 @@
-import { NodeId } from './types';
+import { NodeId } from './types.js';
 
 let pairMapGetter: (() => Map<NodeId, NodeId> | null) | null = null;
 

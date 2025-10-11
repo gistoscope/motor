@@ -1,5 +1,5 @@
-import type { AST, NodeId } from './astNavigator';
-import { expandToNode } from './astNavigator';
+import type { AST, NodeId } from './astNavigator.js';
+import { expandToNode } from './astNavigator.js';
 
 export function wireAltClickExpand(
   root: HTMLElement,

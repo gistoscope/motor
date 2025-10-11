@@ -1,8 +1,8 @@
 import React from 'react';
-import { ErrorBoundary } from './ErrorBoundary';
+import { ErrorBoundary } from './ErrorBoundary.js';
 
 // Lazy import to avoid pulling dev route if not needed
-const StepDevRoute = React.lazy(() => import('../routes/dev/step/StepDevRoute'));
+const StepDevRoute = React.lazy(() => import('../routes/dev/step/StepDevRoute.js'));
 
 const isTrue = (v: any) => {
   if (v === true) return true;

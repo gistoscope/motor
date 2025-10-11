@@ -1,4 +1,4 @@
-import { NodeId } from './types';
+import { NodeId } from './types.js';
 
 type HoverCallback = (id: NodeId | null, event: MouseEvent) => void;
 type SelectCallback = (id: NodeId, event: MouseEvent) => void;

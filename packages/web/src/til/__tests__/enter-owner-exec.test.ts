@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { wireExecuteShortcuts } from '../shortcuts';
-import type { AST, NodeId } from '../opTokens';
+import { wireExecuteShortcuts } from '../shortcuts.js';
+import type { AST, NodeId } from '../opTokens.js';
 
 const ast: AST = {
   linear: ['l', 'op', 'r'],

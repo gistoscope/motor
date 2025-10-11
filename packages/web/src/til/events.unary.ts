@@ -1,5 +1,5 @@
-import { classifyMinus, focusForUnary } from './unary';
-import type { AST, NodeId } from './types';
+import { classifyMinus, focusForUnary } from './unary.js';
+import type { AST, NodeId } from './types.js';
 
 type WireApi = {
   getAst(): AST;

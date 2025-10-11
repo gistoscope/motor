@@ -1,8 +1,7 @@
 // AUTO-GENERATED. DO NOT EDIT.
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-export const aliasRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const aliasRootDir = path.resolve(__dirname, '..');
 
 export const viteAliases = [
   { find: "@motor/core", replacement: path.resolve(aliasRootDir, "packages/core/src") },

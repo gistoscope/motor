@@ -3,7 +3,7 @@ import {
   parseStage2Expression,
   evaluateExpression,
   formatRational,
-} from '../src'; // TSA re-exports stage2 & stage1 helpers via index
+} from '../src/index.js'; // TSA re-exports stage2 & stage1 helpers via index
 
 function evalToString(src: string): string {
   const ast = parseStage2Expression(src);
