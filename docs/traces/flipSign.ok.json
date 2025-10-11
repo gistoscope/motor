@@ -1,0 +1,10 @@
+{
+  "protocolVersion": "til/1.0",
+  "type": "trace",
+  "id": "t-1",
+  "createdAt": "1970-01-01T00:00:00.000Z",
+  "entries": [
+    { "id": "e1", "timestamp": "1970-01-01T00:00:00.000Z", "message": "Received intent", "level": "info" },
+    { "id": "e2", "timestamp": "1970-01-01T00:00:01.000Z", "message": "Applied command flipSign", "level": "info", "data": { "value": -3 } }
+  ]
+}

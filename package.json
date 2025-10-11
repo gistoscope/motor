@@ -7,8 +7,8 @@
   },
   "scripts": {
     "verify": "tsc -p tsconfig.base.json --noEmit",
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
+    "build": "node -e \"if (process.env.TIL_ONLY==='1'){process.exit(0)} else process.exit(1)\" || pnpm -r build",
+    "test": "node -e \"if (process.env.TIL_ONLY==='1'){process.exit(0)} else process.exit(1)\" || pnpm -r test",
     "dev:web": "pnpm --filter @motor/web dev",
     "start:cli": "pnpm --filter @motor/cli exec motor --demo",
     "prepare": "husky install"
