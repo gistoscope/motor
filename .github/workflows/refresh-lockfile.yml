@@ -1,0 +1,43 @@
+name: Refresh pnpm lockfile (spark bootstrap)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sandbox
+        uses: actions/checkout@v4
+        with:
+          ref: sandbox
+          fetch-depth: 0
+
+      - name: Setup Node 20.19.5
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.5'
+
+      - name: Enable Corepack / pnpm and refresh lockfile
+        run: |
+          set -euxo pipefail
+          corepack enable
+          corepack prepare pnpm@9.12.0 --activate
+          pnpm -v
+          pnpm install --no-frozen-lockfile
+
+      - name: Create PR with updated lockfile
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(lockfile): refresh pnpm-lock.yaml after @motor/spark bootstrap'
+          title: 'chore: refresh pnpm-lock.yaml (spark bootstrap)'
+          body: 'Auto-generated lockfile refresh so CI can run with --frozen-lockfile.'
+          branch: ci/refresh-lockfile
+          base: sandbox
+          add-paths: |
+            pnpm-lock.yaml
