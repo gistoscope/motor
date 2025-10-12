@@ -1,0 +1,126 @@
+name: SPARK one-shot repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: 'Branch to repair (default: sandbox)'
+        required: true
+        default: 'sandbox'
+      remove_zip:
+        description: 'Remove spark_sprint1.zip if present'
+        required: true
+        default: 'true'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+
+      - name: Setup Node 20.19.5
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.5'
+
+      - name: Enable Corepack & pnpm 9.12.0
+        run: |
+          set -euxo pipefail
+          corepack enable
+          corepack prepare pnpm@9.12.0 --activate
+          pnpm -v
+
+      - name: Normalize packages/spark/package.json (remove workspace:*)
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ ! -f packages/spark/package.json ]; then
+            echo "packages/spark/package.json not found"; ls -la packages || true; exit 1
+          fi
+
+          node -e '
+          import fs from "fs";
+          const p = "packages/spark/package.json";
+          const j = JSON.parse(fs.readFileSync(p, "utf8"));
+          j.devDependencies = j.devDependencies || {};
+          const fix = (k,v)=>{ if (j.devDependencies[k]==="workspace:*") j.devDependencies[k]=v; };
+          fix("@types/node","^20.12.12");
+          fix("typescript","^5.5.4");
+          fix("vitest","^2.0.5");
+          // минимальные скрипты на место (не ломаем, если уже есть)
+          j.scripts = Object.assign({ build:"tsc -p tsconfig.json", test:"vitest" }, j.scripts||{});
+          fs.writeFileSync(p, JSON.stringify(j, null, 2)+"\n");
+          console.log("patched", p);
+          '
+
+      - name: Optionally remove ZIP artifact
+        if: ${{ inputs.remove_zip == 'true' }}
+        run: |
+          set -euxo pipefail
+          if [ -f spark_sprint1.zip ]; then
+            git rm -f spark_sprint1.zip
+          else
+            echo "spark_sprint1.zip not present, skip"
+          fi
+
+      - name: Refresh lockfile (no frozen)
+        run: |
+          set -euxo pipefail
+          pnpm install --no-frozen-lockfile
+
+      - name: Commit changes (package.json / lockfile)
+        id: commit
+        run: |
+          set -euxo pipefail
+          git config user.name  "spark-repair-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "nothing_to_commit=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          git commit -m "chore(spark): one-shot repair (fix dev deps, refresh pnpm-lock, cleanup zip)"
+          echo "nothing_to_commit=false" >> $GITHUB_OUTPUT
+
+      - name: Push directly to target branch
+        id: push
+        if: ${{ steps.commit.outputs.nothing_to_commit == 'false' }}
+        continue-on-error: true
+        run: |
+          set -euxo pipefail
+          git push origin "${{ inputs.target_branch }}"
+
+      - name: Create PR if push failed (branch protection fallback)
+        if: ${{ steps.commit.outputs.nothing_to_commit == 'false' && steps.push.outcome == 'failure' }}
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(spark): one-shot repair (fix dev deps, refresh pnpm-lock, cleanup zip)'
+          title: 'chore: SPARK one-shot repair (lockfile & devDeps)'
+          body: |
+            Automated repair:
+            - replace workspace:* devDependencies in packages/spark/package.json
+            - refresh pnpm-lock.yaml
+            - remove spark_sprint1.zip (if present)
+          branch: ci/spark-one-shot-repair
+          base: ${{ inputs.target_branch }}
+          add-paths: |
+            packages/spark/package.json
+            pnpm-lock.yaml
+            spark_sprint1.zip
+
+      - name: Summary
+        run: |
+          echo "## One-shot repair finished" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ inputs.target_branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Remove ZIP: ${{ inputs.remove_zip }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit made: ${{ steps.commit.outputs.nothing_to_commit == 'false' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Direct push outcome: ${{ steps.push.outcome || 'n/a' }}" >> $GITHUB_STEP_SUMMARY
