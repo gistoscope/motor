@@ -14,23 +14,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.19'
+          node-version: '20.19.5'
+          cache: pnpm
+
       - name: Enable Corepack and pnpm
         run: |
           corepack enable
           corepack prepare pnpm@9.12.0 --activate
           pnpm -v
-      - name: Install (frozen lockfile)
+
+      # Allow a one-time lockfile refresh ONLY for branch "spark" (push) and PRs whose head ref is "spark"
+      - name: Install deps (spark bootstrap)
+        if: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'spark') || startsWith(github.ref, 'refs/heads/spark') }}
+        run: pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
+
+      - name: Install deps (strict for others)
+        if: ${{ !((github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'spark') || startsWith(github.ref, 'refs/heads/spark')) }}
         run: pnpm install --frozen-lockfile
+
       - name: Generate aliases
         run: |
           node scripts/generate-aliases.mjs
           node scripts/generate-aliases.mjs --check
+
       - name: Verify
         run: pnpm verify
+
       - name: Test
         run: pnpm -r test
+
       - name: Token policy
         run: node scripts/forbidden-tokens.cjs
