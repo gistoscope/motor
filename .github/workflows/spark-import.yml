@@ -1,4 +1,4 @@
-name: SPARK import (from ZIP)
+name: SPARK import (from ZIP) v3
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ on:
         description: 'Target branch to create'
         default: spark
       zip_path:
-        description: 'ZIP path (on base branch)'
+        description: 'ZIP file path relative to repo root'
         default: spark_sprint1.zip
       base_branch:
         description: 'Branch where ZIP lives'
@@ -24,45 +24,43 @@ jobs:
   import:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout base branch (to fetch ZIP)
+      - name: Download ZIP from base branch (raw)
+        run: |
+          set -e
+          REPO="${GITHUB_REPOSITORY}"
+          RAW_URL="https://raw.githubusercontent.com/${REPO}/${{ inputs.base_branch }}/${{ inputs.zip_path }}"
+          echo "Fetching: $RAW_URL"
+          curl -L \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/octet-stream" \
+            "$RAW_URL" -o /tmp/spark.zip
+          ls -l /tmp/spark.zip
+
+      - name: Checkout repo (bare)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.base_branch }}
 
-      - name: Retrieve ZIP from base branch into /tmp
+      - name: Create branch from baseline
         run: |
-          set -e
-          if [ -f "${{ inputs.zip_path }}" ]; then
-            cp "${{ inputs.zip_path }}" /tmp/spark.zip
-          else
-            git fetch origin ${{ inputs.base_branch }} --depth=1
-            git show origin/${{ inputs.base_branch }}:${{ inputs.zip_path }} > /tmp/spark.zip
-          fi
-          ls -l /tmp/spark.zip
-
-      - name: Create branch from baseline (A1)
-        run: |
-          git checkout --detach ${{ inputs.branch_from_sha }}
-          git checkout -b "${{ inputs.new_branch }}"
+          git checkout -b "${{ inputs.new_branch }}" ${{ inputs.branch_from_sha }}
 
       - name: Ensure unzip
         run: sudo apt-get update && sudo apt-get install -y unzip
 
-      - name: Restore ZIP into working tree
-        run: cp /tmp/spark.zip "${{ inputs.zip_path }}"
-
       - name: Unpack ZIP into repo root
         run: |
-          unzip -o "${{ inputs.zip_path }}" -d .
+          unzip -o /tmp/spark.zip -d .
+          # Если ZIP лежал в репозитории — не добавляем его в новый бранч
           git rm -f "${{ inputs.zip_path }}" || true
+          git add -A
 
       - name: Commit changes
         run: |
-          git add -A
           git -c user.name="github-actions[bot]" \
               -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "feat(spark): import @motor/spark Sprint 1 from ZIP" || echo "nothing to commit"
+              commit -m "feat(spark): import @motor/spark Sprint 1 (from ZIP on ${{ inputs.base_branch }})" \
+              || echo "nothing to commit"
 
       - name: Push branch
         run: git push origin "${{ inputs.new_branch }}"
@@ -74,5 +72,5 @@ jobs:
           base: ${{ inputs.base_branch }}
           branch: ${{ inputs.new_branch }}
           title: "feat(spark): add @motor/spark (Sprint 1)"
-          body: "Auto-imported from `${{ inputs.zip_path }}` at `${{ inputs.branch_from_sha }}`."
+          body: "Imported from `${{ inputs.zip_path }}` on `${{ inputs.base_branch }}` at baseline `${{ inputs.branch_from_sha }}`."
           draft: false
