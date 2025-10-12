@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@9.12.0",
   "engines": {
-    "node": ">=20 <21"
+    "node": "20.19.5"
   },
   "scripts": {
     "verify": "tsc -p tsconfig.base.json --noEmit",
@@ -14,7 +14,7 @@
     "prepare": "husky install"
   },
   "devDependencies": {
-    "@types/node": "^20.12.7",
+    "@types/node": "^20.12.12",
     "happy-dom": "^19.0.2",
     "husky": "^8.0.3",
     "lint-staged": "^16.2.3",
