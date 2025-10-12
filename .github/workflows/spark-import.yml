@@ -34,7 +34,6 @@ jobs:
           set -euxo pipefail
           git config user.name "spark-importer"
           git config user.email "spark@users.noreply.github.com"
-          # создаём/обновляем spark от базовой ветки
           git checkout -B spark ${{ inputs.base_branch }}
 
       - name: Unpack ZIP and place into packages/spark
@@ -43,19 +42,24 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_unzipped"
           unzip -o "${{ inputs.zip_path }}" -d "$GITHUB_WORKSPACE/_unzipped" >/dev/null
           ROOT="$GITHUB_WORKSPACE/_unzipped"
-          # Если в ZIP одна верхняя папка — спустимся в неё
-          if [ $(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l) -eq 1 ] && [ $(find "$ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l) -eq 0 ]; then
-            ROOT=$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | head -n1)
+          # Если в ZIP ровно одна верхняя папка и нет файлов — заходим в неё
+          if [ "$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ] && \
+             [ "$(find "$ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 0 ]; then
+            ROOT="$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | head -n1)"
           fi
           echo "Detected content root: $ROOT"
-          mkdir -p packages/spark
-          if [ -d "$ROOT/packages/spark" ]; then
-            rsync -a --delete "$ROOT/packages/spark/" "packages/spark/"
+          # Поддерживаем оба лэйаута: <root>/spark и <root>/packages/spark
+          if [ -d "$ROOT/spark" ]; then
+            SRC="$ROOT/spark"
+          elif [ -d "$ROOT/packages/spark" ]; then
+            SRC="$ROOT/packages/spark"
           else
-            echo "packages/spark not found under $ROOT; showing tree:"
+            echo "spark package not found under $ROOT; tree follows:"
             find "$ROOT" -maxdepth 3 -print
             exit 1
           fi
+          mkdir -p packages/spark
+          rsync -a --delete "$SRC/" "packages/spark/"
 
       - name: Commit and push (spark)
         run: |
@@ -67,3 +71,14 @@ jobs:
             git commit -m "chore(spark): import from ZIP"
           fi
           git push origin spark
+
+      - name: Open PR to base branch
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'chore(spark): import from ZIP'
+          title: 'feat: bootstrap @motor/spark (imported from ZIP)'
+          body: 'Automated import of SPARK package.'
+          branch: spark
+          base: ${{ inputs.base_branch }}
+          draft: false
