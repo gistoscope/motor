@@ -10,10 +10,10 @@ on:
         description: 'Target branch to create'
         default: spark
       zip_path:
-        description: 'ZIP path in repo root'
+        description: 'ZIP path (on base branch)'
         default: spark_sprint1.zip
       base_branch:
-        description: 'PR base branch'
+        description: 'Branch where ZIP lives'
         default: sandbox
 
 permissions:
@@ -24,23 +24,37 @@ jobs:
   import:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
+      - name: Checkout base branch (to fetch ZIP)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ inputs.base_branch }}
 
-      - name: Create branch from baseline
+      - name: Retrieve ZIP from base branch into /tmp
         run: |
-          git checkout -b "${{ inputs.new_branch }}" ${{ inputs.branch_from_sha }}
+          set -e
+          if [ -f "${{ inputs.zip_path }}" ]; then
+            cp "${{ inputs.zip_path }}" /tmp/spark.zip
+          else
+            git fetch origin ${{ inputs.base_branch }} --depth=1
+            git show origin/${{ inputs.base_branch }}:${{ inputs.zip_path }} > /tmp/spark.zip
+          fi
+          ls -l /tmp/spark.zip
+
+      - name: Create branch from baseline (A1)
+        run: |
+          git checkout --detach ${{ inputs.branch_from_sha }}
+          git checkout -b "${{ inputs.new_branch }}"
 
       - name: Ensure unzip
         run: sudo apt-get update && sudo apt-get install -y unzip
 
+      - name: Restore ZIP into working tree
+        run: cp /tmp/spark.zip "${{ inputs.zip_path }}"
+
       - name: Unpack ZIP into repo root
         run: |
-          test -f "${{ inputs.zip_path }}" || { echo "ZIP not found"; ls -la; exit 1; }
           unzip -o "${{ inputs.zip_path }}" -d .
-          # убираем ZIP из новой ветки, чтобы не попадал в PR
           git rm -f "${{ inputs.zip_path }}" || true
 
       - name: Commit changes
