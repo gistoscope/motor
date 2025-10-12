@@ -12,6 +12,11 @@ on:
         default: 'spark_sprint1.zip'
         required: true
 
+# ДАЁМ ТОКЕНУ ПРАВА НА ЗАПИСЬ И PR (это убирает 403)
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
   import:
     runs-on: ubuntu-latest
@@ -42,7 +47,7 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/_unzipped"
           unzip -o "${{ inputs.zip_path }}" -d "$GITHUB_WORKSPACE/_unzipped" >/dev/null
           ROOT="$GITHUB_WORKSPACE/_unzipped"
-          # Если в ZIP ровно одна верхняя папка и нет файлов — заходим в неё
+          # Если в ZIP одна верхняя папка и нет файлов — заходим в неё
           if [ "$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ] && \
              [ "$(find "$ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 0 ]; then
             ROOT="$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | head -n1)"
@@ -61,18 +66,8 @@ jobs:
           mkdir -p packages/spark
           rsync -a --delete "$SRC/" "packages/spark/"
 
-      - name: Commit and push (spark)
-        run: |
-          set -euxo pipefail
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "chore(spark): import from ZIP"
-          fi
-          git push origin spark
-
-      - name: Open PR to base branch
+      # ВАЖНО: убрали ручной push — дальше всё сделает create-pull-request
+      - name: Create PR (auto-commit & push)
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
