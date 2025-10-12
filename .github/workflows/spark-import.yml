@@ -1,76 +1,69 @@
-name: SPARK import (from ZIP) v3
+name: SPARK import (from ZIP) v4
 
 on:
   workflow_dispatch:
     inputs:
-      branch_from_sha:
-        description: 'Baseline commit (A1)'
-        default: e3aae3d8de8f05a389bfd3f98b080a65927f62c2
-      new_branch:
-        description: 'Target branch to create'
-        default: spark
-      zip_path:
-        description: 'ZIP file path relative to repo root'
-        default: spark_sprint1.zip
       base_branch:
-        description: 'Branch where ZIP lives'
-        default: sandbox
-
-permissions:
-  contents: write
-  pull-requests: write
+        description: 'Baseline branch'
+        default: 'sandbox'
+        required: true
+      zip_path:
+        description: 'Path to ZIP in base branch'
+        default: 'spark_sprint1.zip'
+        required: true
 
 jobs:
   import:
     runs-on: ubuntu-latest
     steps:
-      - name: Download ZIP from base branch (raw)
-        run: |
-          set -e
-          REPO="${GITHUB_REPOSITORY}"
-          RAW_URL="https://raw.githubusercontent.com/${REPO}/${{ inputs.base_branch }}/${{ inputs.zip_path }}"
-          echo "Fetching: $RAW_URL"
-          curl -L \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/octet-stream" \
-            "$RAW_URL" -o /tmp/spark.zip
-          ls -l /tmp/spark.zip
-
-      - name: Checkout repo (bare)
+      - name: Checkout base branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.base_branch }}
           fetch-depth: 0
 
-      - name: Create branch from baseline
+      - name: Verify & list ZIP
         run: |
-          git checkout -b "${{ inputs.new_branch }}" ${{ inputs.branch_from_sha }}
+          set -euxo pipefail
+          test -f "${{ inputs.zip_path }}" || { echo "ZIP not found at ${{ inputs.zip_path }}"; ls -la; exit 1; }
+          echo "ZIP found at ${{ inputs.zip_path }}"
+          unzip -l "${{ inputs.zip_path }}" | sed -n '1,200p'
 
-      - name: Ensure unzip
-        run: sudo apt-get update && sudo apt-get install -y unzip
-
-      - name: Unpack ZIP into repo root
+      - name: Prepare git user and spark branch
         run: |
-          unzip -o /tmp/spark.zip -d .
-          # Если ZIP лежал в репозитории — не добавляем его в новый бранч
-          git rm -f "${{ inputs.zip_path }}" || true
+          set -euxo pipefail
+          git config user.name "spark-importer"
+          git config user.email "spark@users.noreply.github.com"
+          # создаём/обновляем spark от базовой ветки
+          git checkout -B spark ${{ inputs.base_branch }}
+
+      - name: Unpack ZIP and place into packages/spark
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/_unzipped"
+          unzip -o "${{ inputs.zip_path }}" -d "$GITHUB_WORKSPACE/_unzipped" >/dev/null
+          ROOT="$GITHUB_WORKSPACE/_unzipped"
+          # Если в ZIP одна верхняя папка — спустимся в неё
+          if [ $(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l) -eq 1 ] && [ $(find "$ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l) -eq 0 ]; then
+            ROOT=$(find "$ROOT" -mindepth 1 -maxdepth 1 -type d | head -n1)
+          fi
+          echo "Detected content root: $ROOT"
+          mkdir -p packages/spark
+          if [ -d "$ROOT/packages/spark" ]; then
+            rsync -a --delete "$ROOT/packages/spark/" "packages/spark/"
+          else
+            echo "packages/spark not found under $ROOT; showing tree:"
+            find "$ROOT" -maxdepth 3 -print
+            exit 1
+          fi
+
+      - name: Commit and push (spark)
+        run: |
+          set -euxo pipefail
           git add -A
-
-      - name: Commit changes
-        run: |
-          git -c user.name="github-actions[bot]" \
-              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "feat(spark): import @motor/spark Sprint 1 (from ZIP on ${{ inputs.base_branch }})" \
-              || echo "nothing to commit"
-
-      - name: Push branch
-        run: git push origin "${{ inputs.new_branch }}"
-
-      - name: Open PR to base branch
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          base: ${{ inputs.base_branch }}
-          branch: ${{ inputs.new_branch }}
-          title: "feat(spark): add @motor/spark (Sprint 1)"
-          body: "Imported from `${{ inputs.zip_path }}` on `${{ inputs.base_branch }}` at baseline `${{ inputs.branch_from_sha }}`."
-          draft: false
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore(spark): import from ZIP"
+          fi
+          git push origin spark
