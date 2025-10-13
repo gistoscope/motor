@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://til.dev/schemas/intent.schema.json",
+  "title": "Til Intent",
+  "description": "An intent describes the user's goal within the TIL protocol.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocolVersion",
+    "type",
+    "id",
+    "createdAt",
+    "goal"
+  ],
+  "properties": {
+    "protocolVersion": {
+      "const": "til/1.0"
+    },
+    "type": {
+      "const": "intent"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "actor": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "context": {
+      "type": "object"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "examples": [
+    {
+      "protocolVersion": "til/1.0",
+      "type": "intent",
+      "id": "intent-123",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "goal": "Classify the request",
+      "actor": {
+        "id": "user-1",
+        "role": "user"
+      }
+    }
+  ]
+}
