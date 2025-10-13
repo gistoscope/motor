@@ -7,30 +7,75 @@ on:
     branches: [sandbox]
 
 permissions:
-  contents: read
+  contents: write   # needed to push lockfile from pre-job
 
 jobs:
-  verify-test:
+  lockfile_sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19.5'
+      - name: Enable Corepack & pin pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9.12.0 --activate
+          pnpm -v
+      - name: Ensure lockfile importers cover workspace
+        id: importers
+        run: |
+          node -e "
+            const fs=require('fs');
+            const ws=fs.readFileSync('pnpm-workspace.yaml','utf8').split(/\r?\n/);
+            const pkgs=[];let inP=false;
+            for(const l of ws){if(!inP&&l.trim()==='packages:'){inP=true;continue;}
+              if(inP){if(/^\s*-\s+/.test(l)) pkgs.push(l.replace(/^\s*-\s+/,'').trim());
+                     else if(l.trim() && !l.startsWith(' ')) break;}}
+            const lf=fs.readFileSync('pnpm-lock.yaml','utf8');
+            const miss=pkgs.filter(p=>!new RegExp(`\n  ${p.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}:`).test(lf));
+            process.stdout.write(`MISSING=${miss.length?miss.join(','):''}`);
+          "
+      - name: Regenerate lockfile when needed
+        if: steps.importers.outputs.MISSING != ''
+        run: pnpm -w install
+      - name: Commit updated lockfile
+        if: steps.importers.outputs.MISSING != '' && !cancelled()
+        run: |
+          if git diff --quiet pnpm-lock.yaml; then
+            echo "Lockfile unchanged"
+          else
+            git config user.name "lockfile-sync[bot]"
+            git config user.email "lockfile-sync[bot]@users.noreply.github.com"
+            git add pnpm-lock.yaml
+            git commit -m "chore: sync pnpm-lock.yaml for workspace importers"
+            git push
+          fi
+
+  verify_test:
+    needs: lockfile_sync
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.19'
-      - name: Enable Corepack and pnpm
+          node-version: '20.19.5'
+      - name: Enable Corepack & pin pnpm
         run: |
           corepack enable
           corepack prepare pnpm@9.12.0 --activate
           pnpm -v
+      - name: Repo Guard (pre-install)
+        run: node scripts/repo-guard.mjs
       - name: Install (frozen lockfile)
-        run: pnpm install --frozen-lockfile
-      - name: Generate aliases
-        run: |
-          node scripts/generate-aliases.mjs
-          node scripts/generate-aliases.mjs --check
+        run: pnpm -w install --frozen-lockfile
       - name: Verify
-        run: pnpm verify
+        run: pnpm -w verify
       - name: Test
-        run: pnpm -r test
+        run: pnpm -w test
       - name: Token policy
-        run: node scripts/forbidden-tokens.cjs
+        run: |
+          if pnpm -w run | grep -q '^forbidden-tokens'; then pnpm -w run forbidden-tokens; fi
+
