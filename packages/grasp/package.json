@@ -1,0 +1,24 @@
+{
+  "name": "@motor/grasp",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "verify": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "happy-dom": "^19.0.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
