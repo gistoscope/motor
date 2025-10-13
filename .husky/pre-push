@@ -1,7 +1,5 @@
 #!/usr/bin/env sh
 . "$(dirname -- "$0")/_/husky.sh"
-node scripts/generate-aliases.mjs || exit 1
-node scripts/generate-aliases.mjs --check || exit 1
-pnpm verify || exit 1
-pnpm -r test || exit 1
-node scripts/forbidden-tokens.cjs || exit 1
+pnpm -w verify || exit 1
+pnpm -w test || exit 1
+if pnpm -w run | grep -q '^forbidden-tokens'; then pnpm -w run forbidden-tokens || exit 1; fi

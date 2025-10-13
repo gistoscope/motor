@@ -1,0 +1,8 @@
+[
+  "packages/cli",
+  "packages/core",
+  "packages/parser",
+  "packages/tests",
+  "packages/tsa",
+  "packages/web"
+]

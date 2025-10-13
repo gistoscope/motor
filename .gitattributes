@@ -1,3 +1,5 @@
+* text=auto eol=lf
+
 # Enforce LF for scripts and yaml to keep CI/Husky happy on Windows
 *.sh text eol=lf
 *.cjs text eol=lf
