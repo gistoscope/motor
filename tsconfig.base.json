@@ -22,6 +22,12 @@
       ],
       "@motor/tsa/*": [
         "packages/tsa/src/*"
+      ],
+      "@motor/grasp": [
+        "packages/grasp/src/index.ts"
+      ],
+      "@motor/grasp/*": [
+        "packages/grasp/src/*"
       ]
     }
   },
