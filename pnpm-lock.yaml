@@ -38,6 +38,8 @@ importers:
 
   packages/core: {}
 
+  packages/grasp: {}
+
   packages/parser:
     dependencies:
       '@motor/core':

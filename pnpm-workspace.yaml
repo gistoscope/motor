@@ -1,6 +1,7 @@
 packages:
   - 'packages/cli'
   - 'packages/core'
+  - 'packages/grasp'
   - 'packages/parser'
   - 'packages/tests'
   - 'packages/tsa'
