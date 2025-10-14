@@ -3,10 +3,10 @@
   "private": true,
   "packageManager": "pnpm@9.12.0",
   "engines": {
-    "node": "20.19.5"
+    "node": ">=20 <21"
   },
   "scripts": {
-    "verify": "tsc -p tsconfig.base.json --noEmit",
+    "verify": "node scripts/verify-no-web.mjs",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "dev:web": "pnpm --filter @motor/web dev",
