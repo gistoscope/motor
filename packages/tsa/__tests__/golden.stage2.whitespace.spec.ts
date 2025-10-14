@@ -3,7 +3,7 @@ import {
   parseStage2Expression,
   evaluateExpression,
   formatRational,
-} from '../src';
+} from '../src/index.js';
 
 function evalToString(src: string): string {
   const ast = parseStage2Expression(src);

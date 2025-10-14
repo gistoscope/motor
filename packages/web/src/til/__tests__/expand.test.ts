@@ -1,8 +1,8 @@
 /* @vitest-environment jsdom */
 import { describe, it, expect } from 'vitest';
-import { wireAltClickExpand } from '../events.expand';
-import { expandToNode } from '../astNavigator';
-import type { AST, NodeId } from '../astNavigator';
+import { wireAltClickExpand } from '../events.expand.js';
+import { expandToNode } from '../astNavigator.js';
+import type { AST, NodeId } from '../astNavigator.js';
 
 function makeAst(linear: NodeId[], text: Record<NodeId, string>, extra: Partial<AST> = {}): AST {
   return {

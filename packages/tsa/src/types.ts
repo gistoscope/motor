@@ -41,9 +41,7 @@ export function cloneAST(ast: AST): AST {
       return { type: 'Add', left: cloneAST(ast.left), right: cloneAST(ast.right) };
     case 'Sub':
       return { type: 'Sub', left: cloneAST(ast.left), right: cloneAST(ast.right) };
-    default: {
-      const neverAst: never = ast;
-      return neverAst;
-    }
+    default:
+      throw new Error(`UNHANDLED_AST_TYPE:${(ast as { type: string }).type}`);
   }
 }

@@ -1,4 +1,4 @@
-import { AST, NodeId } from './types';
+import { AST, NodeId } from './types.js';
 
 export type ActionDescriptor = {
   id: string;

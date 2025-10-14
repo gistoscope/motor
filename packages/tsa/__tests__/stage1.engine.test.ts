@@ -6,7 +6,7 @@ import {
   formatStage1,
   parseStage1Expression,
   reduceAndNormalize
-} from '../src';
+} from '../src/index.js';
 
 function collectRules(source: string): { finalExpr: string; rules: string[]; rational: string } {
   let ast = parseStage1Expression(source);

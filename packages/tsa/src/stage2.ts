@@ -1,6 +1,6 @@
-import type { Rational } from './types';
-import { add, div, literal, mul, sub, type AST } from './types';
-import { reduceAndNormalize } from './reduce';
+import type { Rational } from './types.js';
+import { add, div, literal, mul, sub, type AST } from './types.js';
+import { reduceAndNormalize } from './reduce.js';
 
 const MUL_TOKENS = new Set(['×', '*']);
 const DIV_TOKENS = new Set(['÷', '/']);
@@ -248,9 +248,7 @@ export function formatStage2(ast: AST): string {
     case 'Sub': {
       return `(${formatStage2(ast.left)} - ${formatStage2(ast.right)})`;
     }
-    default: {
-      const neverAst: never = ast;
-      return neverAst;
-    }
+    default:
+      throw new Error(`UNHANDLED_AST_TYPE:${(ast as { type: string }).type}`);
   }
 }

@@ -1,6 +1,6 @@
 import { R } from '@motor/core';
-import type { AST, Rational } from './types';
-import { reduceAndNormalize } from './reduce';
+import type { AST, Rational } from './types.js';
+import { reduceAndNormalize } from './reduce.js';
 
 export function evaluateExpression(ast: AST): Rational | { error: string } {
   try {
@@ -41,9 +41,7 @@ function evaluate(ast: AST): Rational {
       const right = evaluate(ast.right);
       return R.sub(left, right);
     }
-    default: {
-      const neverAst: never = ast;
-      return neverAst;
-    }
+    default:
+      throw new Error(`UNHANDLED_AST_TYPE:${(ast as { type: string }).type}`);
   }
 }

@@ -1,5 +1,5 @@
-import type { AST, NodeId } from './opTokens';
-import { isOperatorChar, getTokenText, getNeighbors } from './opTokens';
+import type { AST, NodeId } from './opTokens.js';
+import { isOperatorChar, getTokenText, getNeighbors } from './opTokens.js';
 
 export type TILExecuteOptions = {
   listActions: (focus: NodeId[]) => string[];

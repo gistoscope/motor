@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { wireExecuteShortcuts } from '../shortcuts';
-import type { AST, NodeId } from '../opTokens';
+import { wireExecuteShortcuts } from '../shortcuts.js';
+import type { AST, NodeId } from '../opTokens.js';
 
 function makeAst(linear: NodeId[], text: Record<NodeId, string>): AST {
   return {

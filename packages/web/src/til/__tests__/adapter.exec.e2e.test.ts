@@ -1,7 +1,7 @@
 /* @vitest-environment jsdom */
 import { describe, it, expect, vi } from 'vitest';
-import { makeExecutor } from '../../til/executor';
-import * as adapter from '../../til/tsaAdapter';
+import { makeExecutor } from '../../til/executor.js';
+import * as adapter from '../../til/tsaAdapter.js';
 
 type AST = any; type NodeId = string;
 

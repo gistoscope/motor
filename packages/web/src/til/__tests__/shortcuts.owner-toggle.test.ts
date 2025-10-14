@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { wireExecuteShortcuts } from '../shortcuts';
-import type { NodeId } from '../opTokens';
+import { wireExecuteShortcuts } from '../shortcuts.js';
+import type { NodeId } from '../opTokens.js';
 
 describe('wireExecuteShortcuts owner toggle', () => {
   it('handles owner selection, toggling, and execution', async () => {

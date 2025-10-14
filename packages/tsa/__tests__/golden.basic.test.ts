@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { parseStage1Expression, formatRational } from '../src/stage1';
-import { parseStage2Expression } from '../src/stage2';
-import { evaluateExpression } from '../src/evaluate';
-import { reduceAndNormalize } from '../src/reduce';
+import { parseStage1Expression, formatRational } from '../src/stage1.js';
+import { parseStage2Expression } from '../src/stage2.js';
+import { evaluateExpression } from '../src/evaluate.js';
+import { reduceAndNormalize } from '../src/reduce.js';
 
 function must(r: unknown) {
   if (typeof r === 'object' && r !== null && 'error' in r) {

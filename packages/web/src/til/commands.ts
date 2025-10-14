@@ -1,4 +1,4 @@
-import { NodeId } from './types';
+import { NodeId } from './types.js';
 
 export type CommandContext = {
   selection: NodeId[];

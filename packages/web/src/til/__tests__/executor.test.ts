@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { makeTypedMock } from './testUtils';
-import { makeExecutor } from '../executor';
-import type { NodeId, AST } from '../opTokens';
+import { makeExecutor } from '../executor.js';
+import type { NodeId, AST } from '../opTokens.js';
 
 type ListActions = (focus: NodeId[]) => string[];
 type CanApply = (rule: string, focus: NodeId[]) => boolean;

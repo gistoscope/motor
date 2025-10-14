@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { makeTypedMock } from './testUtils';
 
-import { wireUnarySign } from '../events.unary';
-import { suggestUnaryRule, toEngineFocus } from '../adapter.unary';
+import { wireUnarySign } from '../events.unary.js';
+import { suggestUnaryRule, toEngineFocus } from '../adapter.unary.js';
 import {
   UnaryKind,
   classifyMinus,
@@ -12,8 +12,8 @@ import {
   isVirtual,
   makeMagId,
   makeSignId,
-} from '../unary';
-import type { AST, NodeId } from '../types';
+} from '../unary.js';
+import type { AST, NodeId } from '../types.js';
 
 const AST_ATTRIBUTE = 'data-ast-id';
 
