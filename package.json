@@ -3,12 +3,13 @@
   "private": true,
   "packageManager": "pnpm@9.12.0",
   "engines": {
-    "node": "20.19.5"
+    "node": ">=20 <21"
   },
   "scripts": {
-    "verify": "tsc -p tsconfig.base.json --noEmit",
-    "build": "pnpm -r build",
+    "verify": "node scripts/verify-no-web.mjs",
     "test": "pnpm -r test",
+    "forbidden-tokens": "node scripts/forbidden-tokens.cjs",
+    "build": "pnpm -r build",
     "dev:web": "pnpm --filter @motor/web dev",
     "start:cli": "pnpm --filter @motor/cli exec motor --demo",
     "prepare": "husky install"
