@@ -6,6 +6,7 @@ export const aliasRootDir = path.resolve(path.dirname(fileURLToPath(import.meta.
 
 export const viteAliases = [
   { find: "@motor/core", replacement: path.resolve(aliasRootDir, "packages/core/src") },
+  { find: "@motor/grasp", replacement: path.resolve(aliasRootDir, "packages/grasp/src") },
   { find: "@motor/parser", replacement: path.resolve(aliasRootDir, "packages/parser/src") },
   { find: "@motor/tsa", replacement: path.resolve(aliasRootDir, "packages/tsa/src") }
 ] as const;
