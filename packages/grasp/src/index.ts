@@ -18,3 +18,4 @@ export {
 export * from './traverse';
 export * from './analysis';
 export * from './weighted';
+export * from './subgraph';
