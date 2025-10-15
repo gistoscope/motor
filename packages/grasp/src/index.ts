@@ -15,3 +15,4 @@ export {
   removeNode,
 } from './core';
 export * from './traverse';
+export * from './analysis';
