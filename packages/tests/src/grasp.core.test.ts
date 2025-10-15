@@ -12,7 +12,7 @@ describe('grasp core', () => {
     expect(getNeighbors(g, A)).toEqual(['B']);
     expect(pathExists(g, A, C)).toBe(true);
     expect(pathExists(g, C, A)).toBe(false);
-    // идемпотентность
+    // idempotency
     addEdge(g, edge(A, B));
     expect(getNeighbors(g, A)).toEqual(['B']);
   });
