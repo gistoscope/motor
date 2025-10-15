@@ -1,4 +1,5 @@
 export * from './types';
+export * from './attrs';
 export * from './api';
 export * from './io';
 export type { GraspGraph } from './core';
