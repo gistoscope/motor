@@ -34,3 +34,34 @@ export function pathExists(g: GraspGraph, from: GraspId, to: GraspId): boolean {
   }
   return false;
 }
+
+export function nodes(g: GraspGraph): GraspId[] {
+  return Array.from(g.adj.keys()).sort();
+}
+
+export function edges(g: GraspGraph): Array<{ from: GraspId; to: GraspId }> {
+  const out: Array<{ from: GraspId; to: GraspId }> = [];
+  for (const [from, tos] of g.adj) {
+    for (const to of tos) out.push({ from, to });
+  }
+  // keep deterministic order
+  out.sort((a, b) => (a.from === b.from ? (a.to < b.to ? -1 : a.to > b.to ? 1 : 0) : (a.from < b.from ? -1 : 1)));
+  return out;
+}
+
+export function hasEdge(g: GraspGraph, from: GraspId, to: GraspId): boolean {
+  return g.adj.get(from)?.has(to) ?? false;
+}
+
+export function degree(g: GraspGraph, id: GraspId): { out: number; in: number } {
+  const out = g.adj.get(id)?.size ?? 0;
+  let inbound = 0;
+  for (const [, tos] of g.adj) if (tos.has(id)) inbound++;
+  return { out, in: inbound };
+}
+
+export function size(g: GraspGraph): { nodes: number; edges: number } {
+  let e = 0;
+  for (const [, tos] of g.adj) e += tos.size;
+  return { nodes: g.adj.size, edges: e };
+}
