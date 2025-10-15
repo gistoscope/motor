@@ -11,7 +11,7 @@ export function addNode(g: GraspGraph, n: GraspNode): void {
 }
 
 export function addEdge(g: GraspGraph, e: GraspEdge): void {
-  // идемпотентно
+  // idempotent
   addNode(g, { id: e.from, label: '' } as GraspNode);
   addNode(g, { id: e.to, label: '' } as GraspNode);
   g.adj.get(e.from)!.add(e.to);
