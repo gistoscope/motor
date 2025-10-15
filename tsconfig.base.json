@@ -14,6 +14,9 @@
       "@motor/core": [
         "packages/core/src/index.ts"
       ],
+      "@motor/grasp": [
+        "packages/grasp/src/index.ts"
+      ],
       "@motor/parser": [
         "packages/parser/src/index.ts"
       ],
@@ -22,6 +25,9 @@
       ],
       "@motor/tsa/*": [
         "packages/tsa/src/*"
+      ],
+      "@motor/grasp/*": [
+        "packages/grasp/src/*"
       ]
     }
   },
