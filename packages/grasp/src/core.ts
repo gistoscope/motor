@@ -1,13 +1,19 @@
 import type { GraspId, GraspNode, GraspEdge } from './types';
 
-export type GraspGraph = { adj: Map<GraspId, Set<GraspId>> };
+export type GraspGraph = {
+  adj: Map<GraspId, Set<GraspId>>;
+  nodes?: Map<GraspId, GraspNode>;
+};
 
 export function createGraph(): GraspGraph {
-  return { adj: new Map() };
+  return { adj: new Map(), nodes: new Map() };
 }
 
 export function addNode(g: GraspGraph, n: GraspNode): void {
   if (!g.adj.has(n.id)) g.adj.set(n.id, new Set());
+  if (g.nodes instanceof Map && !g.nodes.has(n.id)) {
+    g.nodes.set(n.id, n);
+  }
 }
 
 export function addEdge(g: GraspGraph, e: GraspEdge): void {
@@ -36,6 +42,9 @@ export function pathExists(g: GraspGraph, from: GraspId, to: GraspId): boolean {
 }
 
 export function nodes(g: GraspGraph): GraspId[] {
+  if (g.nodes instanceof Map) {
+    return Array.from(g.nodes.keys()).sort();
+  }
   return Array.from(g.adj.keys()).sort();
 }
 
@@ -63,5 +72,44 @@ export function degree(g: GraspGraph, id: GraspId): { out: number; in: number } 
 export function size(g: GraspGraph): { nodes: number; edges: number } {
   let e = 0;
   for (const [, tos] of g.adj) e += tos.size;
-  return { nodes: g.adj.size, edges: e };
+  const nodesCount = g.nodes instanceof Map ? g.nodes.size : g.adj.size;
+  return { nodes: nodesCount, edges: e };
+}
+
+/** Remove a single directed edge; idempotent. Returns true if deletion happened. */
+export function removeEdge(g: GraspGraph, from: GraspId, to: GraspId): boolean {
+  const set = g.adj.get(from);
+  if (!set) return false;
+  const existed = set.delete(to);
+  if (set.size === 0) g.adj.delete(from);
+  return existed;
+}
+
+/** Remove node and all incident edges (in & out); idempotent. Returns summary. */
+export function removeNode(
+  g: GraspGraph,
+  id: GraspId,
+): { removedNode: boolean; removedOut: number; removedIn: number } {
+  // out-edges
+  let removedOut = 0;
+  const out = g.adj.get(id);
+  if (out) {
+    removedOut = out.size;
+    g.adj.delete(id);
+  }
+
+  // in-edges
+  let removedIn = 0;
+  for (const [from, set] of Array.from(g.adj.entries())) {
+    if (set.delete(id)) removedIn++;
+    if (set.size === 0) g.adj.delete(from);
+  }
+
+  // node map (if present)
+  let removedNode = false;
+  if (g.nodes instanceof Map) {
+    removedNode = g.nodes.delete(id) || false;
+  }
+
+  return { removedNode, removedOut, removedIn };
 }
