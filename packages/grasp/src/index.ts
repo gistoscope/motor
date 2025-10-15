@@ -16,3 +16,4 @@ export {
 } from './core';
 export * from './traverse';
 export * from './analysis';
+export * from './weighted';
