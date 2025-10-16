@@ -21,3 +21,4 @@ export * from './analysis';
 export * from './weighted';
 export * from './dot';
 export * from './subgraph';
+export * from './inspect';
