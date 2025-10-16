@@ -1,19 +1,14 @@
 {
   "name": "@motor/cli",
-  "version": "0.2.0",
+  "version": "0.0.0",
+  "private": true,
   "type": "module",
-  "bin": {
-    "motor": "dist/index.js"
+  "main": "src/cli.ts",
+  "exports": {
+    ".": "./src/cli.ts"
   },
-  "files": [
-    "dist"
-  ],
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+  "engines": {
+    "node": ">=20 <21"
   },
-  "dependencies": {
-    "@motor/core": "workspace:*",
-    "@motor/parser": "workspace:*"
-  }
+  "packageManager": "pnpm@9.12.0"
 }
