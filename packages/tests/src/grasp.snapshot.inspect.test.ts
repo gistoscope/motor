@@ -15,10 +15,10 @@ describe('snapshot: inspect', () => {
   it('emits stable human-readable dump', () => {
     const g = small();
     expect(inspect(g)).toMatchInlineSnapshot(`
-      "nodes: \\"A\\" [A], \\"B\\" [B], \\"C\\" [C]
+      "nodes: "A" [A], "B" [B], "C" [C]
       edges:
-        \\"A\\" -> \\"B\\"
-        \\"B\\" -> \\"C\\""
+        "A" -> "B"
+        "B" -> "C""
     `);
   });
 
