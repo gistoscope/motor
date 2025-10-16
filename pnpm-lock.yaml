@@ -35,6 +35,9 @@ importers:
       '@motor/parser':
         specifier: workspace:*
         version: link:../parser
+      '@motor/grasp':
+        specifier: workspace:*
+        version: link:../grasp
 
   packages/core: {}
 
