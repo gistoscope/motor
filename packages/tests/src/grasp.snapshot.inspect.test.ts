@@ -15,19 +15,19 @@ describe('snapshot: inspect', () => {
   it('emits stable human-readable dump', () => {
     const g = small();
     expect(inspect(g)).toMatchInlineSnapshot(`
-      "nodes: \\"A\\" [A], \\"B\\" [B], \\"C\\" [C]
+      nodes: "A" [A], "B" [B], "C" [C]
       edges:
-        \\"A\\" -> \\"B\\"
-        \\"B\\" -> \\"C\\""
+        "A" -> "B"
+        "B" -> "C"
     `);
   });
 
   it('prints (none) for empty graph', () => {
     const g = createGraph();
     expect(inspect(g)).toMatchInlineSnapshot(`
-      "nodes: (none)
+      nodes: (none)
       edges:
-        (none)"
+        (none)
     `);
   });
 });
