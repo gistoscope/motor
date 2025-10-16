@@ -211,3 +211,35 @@ export function toDOT(g, opts = {}) {
   lines.push('}');
   return lines.join('\n');
 }
+
+export function genChain(n) {
+  if (!Number.isInteger(n) || n <= 0) throw new Error('n must be a positive integer');
+  const g = createGraph();
+  for (let i = 1; i <= n; i++) {
+    const id = String(i);
+    addNode(g, node(id, id));
+  }
+  for (let i = 1; i < n; i++) {
+    addEdge(g, edge(String(i), String(i + 1)));
+  }
+  return g;
+}
+
+export function genCycle(n) {
+  const g = genChain(n);
+  if (n > 1) addEdge(g, edge(String(n), String(1)));
+  return g;
+}
+
+export function genStar(n) {
+  if (!Number.isInteger(n) || n <= 0) throw new Error('n must be a positive integer');
+  const g = createGraph();
+  for (let i = 1; i <= n; i++) {
+    const id = String(i);
+    addNode(g, node(id, id));
+  }
+  for (let i = 2; i <= n; i++) {
+    addEdge(g, edge('1', String(i)));
+  }
+  return g;
+}
