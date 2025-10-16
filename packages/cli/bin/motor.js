@@ -8,7 +8,10 @@ import {
   fromJSON,
   validateGraphJSON,
   toDOT,
-  inspect as inspectGraph
+  inspect as inspectGraph,
+  genChain,
+  genCycle,
+  genStar
 } from '@motor/grasp';
 
 function getPkg() {
@@ -30,6 +33,7 @@ Usage:
   motor dot [--in FILE] [--name NAME]
   motor json [--in FILE]
   motor validate [--in FILE]
+  motor gen --kind chain|cycle|star --n N [--format json|dot|inspect] [--name NAME] [--out FILE]
 
 Reads GraphJSON from FILE or STDIN (if --in not provided).
 
@@ -38,7 +42,10 @@ Examples:
   cat graph.json | motor dot --name T
   motor json --in graph.json > normalized.json
   cat graph.json | motor validate
-  motor validate --in graph.json`
+  motor validate --in graph.json
+  motor gen --kind chain --n 3 --format inspect
+  motor gen --kind cycle --n 4 --format dot --name MyG > g.dot
+  motor gen --kind star  --n 5 --format json --out out.json`
   );
 }
 
@@ -50,7 +57,7 @@ function parseArgs(argv) {
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (!cmd && !a.startsWith('-') && (a === 'inspect' || a === 'dot' || a === 'json' || a === 'validate')) {
+    if (!cmd && !a.startsWith('-') && (a === 'inspect' || a === 'dot' || a === 'json' || a === 'validate' || a === 'gen')) {
       cmd = a;
       continue;
     }
@@ -58,6 +65,10 @@ function parseArgs(argv) {
     if (a === '--version' || a === '-v') { flags.set('version', true); continue; }
     if (a === '--in') { flags.set('in', args[++i]); continue; }
     if (a === '--name' || a === '-n') { flags.set('name', args[++i]); continue; }
+    if (a === '--kind') { flags.set('kind', args[++i]); continue; }
+    if (a === '--n') { flags.set('n', args[++i]); continue; }
+    if (a === '--format') { flags.set('format', args[++i]); continue; }
+    if (a === '--out') { flags.set('out', args[++i]); continue; }
     rest.push(a);
   }
   return { cmd, flags, rest };
@@ -151,6 +162,53 @@ async function cmdValidate(flags) {
   process.exitCode = 1;
 }
 
+async function cmdGen(flags) {
+  const kind = String(flags.get('kind') ?? '');
+  const nRaw = flags.get('n');
+  const fmt = String(flags.get('format') ?? 'json').toLowerCase();
+  const name = flags.get('name') ? String(flags.get('name')) : 'G';
+  const outPath = flags.get('out') ? String(flags.get('out')) : '';
+
+  const n = Number(nRaw);
+  if (!['chain', 'cycle', 'star'].includes(kind)) {
+    process.stderr.write('invalid --kind; expected chain|cycle|star\n');
+    process.exitCode = 1;
+    return;
+  }
+  if (!Number.isInteger(n) || n <= 0) {
+    process.stderr.write('invalid --n; expected positive integer\n');
+    process.exitCode = 1;
+    return;
+  }
+  if (!['json', 'dot', 'inspect'].includes(fmt)) {
+    process.stderr.write('invalid --format; expected json|dot|inspect\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  let g;
+  if (kind === 'chain') g = genChain(n);
+  else if (kind === 'cycle') g = genCycle(n);
+  else g = genStar(n);
+
+  let text = '';
+  if (fmt === 'json') {
+    text = JSON.stringify(toJSON(g), null, 2) + '\n';
+  } else if (fmt === 'dot') {
+    text = toDOT(g, { graphName: name }) + '\n';
+  } else {
+    text = inspectGraph(g) + '\n';
+  }
+
+  if (outPath) {
+    const fs = await import('node:fs/promises');
+    await fs.writeFile(outPath, text, 'utf-8');
+  } else {
+    process.stdout.write(text);
+  }
+  process.exitCode = 0;
+}
+
 async function main(argv) {
   const { cmd, flags } = parseArgs(argv);
 
@@ -167,6 +225,7 @@ async function main(argv) {
   if (cmd === 'dot') return cmdDot(flags);
   if (cmd === 'json') return cmdJson(flags);
   if (cmd === 'validate') return cmdValidate(flags);
+  if (cmd === 'gen') return cmdGen(flags);
 
   console.error('Unknown command:', cmd);
   printTopHelp();
