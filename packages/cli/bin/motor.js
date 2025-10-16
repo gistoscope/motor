@@ -9,6 +9,7 @@ import {
   validateGraphJSON,
   toDOT,
   inspect as inspectGraph,
+  graphStats,
   genChain,
   genCycle,
   genStar
@@ -33,19 +34,18 @@ Usage:
   motor dot [--in FILE] [--name NAME] [--out FILE]
   motor json [--in FILE] [--out FILE]
   motor validate [--in FILE]
+  motor stats [--in FILE] [--format text|json]
   motor gen --kind chain|cycle|star --n N [--format json|dot|inspect] [--name NAME] [--out FILE]
 
 Reads GraphJSON from FILE or STDIN (if --in not provided).
 
 Examples:
-  motor inspect --in graph.json --out dump.txt
+  motor inspect --in graph.json
   cat graph.json | motor dot --name T
-  motor json --in graph.json --out normalized.json
+  motor json --in graph.json > normalized.json
   cat graph.json | motor validate
   motor validate --in graph.json
-  motor gen --kind chain --n 3 --format inspect
-  motor gen --kind cycle --n 4 --format dot --name MyG > g.dot
-  motor gen --kind star  --n 5 --format json --out out.json`
+  motor stats --in graph.json --format json`
   );
 }
 
@@ -71,7 +71,7 @@ function parseArgs(argv) {
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (!cmd && !a.startsWith('-') && (a === 'inspect' || a === 'dot' || a === 'json' || a === 'validate' || a === 'gen')) {
+    if (!cmd && !a.startsWith('-') && (a === 'inspect' || a === 'dot' || a === 'json' || a === 'validate' || a === 'stats' || a === 'gen')) {
       cmd = a;
       continue;
     }
@@ -81,7 +81,7 @@ function parseArgs(argv) {
     if (a === '--name' || a === '-n') { flags.set('name', args[++i]); continue; }
     if (a === '--kind') { flags.set('kind', args[++i]); continue; }
     if (a === '--n') { flags.set('n', args[++i]); continue; }
-    if (a === '--format') { flags.set('format', args[++i]); continue; }
+    if (a === '--format' || a === '-f') { flags.set('format', args[++i]); continue; }
     if (a === '--out') { flags.set('out', args[++i]); continue; }
     rest.push(a);
   }
@@ -89,26 +89,36 @@ function parseArgs(argv) {
 }
 
 function readGraphJSON(flags) {
+  let text;
+  const inFile = flags.get('in');
   try {
-    let text;
-    const inFile = flags.get('in');
     if (inFile) {
       text = readFileSync(inFile, 'utf8');
     } else {
-      // read from stdin
       text = readFileSync(0, 'utf8');
     }
-    const j = JSON.parse(text);
-    const v = validateGraphJSON(j);
-    if (!v.ok) {
-      console.error('Invalid GraphJSON:\n' + v.errors.map(e => ' - ' + e).join('\n'));
-      process.exit(1);
-    }
-    return j;
   } catch (err) {
-    console.error('Failed to read/parse GraphJSON:', err && err.message ? err.message : String(err));
+    const message = err && err.message ? err.message : String(err);
+    process.stderr.write(`failed to read input: ${message}\n`);
     process.exit(1);
   }
+
+  let j;
+  try {
+    j = JSON.parse(text);
+  } catch (err) {
+    const message = err && err.message ? err.message : String(err);
+    process.stderr.write(`invalid JSON: ${message}\n`);
+    process.exit(1);
+  }
+
+  const v = validateGraphJSON(j);
+  if (!v.ok) {
+    const msg = 'Invalid GraphJSON:\n' + v.errors.map(e => ' - ' + e).join('\n');
+    process.stderr.write(msg + '\n');
+    process.exit(1);
+  }
+  return j;
 }
 
 async function cmdInspect(flags) {
@@ -130,6 +140,42 @@ async function cmdJson(flags) {
   const normalized = toJSON(g);
   const text = JSON.stringify(normalized, null, 2);
   await writeOutput(text, flags.get('out'));
+}
+
+async function cmdStats(flags) {
+  const j = readGraphJSON(flags);
+  const g = fromJSON(j);
+  const s = graphStats(g);
+
+  const fmt = String(flags.get('format') ?? 'text').toLowerCase();
+  if (fmt === 'json') {
+    const out = {
+      nodes: s.nodes,
+      edges: s.edges,
+      minOut: s.minOut,
+      maxOut: s.maxOut,
+      minIn: s.minIn,
+      maxIn: s.maxIn,
+      hasCycle: s.hasCycle,
+      sccCount: s.sccCount,
+    };
+    await writeOutput(JSON.stringify(out, null, 2), flags.get('out'));
+    process.exitCode = 0;
+  } else if (fmt === 'text') {
+    const lines = [
+      `nodes: ${s.nodes}`,
+      `edges: ${s.edges}`,
+      `outDegree: min=${s.minOut} max=${s.maxOut}`,
+      `inDegree:  min=${s.minIn} max=${s.maxIn}`,
+      `hasCycle: ${s.hasCycle ? 'true' : 'false'}`,
+      `sccCount: ${s.sccCount}`,
+    ];
+    await writeOutput(lines.join('\n'), flags.get('out'));
+    process.exitCode = 0;
+  } else {
+    process.stderr.write('invalid --format; expected text|json\n');
+    process.exit(1);
+  }
 }
 
 async function cmdValidate(flags) {
@@ -239,6 +285,7 @@ async function main(argv) {
   if (cmd === 'dot') return cmdDot(flags);
   if (cmd === 'json') return cmdJson(flags);
   if (cmd === 'validate') return cmdValidate(flags);
+  if (cmd === 'stats') return cmdStats(flags);
   if (cmd === 'gen') return cmdGen(flags);
 
   console.error('Unknown command:', cmd);
