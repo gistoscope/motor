@@ -29,13 +29,16 @@ Usage:
   motor inspect [--in FILE]
   motor dot [--in FILE] [--name NAME]
   motor json [--in FILE]
+  motor validate [--in FILE]
 
 Reads GraphJSON from FILE or STDIN (if --in not provided).
 
 Examples:
   motor inspect --in graph.json
   cat graph.json | motor dot --name T
-  motor json --in graph.json > normalized.json`
+  motor json --in graph.json > normalized.json
+  cat graph.json | motor validate
+  motor validate --in graph.json`
   );
 }
 
@@ -47,7 +50,7 @@ function parseArgs(argv) {
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (!cmd && !a.startsWith('-') && (a === 'inspect' || a === 'dot' || a === 'json')) {
+    if (!cmd && !a.startsWith('-') && (a === 'inspect' || a === 'dot' || a === 'json' || a === 'validate')) {
       cmd = a;
       continue;
     }
@@ -104,7 +107,51 @@ function cmdJson(flags) {
   process.stdout.write(JSON.stringify(normalized, null, 2) + '\n');
 }
 
-function main(argv) {
+async function cmdValidate(flags) {
+  const src = typeof flags.get === 'function' ? flags.get('in') : flags.in;
+  let text = '';
+  if (src) {
+    const fs = await import('node:fs/promises');
+    text = await fs.readFile(src, 'utf-8');
+  } else {
+    text = await new Promise((resolve) => {
+      let buf = '';
+      process.stdin.setEncoding('utf-8');
+      process.stdin.on('data', (c) => { buf += c; });
+      process.stdin.on('end', () => resolve(buf));
+      process.stdin.resume();
+    });
+    if (!text) {
+      process.stderr.write('no input; provide --in FILE or pipe JSON\n');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  let obj;
+  try {
+    obj = JSON.parse(text);
+  } catch (e) {
+    const message = e && e.message ? e.message : String(e);
+    process.stderr.write('invalid JSON: ' + message + '\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  const res = validateGraphJSON(obj);
+  if (res.ok) {
+    process.stdout.write('OK\n');
+    process.exitCode = 0;
+    return;
+  }
+
+  for (const m of res.errors) {
+    process.stderr.write('- ' + m + '\n');
+  }
+  process.exitCode = 1;
+}
+
+async function main(argv) {
   const { cmd, flags } = parseArgs(argv);
 
   if (flags.get('help')) { printTopHelp(); process.exit(0); }
@@ -119,10 +166,11 @@ function main(argv) {
   if (cmd === 'inspect') return cmdInspect(flags);
   if (cmd === 'dot') return cmdDot(flags);
   if (cmd === 'json') return cmdJson(flags);
+  if (cmd === 'validate') return cmdValidate(flags);
 
   console.error('Unknown command:', cmd);
   printTopHelp();
   process.exit(1);
 }
 
-main(process.argv);
+await main(process.argv);
