@@ -6,7 +6,7 @@
   "bin": {
     "motor": "bin/motor.js"
   },
-  "description": "Motor CLI for quick local checks (help/version scaffolding)",
+  "description": "Motor CLI for quick local checks (help/version + inspect/dot/json)",
   "license": "MIT",
   "engines": {
     "node": ">=20 <21"
