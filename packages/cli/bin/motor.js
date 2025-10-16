@@ -29,24 +29,38 @@ Usage:
   motor --help | -h
   motor --version | -v
 
-  motor inspect [--in FILE]
-  motor dot [--in FILE] [--name NAME]
-  motor json [--in FILE]
+  motor inspect [--in FILE] [--out FILE]
+  motor dot [--in FILE] [--name NAME] [--out FILE]
+  motor json [--in FILE] [--out FILE]
   motor validate [--in FILE]
   motor gen --kind chain|cycle|star --n N [--format json|dot|inspect] [--name NAME] [--out FILE]
 
 Reads GraphJSON from FILE or STDIN (if --in not provided).
 
 Examples:
-  motor inspect --in graph.json
+  motor inspect --in graph.json --out dump.txt
   cat graph.json | motor dot --name T
-  motor json --in graph.json > normalized.json
+  motor json --in graph.json --out normalized.json
   cat graph.json | motor validate
   motor validate --in graph.json
   motor gen --kind chain --n 3 --format inspect
   motor gen --kind cycle --n 4 --format dot --name MyG > g.dot
   motor gen --kind star  --n 5 --format json --out out.json`
   );
+}
+
+function withNL(s) {
+  return s.endsWith('\n') ? s : (s + '\n');
+}
+
+async function writeOutput(text, outPath) {
+  const data = withNL(text);
+  if (outPath) {
+    const fs = await import('node:fs/promises');
+    await fs.writeFile(outPath, data, 'utf-8');
+  } else {
+    process.stdout.write(data);
+  }
 }
 
 function parseArgs(argv) {
@@ -97,25 +111,25 @@ function readGraphJSON(flags) {
   }
 }
 
-function cmdInspect(flags) {
+async function cmdInspect(flags) {
   const j = readGraphJSON(flags);
   const g = fromJSON(j);
-  console.log(inspectGraph(g));
+  await writeOutput(inspectGraph(g), flags.get('out'));
 }
 
-function cmdDot(flags) {
+async function cmdDot(flags) {
   const j = readGraphJSON(flags);
   const g = fromJSON(j);
   const name = flags.get('name') || 'G';
-  console.log(toDOT(g, { graphName: name }));
+  await writeOutput(toDOT(g, { graphName: name }), flags.get('out'));
 }
 
-function cmdJson(flags) {
+async function cmdJson(flags) {
   const j = readGraphJSON(flags);
   const g = fromJSON(j);
   const normalized = toJSON(g);
-  // stable output + trailing newline
-  process.stdout.write(JSON.stringify(normalized, null, 2) + '\n');
+  const text = JSON.stringify(normalized, null, 2);
+  await writeOutput(text, flags.get('out'));
 }
 
 async function cmdValidate(flags) {
