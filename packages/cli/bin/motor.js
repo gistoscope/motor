@@ -24,20 +24,24 @@ function getPkg() {
 }
 
 function printTopHelp() {
-  console.log(
+  process.stdout.write(
 `motor — GRASP CLI
 Usage:
   motor --help | -h
   motor --version | -v
 
-  motor inspect [--in FILE] [--out FILE]
-  motor dot [--in FILE] [--name NAME] [--out FILE]
-  motor json [--in FILE] [--out FILE]
-  motor validate [--in FILE]
-  motor stats [--in FILE] [--format text|json]
-  motor gen --kind chain|cycle|star --n N [--format json|dot|inspect] [--name NAME] [--out FILE]
+Commands:
+  inspect    Print a human-readable dump
+  dot        Emit Graphviz DOT
+  json       Validate & normalize GraphJSON
+  validate   Validate GraphJSON (OK/exit codes)
+  gen        Generate synthetic graphs (chain|cycle|star)
+  stats      Compute graph metrics
 
-Reads GraphJSON from FILE or STDIN (if --in not provided).
+Common flags:
+  --in FILE       Read GraphJSON from FILE (otherwise STDIN)
+  --out FILE      Write output to FILE (stdout stays empty when used)
+  --name NAME     Graph name for DOT (default: G)
 
 Examples:
   motor inspect --in graph.json
@@ -45,8 +49,75 @@ Examples:
   motor json --in graph.json > normalized.json
   cat graph.json | motor validate
   motor validate --in graph.json
-  motor stats --in graph.json --format json`
+  motor gen --kind chain --n 3 --format inspect
+  motor stats --in graph.json --format json
+`
   );
+}
+
+function printCmdHelp(cmd) {
+  const H = {
+    inspect: `motor inspect [--in FILE] [--out FILE]
+
+Description:
+  Print a human-readable dump (stable order).
+
+Flags:
+  --in FILE     Read GraphJSON from file (else STDIN)
+  --out FILE    Write output to file (adds trailing \\n)`,
+    dot: `motor dot [--in FILE] [--name NAME] [--out FILE]
+
+Description:
+  Emit Graphviz DOT (deterministic).
+
+Flags:
+  --in FILE     Read GraphJSON from file (else STDIN)
+  --name NAME   Graph name for DOT (default: G)
+  --out FILE    Write output to file (adds trailing \\n)`,
+    json: `motor json [--in FILE] [--out FILE]
+
+Description:
+  Validate + normalize GraphJSON deterministically.
+
+Flags:
+  --in FILE     Read GraphJSON from file (else STDIN)
+  --out FILE    Write output to file (adds trailing \\n)`,
+    validate: `motor validate [--in FILE]
+
+Description:
+  Validate GraphJSON and set exit codes:
+   - OK + exit 0 for valid
+   - errors to stderr + exit 1 for invalid
+
+Flags:
+  --in FILE     Read GraphJSON from file (else STDIN)`,
+    gen: `motor gen --kind chain|cycle|star --n N [--format json|dot|inspect] [--name NAME] [--out FILE]
+
+Description:
+  Generate synthetic graphs with deterministic outputs.
+
+Flags:
+  --kind K      Must be one of: chain, cycle, star
+  --n N         Positive integer
+  --format F    One of: json, dot, inspect (default: json)
+  --name NAME   Graph name for DOT (default: G)
+  --out FILE    Write output to file (adds trailing \\n)`,
+    stats: `motor stats [--in FILE] [--format text|json] [--out FILE]
+
+Description:
+  Compute graph metrics (nodes, edges, degrees, cycle, SCC count).
+
+Flags:
+  --in FILE     Read GraphJSON from file (else STDIN)
+  --format F    text (default) or json
+  --out FILE    Write output to file (adds trailing \\n)`
+  };
+  const text = H[cmd];
+  if (text) {
+    process.stdout.write(text + '\\n');
+  } else {
+    process.stdout.write('Unknown command for help: ' + String(cmd) + '\\n');
+  }
 }
 
 function withNL(s) {
@@ -272,8 +343,9 @@ async function cmdGen(flags) {
 async function main(argv) {
   const { cmd, flags } = parseArgs(argv);
 
-  if (flags.get('help')) { printTopHelp(); process.exit(0); }
-  if (flags.get('version')) { console.log(getPkg().version ?? '0.0.0'); process.exit(0); }
+  if (flags.get('help') && cmd) { printCmdHelp(cmd); process.exit(0); }
+  if (flags.get('help') && !cmd) { printTopHelp(); process.exit(0); }
+  if (flags.get('version')) { process.stdout.write((getPkg().version ?? '0.0.0') + '\n'); process.exit(0); }
 
   if (!cmd) {
     // default to top-level help
