@@ -40,7 +40,7 @@ Description:
 Flags:
   --in FILE     Read GraphJSON from file (else STDIN)
   --name NAME   Graph name for DOT (default: G)
-  --out FILE    Write output to file (adds trailing \\n)` ,
+  --out FILE    Write output to file (adds trailing \\n)`,
     json: `motor json [--in FILE] [--out FILE]
 
 Description:
@@ -150,10 +150,11 @@ function parseArgs(argv) {
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
-    if (!cmd && !a.startsWith('-')) {
-      cmd = a;
-      continue;
-    }
+
+    // First non-flag token is the command (even if unknown),
+    // to ensure proper "Unknown command" path.
+    if (!cmd && !a.startsWith('-')) { cmd = a; continue; }
+
     if (a === '--help' || a === '-h') { flags.set('help', true); continue; }
     if (a === '--version' || a === '-v') { flags.set('version', true); continue; }
     if (a === '--in') { flags.set('in', args[++i]); continue; }
@@ -169,36 +170,26 @@ function parseArgs(argv) {
 }
 
 function readGraphJSON(flags) {
-  let text;
-  const inFile = flags.get('in');
   try {
+    let text;
+    const inFile = flags.get('in');
     if (inFile) {
       text = readFileSync(inFile, 'utf8');
     } else {
-      text = readFileSync(0, 'utf8');
+      // read from stdin (sync for inspect/dot/json/stats)
+      try { text = readFileSync(0, 'utf8'); } catch { text = ''; }
     }
-  } catch (err) {
-    const message = err && err.message ? err.message : String(err);
-    process.stderr.write(`failed to read input: ${message}\n`);
+    const j = JSON.parse(text);
+    const v = validateGraphJSON(j);
+    if (!v.ok) {
+      v.errors.forEach(m => process.stderr.write('- ' + m + '\n'));
+      process.exit(1);
+    }
+    return j;
+  } catch (e) {
+    process.stderr.write(String(e instanceof Error ? e.message : e) + '\n');
     process.exit(1);
   }
-
-  let j;
-  try {
-    j = JSON.parse(text);
-  } catch (err) {
-    const message = err && err.message ? err.message : String(err);
-    process.stderr.write(`invalid JSON: ${message}\n`);
-    process.exit(1);
-  }
-
-  const v = validateGraphJSON(j);
-  if (!v.ok) {
-    const msg = 'Invalid GraphJSON:\n' + v.errors.map(e => ' - ' + e).join('\n');
-    process.stderr.write(msg + '\n');
-    process.exit(1);
-  }
-  return j;
 }
 
 async function cmdInspect(flags) {
@@ -218,8 +209,7 @@ async function cmdJson(flags) {
   const j = readGraphJSON(flags);
   const g = fromJSON(j);
   const normalized = toJSON(g);
-  const text = JSON.stringify(normalized, null, 2);
-  await writeOutput(text, flags.get('out'));
+  await writeOutput(JSON.stringify(normalized, null, 2), flags.get('out'));
 }
 
 async function cmdValidate(flags) {
@@ -257,10 +247,11 @@ async function cmdValidate(flags) {
 async function cmdStats(flags) {
   const j = readGraphJSON(flags);
   const g = fromJSON(j);
-  const fmt = String(flags.get('format') ?? 'text').toLowerCase();
+  const fmt = (flags.get('format') || 'text').toLowerCase();
   const s = graphStats(g);
+
   if (fmt === 'json') {
-    const out = {
+    await writeOutput(JSON.stringify({
       nodes: s.nodes,
       edges: s.edges,
       minOut: s.minOut,
@@ -269,20 +260,19 @@ async function cmdStats(flags) {
       maxIn: s.maxIn,
       hasCycle: s.hasCycle,
       sccCount: s.sccCount
-    };
-    await writeOutput(JSON.stringify(out, null, 2), flags.get('out'));
-    process.exitCode = 0;
+    }, null, 2), flags.get('out'));
   } else if (fmt === 'text') {
     const lines = [
       `nodes: ${s.nodes}`,
       `edges: ${s.edges}`,
-      `outDegree: min=${s.minOut} max=${s.maxOut}`,
-      `inDegree:  min=${s.minIn} max=${s.maxIn}`,
+      `minOut: ${s.minOut}`,
+      `maxOut: ${s.maxOut}`,
+      `minIn: ${s.minIn}`,
+      `maxIn: ${s.maxIn}`,
       `hasCycle: ${s.hasCycle ? 'true' : 'false'}`,
       `sccCount: ${s.sccCount}`
     ];
     await writeOutput(lines.join('\n'), flags.get('out'));
-    process.exitCode = 0;
   } else {
     process.stderr.write('invalid --format; expected text|json\n');
     process.exit(1);
@@ -292,25 +282,22 @@ async function cmdStats(flags) {
 async function cmdGen(flags) {
   const kind = String(flags.get('kind') || flags.get('k') || '').trim();
   const nRaw = flags.get('n');
-  const fmt = String(flags.get('format') ?? 'json').toLowerCase();
+  const fmt = (flags.get('format') || 'json').toLowerCase();
   const name = flags.get('name') || 'G';
   const outPath = flags.get('out');
 
-  if (!['chain', 'cycle', 'star'].includes(kind)) {
-    process.stderr.write('invalid --kind; expected chain|cycle|star\n');
-    process.exitCode = 1;
-    return;
+  if (!kind || !['chain','cycle','star'].includes(kind)) {
+    process.stderr.write('gen: --kind must be chain|cycle|star\n');
+    process.exit(1);
   }
   const n = Number(nRaw);
   if (!Number.isInteger(n) || n <= 0) {
-    process.stderr.write('invalid --n; expected positive integer\n');
-    process.exitCode = 1;
-    return;
+    process.stderr.write('gen: --n must be a positive integer\n');
+    process.exit(1);
   }
-  if (!['json', 'dot', 'inspect'].includes(fmt)) {
-    process.stderr.write('invalid --format; expected json|dot|inspect\n');
-    process.exitCode = 1;
-    return;
+  if (!['json','dot','inspect'].includes(fmt)) {
+    process.stderr.write('gen: --format must be json|dot|inspect\n');
+    process.exit(1);
   }
 
   let g;
@@ -319,16 +306,11 @@ async function cmdGen(flags) {
   else g = genStar(n);
 
   let text = '';
-  if (fmt === 'json')      text = JSON.stringify(toJSON(g), null, 2) + '\n';
-  else if (fmt === 'dot')  text = toDOT(g, { graphName: name }) + '\n';
-  else                     text = inspectGraph(g) + '\n';
+  if (fmt === 'json')      text = JSON.stringify(toJSON(g), null, 2);
+  else if (fmt === 'dot')  text = toDOT(g, { graphName: name });
+  else                     text = inspectGraph(g);
 
-  if (outPath) {
-    const fs = await import('node:fs/promises');
-    await fs.writeFile(outPath, text, 'utf-8');
-  } else {
-    process.stdout.write(text);
-  }
+  await writeOutput(text, outPath);
   process.exitCode = 0;
 }
 
@@ -336,7 +318,7 @@ async function cmdGen(flags) {
 async function main(argv) {
   const { cmd, flags } = parseArgs(argv);
 
-  // Help/version → stdout + exit 0 (no console.log)
+  // Help/version → stdout + exit 0
   if (flags.get('help') && cmd) { printCmdHelp(cmd); process.exit(0); }
   if (flags.get('help') && !cmd) { printTopHelp();  process.exit(0); }
   if (flags.get('version')) {
