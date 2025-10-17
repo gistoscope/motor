@@ -336,6 +336,11 @@ async function main(argv) {
     process.exit(0);
   }
 
+  if (cmd === 'version') {
+    process.stdout.write((getPkg().version ?? '0.0.0') + '\n');
+    process.exit(0);
+  }
+
   // `help` subcommand mirrors --help
   if (cmd === 'help') {
     const target = rest[0];
