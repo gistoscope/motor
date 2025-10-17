@@ -92,6 +92,8 @@ function printTopHelp() {
 Usage:
   motor --help | -h
   motor --version | -v
+  motor help [<cmd>]
+  motor version
 
   motor inspect [--in FILE] [--out FILE]
   motor dot [--in FILE] [--name NAME] [--out FILE]
@@ -122,7 +124,7 @@ Examples:
   cat graph.json | motor validate
   motor validate --in graph.json
   motor gen --kind chain --n 3 --format inspect
-  motor stats --in graph.json --format json
+  motor stats --in "C:\\path with spaces\\graph.json" --format json --out "C:\\path with spaces\\stats.json"
 `
   );
 }
