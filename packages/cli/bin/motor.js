@@ -185,6 +185,11 @@ function readGraphJSON(flags) {
     process.exit(1);
   }
 
+  if (!inFile && text === '') {
+    process.stderr.write('no input; provide --in FILE or pipe JSON\n');
+    process.exit(1);
+  }
+
   let parsed;
   try {
     parsed = JSON.parse(text);
