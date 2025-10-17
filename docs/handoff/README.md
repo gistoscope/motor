@@ -10,7 +10,7 @@ This kit is a **single, self-contained onboarding package** for new teammates
 - `04_workflows/` — Codex Cloud workflow, branching, CI/testing.
 - `05_architecture/` — AMD (Actions/Model/Display) doc & math engine notes.
 - `06_guidelines/` — guardrails, UI/UX principles, prompt conventions.
-- `07_playbooks/` — dev server, PowerShell, troubleshooting.
+- `07_playbooks/` — dev server, PowerShell, CC17 verification, troubleshooting.
 - `08_roadmaps/` — math and UI roadmaps.
 - `09_checklists/` — handoff & release checklists.
 - `10_templates/` — Codex Cloud prompt template.
