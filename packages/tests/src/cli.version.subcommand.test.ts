@@ -9,16 +9,27 @@ function bin() {
 function run(args: string[]) {
   const r = spawnSync(process.execPath, [bin(), ...args], {
     encoding: 'utf-8',
-    maxBuffer: 1024 * 1024
+    maxBuffer: 1024 * 1024,
   });
   return { code: r.status ?? 0, out: r.stdout, err: r.stderr };
 }
 
 describe('motor version subcommand', () => {
-  it('prints version to stdout (single line, trailing \n), stderr empty', () => {
-    const r = run(['version']);
-    expect(r.code).toBe(0);
-    expect(r.err).toBe('');
-    expect(r.out).toMatch(/^\d+\.\d+(?:\.\d+)?\n$/);
+  it('mirrors --version: same single-line stdout with trailing \\n; stderr empty; exit 0', () => {
+    const flag = run(['--version']);
+    const sub  = run(['version']);
+
+    expect(flag.code).toBe(0);
+    expect(sub.code).toBe(0);
+
+    expect(flag.err).toBe('');
+    expect(sub.err).toBe('');
+
+    // Версия вида 1.2 или 1.2.3 — одна строка с \n
+    expect(flag.out).toMatch(/^\d+\.\d+(?:\.\d+)?\n$/);
+    expect(sub.out).toMatch(/^\d+\.\d+(?:\.\d+)?\n$/);
+
+    // Должны быть идентичны
+    expect(sub.out).toBe(flag.out);
   });
 });
