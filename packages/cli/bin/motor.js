@@ -171,26 +171,40 @@ function parseArgs(argv) {
 }
 
 function readGraphJSON(flags) {
+  const inFile = flags.get('in');
+  let text = '';
+
   try {
-    let text;
-    const inFile = flags.get('in');
     if (inFile) {
       text = readFileSync(inFile, 'utf8');
     } else {
       // read from stdin (sync for inspect/dot/json/stats)
-      try { text = readFileSync(0, 'utf8'); } catch { text = ''; }
+      try { text = readFileSync(0, 'utf8'); }
+      catch { text = ''; }
     }
-    const j = JSON.parse(text);
-    const v = validateGraphJSON(j);
-    if (!v.ok) {
-      v.errors.forEach(m => process.stderr.write('- ' + m + '\n'));
-      process.exit(1);
-    }
-    return j;
   } catch (e) {
-    process.stderr.write(String(e instanceof Error ? e.message : e) + '\n');
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write('Failed to read input: ' + msg + '\n');
     process.exit(1);
   }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    process.stderr.write('invalid JSON: ' + msg + '\n');
+    process.exit(1);
+  }
+
+  const validation = validateGraphJSON(parsed);
+  if (!validation.ok) {
+    process.stderr.write('Invalid GraphJSON:\n');
+    validation.errors.forEach(m => process.stderr.write('- ' + m + '\n'));
+    process.exit(1);
+  }
+
+  return parsed;
 }
 
 async function cmdInspect(flags) {
@@ -266,10 +280,8 @@ async function cmdStats(flags) {
     const lines = [
       `nodes: ${s.nodes}`,
       `edges: ${s.edges}`,
-      `minOut: ${s.minOut}`,
-      `maxOut: ${s.maxOut}`,
-      `minIn: ${s.minIn}`,
-      `maxIn: ${s.maxIn}`,
+      `outDegree: min=${s.minOut} max=${s.maxOut}`,
+      `inDegree: min=${s.minIn} max=${s.maxIn}`,
       `hasCycle: ${s.hasCycle ? 'true' : 'false'}`,
       `sccCount: ${s.sccCount}`
     ];
@@ -288,16 +300,16 @@ async function cmdGen(flags) {
   const outPath = flags.get('out');
 
   if (!kind || !['chain','cycle','star'].includes(kind)) {
-    process.stderr.write('gen: --kind must be chain|cycle|star\n');
+    process.stderr.write('invalid --kind; expected chain|cycle|star\n');
     process.exit(1);
   }
   const n = Number(nRaw);
   if (!Number.isInteger(n) || n <= 0) {
-    process.stderr.write('gen: --n must be a positive integer\n');
+    process.stderr.write('invalid --n; must be a positive integer\n');
     process.exit(1);
   }
   if (!['json','dot','inspect'].includes(fmt)) {
-    process.stderr.write('gen: --format must be json|dot|inspect\n');
+    process.stderr.write('invalid --format; expected json|dot|inspect\n');
     process.exit(1);
   }
 
