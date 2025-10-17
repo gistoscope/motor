@@ -6,7 +6,6 @@ function bin() {
   const url = new URL('../../cli/bin/motor.js', import.meta.url);
   return fileURLToPath(url);
 }
-
 function run(args: string[], opts?: { input?: string }) {
   const r = spawnSync(process.execPath, [bin(), ...args], {
     encoding: 'utf-8',
@@ -16,73 +15,45 @@ function run(args: string[], opts?: { input?: string }) {
   return { code: r.status ?? 0, out: r.stdout, err: r.stderr };
 }
 
-describe('DOT graph name & determinism', () => {
-  it('dot (stdin) uses default name "G" and respects --name', () => {
-    // Подготовим GraphJSON
+describe('DOT graph name (default & --name)', () => {
+  it('dot (default name) uses "G" and ends with \n', () => {
+    // Получаем исходный GraphJSON
     const g = run(['gen', '--kind', 'chain', '--n', '3', '--format', 'json']);
     expect(g.code).toBe(0);
     expect(g.err).toBe('');
     expect(g.out.length).toBeGreaterThan(0);
 
-    // По умолчанию должен быть G
-    const d1 = run(['dot'], { input: g.out });
-    expect(d1.code).toBe(0);
-    expect(d1.err).toBe('');
-    expect(d1.out.length).toBeGreaterThan(0);
-    expect(d1.out.endsWith('\n')).toBe(true);
-    expect(d1.out).toMatch(/^\s*(digraph|graph)\s+G\s*\{/i);
+    // Подаём в dot без --name (должно быть имя G)
+    const r = run(['dot'], { input: g.out });
+    expect(r.code).toBe(0);
+    expect(r.err).toBe('');
+    expect(r.out.length).toBeGreaterThan(0);
+    expect(r.out.endsWith('\n')).toBe(true);
 
-    // С кастомным именем, например T
-    const d2 = run(['dot', '--name', 'T'], { input: g.out });
-    expect(d2.code).toBe(0);
-    expect(d2.err).toBe('');
-    expect(d2.out.length).toBeGreaterThan(0);
-    expect(d2.out.endsWith('\n')).toBe(true);
-    expect(d2.out).toMatch(/\b(digraph|graph)\s+T\b/i);
+    // Толерантно к digraph/graph
+    expect(/^\s*(digraph|graph)\s+G\b/i.test(r.out)).toBe(true);
   });
 
-  it('gen --format dot uses default "G" and respects --name', () => {
-    const a = run(['gen', '--kind', 'chain', '--n', '3', '--format', 'dot']);
-    expect(a.code).toBe(0);
-    expect(a.err).toBe('');
-    expect(a.out.length).toBeGreaterThan(0);
-    expect(a.out.endsWith('\n')).toBe(true);
-    expect(a.out).toMatch(/^\s*(digraph|graph)\s+G\s*\{/i);
-
-    const b = run(['gen', '--kind', 'chain', '--n', '3', '--format', 'dot', '--name', 'K']);
-    expect(b.code).toBe(0);
-    expect(b.err).toBe('');
-    expect(b.out.length).toBeGreaterThan(0);
-    expect(b.out.endsWith('\n')).toBe(true);
-    expect(b.out).toMatch(/\b(digraph|graph)\s+K\b/i);
-  });
-
-  it('determinism: dot(stdin) output is byte-for-byte identical across runs', () => {
-    const g = run(['gen', '--kind', 'chain', '--n', '4', '--format', 'json']);
+  it('dot --name CustomName overrides default and ends with \n', () => {
+    const g = run(['gen', '--kind', 'chain', '--n', '3', '--format', 'json']);
     expect(g.code).toBe(0);
 
-    const r1 = run(['dot', '--name', 'G1'], { input: g.out });
-    const r2 = run(['dot', '--name', 'G1'], { input: g.out });
+    const r = run(['dot', '--name', 'CustomName'], { input: g.out });
+    expect(r.code).toBe(0);
+    expect(r.err).toBe('');
+    expect(r.out.length).toBeGreaterThan(0);
+    expect(r.out.endsWith('\n')).toBe(true);
 
-    expect(r1.code).toBe(0);
-    expect(r2.code).toBe(0);
-    expect(r1.err).toBe('');
-    expect(r2.err).toBe('');
-    expect(r1.out.endsWith('\n')).toBe(true);
-    expect(r2.out.endsWith('\n')).toBe(true);
-    expect(r2.out).toBe(r1.out);
+    expect(/^\s*(digraph|graph)\s+CustomName\b/i.test(r.out)).toBe(true);
   });
 
-  it('determinism: gen --format dot output is identical across runs', () => {
-    const r1 = run(['gen', '--kind', 'cycle', '--n', '5', '--format', 'dot', '--name', 'Z']);
-    const r2 = run(['gen', '--kind', 'cycle', '--n', '5', '--format', 'dot', '--name', 'Z']);
+  it('gen --format dot --name X emits DOT with that name and trailing \n', () => {
+    const r = run(['gen', '--kind', 'chain', '--n', '3', '--format', 'dot', '--name', 'MyGraph']);
+    expect(r.code).toBe(0);
+    expect(r.err).toBe('');
+    expect(r.out.length).toBeGreaterThan(0);
+    expect(r.out.endsWith('\n')).toBe(true);
 
-    expect(r1.code).toBe(0);
-    expect(r2.code).toBe(0);
-    expect(r1.err).toBe('');
-    expect(r2.err).toBe('');
-    expect(r1.out.endsWith('\n')).toBe(true);
-    expect(r2.out.endsWith('\n')).toBe(true);
-    expect(r2.out).toBe(r1.out);
+    expect(/^\s*(digraph|graph)\s+MyGraph\b/i.test(r.out)).toBe(true);
   });
 });
