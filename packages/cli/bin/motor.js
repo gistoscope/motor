@@ -81,11 +81,8 @@ Flags:
   --out FILE    Write output to file (adds trailing \\n)`
   };
   const text = H[cmd];
-  if (text) {
-    process.stdout.write(text + '\n');
-  } else {
-    process.stdout.write('Unknown command for help: ' + String(cmd) + '\n');
-  }
+  if (text) process.stdout.write(text + '\n');
+  else process.stdout.write('Unknown command for help: ' + String(cmd) + '\n');
 }
 
 // <<HELP:BEGIN>>
@@ -329,13 +326,21 @@ async function cmdGen(flags) {
 
 // <<MAIN:BEGIN>>
 async function main(argv) {
-  const { cmd, flags } = parseArgs(argv);
+  const { cmd, flags, rest } = parseArgs(argv);
 
-  // Help/version → stdout + exit 0
+  // --help/--version short-circuit
   if (flags.get('help') && cmd) { printCmdHelp(cmd); process.exit(0); }
   if (flags.get('help') && !cmd) { printTopHelp();  process.exit(0); }
   if (flags.get('version')) {
     process.stdout.write((getPkg().version ?? '0.0.0') + '\n');
+    process.exit(0);
+  }
+
+  // `help` subcommand mirrors --help
+  if (cmd === 'help') {
+    const target = rest[0];
+    if (target) printCmdHelp(target);
+    else printTopHelp();
     process.exit(0);
   }
 
