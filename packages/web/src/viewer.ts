@@ -23,6 +23,7 @@ import { createOverlayController, type AnalysisPanelElements } from './overlays'
 import { initHelp, type HelpOverlayHandle } from './ui/help';
 import { attachMathEngine } from './math/bridge';
 import type { MathBridgeHandle, MathEngine } from './math/types';
+import type { GraphJSON } from './types';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -965,9 +966,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       return false;
     }
 
-    let data: unknown;
+    let parsed: unknown;
     try {
-      data = JSON.parse(trimmed);
+      parsed = JSON.parse(trimmed);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown JSON parse error';
       showErrors([`Invalid JSON: ${msg}`]);
@@ -978,7 +979,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       return false;
     }
 
-    const validation = validateGraphJSON(data);
+    const validation = validateGraphJSON(parsed);
     if (!validation.ok) {
       showErrors(validation.errors);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
@@ -988,6 +989,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       return false;
     }
 
+    const data = parsed as GraphJSON;
     const graph = fromJSON(data);
     const weightMap = parseWeightMap(data);
     let weightsAttached = false;
