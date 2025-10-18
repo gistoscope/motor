@@ -296,6 +296,50 @@
   pointer-events: none;
 }
 
+.motor-node[class*='motor-scc-'] .motor-node-circle {
+  stroke-width: 3;
+}
+
+.motor-node.motor-scc-0 .motor-node-circle {
+  fill: rgba(37, 99, 235, 0.15);
+  stroke: #2563eb;
+}
+
+.motor-node.motor-scc-1 .motor-node-circle {
+  fill: rgba(14, 116, 144, 0.18);
+  stroke: #0e7490;
+}
+
+.motor-node.motor-scc-2 .motor-node-circle {
+  fill: rgba(234, 179, 8, 0.2);
+  stroke: #b45309;
+}
+
+.motor-node.motor-scc-3 .motor-node-circle {
+  fill: rgba(220, 38, 38, 0.18);
+  stroke: #b91c1c;
+}
+
+.motor-node.motor-scc-4 .motor-node-circle {
+  fill: rgba(147, 51, 234, 0.18);
+  stroke: #7c3aed;
+}
+
+.motor-node.motor-scc-5 .motor-node-circle {
+  fill: rgba(34, 197, 94, 0.2);
+  stroke: #16a34a;
+}
+
+.motor-node.motor-scc-6 .motor-node-circle {
+  fill: rgba(15, 118, 110, 0.2);
+  stroke: #0f766e;
+}
+
+.motor-node.motor-scc-7 .motor-node-circle {
+  fill: rgba(244, 114, 182, 0.22);
+  stroke: #db2777;
+}
+
 .motor-node--hover .motor-node-circle {
   stroke: #f59e0b;
   stroke-width: 3;
@@ -325,4 +369,9 @@
 
 .motor-edge-marker-path {
   fill: #94a3b8;
+}
+
+.motor-edge--cycle {
+  stroke: #dc2626;
+  stroke-width: 3;
 }
