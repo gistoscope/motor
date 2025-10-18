@@ -1246,6 +1246,39 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   };
 }
 
+export function initViewer(
+  target: HTMLElement | string,
+  options: ViewerOptions = {},
+): ViewerHandle {
+  if (typeof document === 'undefined') {
+    throw new Error('initViewer requires a DOM environment.');
+  }
+
+  const root =
+    typeof target === 'string'
+      ? document.querySelector<HTMLElement>(target)
+      : target;
+
+  if (!root) {
+    const selector = typeof target === 'string' ? target : '[object HTMLElement]';
+    throw new Error(`Viewer root not found for selector: ${selector}`);
+  }
+
+  return createViewer(root, options);
+}
+
+export function initViewers(
+  selector = '[data-motor-viewer]',
+  options: ViewerOptions = {},
+): ViewerHandle[] {
+  if (typeof document === 'undefined') {
+    throw new Error('initViewers requires a DOM environment.');
+  }
+
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  return nodes.map((node) => createViewer(node, options));
+}
+
 export default createViewer;
 
 export function initMath(
