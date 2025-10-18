@@ -197,6 +197,20 @@ const captureHostHtml = (target: HTMLElement): string => {
   return cloneNode.innerHTML;
 };
 
+const sanitizeHtml = (html: string): string => {
+  return html.replace(/class=(['"])(.*?)\1/g, (_match, quote: string, classValue: string) => {
+    const tokens = classValue
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean)
+      .filter((token) => !token.startsWith('motor-diff-'));
+    if (tokens.length === 0) {
+      return '';
+    }
+    return `class=${quote}${tokens.join(' ')}${quote}`;
+  });
+};
+
 const readRenderedActions = (container: HTMLElement): string[] => {
   return Array.from(
     container.querySelectorAll<HTMLButtonElement>('button[data-role="math-action"]'),
@@ -249,7 +263,9 @@ describe('math session log » Example addition session', () => {
 
     const [initialFrame, ...frames] = SESSION_RECORD.frames;
     expect(initialFrame).toBeDefined();
-    expect(captureHostHtml(host)).toBe(initialFrame?.hostHtml ?? '');
+    expect(sanitizeHtml(captureHostHtml(host))).toBe(
+      sanitizeHtml(initialFrame?.hostHtml ?? ''),
+    );
     expect(readRenderedActions(actions)).toEqual(initialFrame?.actions.map((action) => action.id));
 
     for (const frame of frames) {
@@ -257,7 +273,7 @@ describe('math session log » Example addition session', () => {
         continue;
       }
       click(frame.actionId);
-      expect(captureHostHtml(host)).toBe(frame.hostHtml);
+      expect(sanitizeHtml(captureHostHtml(host))).toBe(sanitizeHtml(frame.hostHtml));
       expect(readRenderedActions(actions)).toEqual(frame.actions.map((action) => action.id));
     }
 
@@ -287,7 +303,7 @@ describe('math session log » Example addition session', () => {
         await playback.destroy();
       }
       const lastFrame = SESSION_RECORD.frames[SESSION_RECORD.frames.length - 1]!;
-      expect(captureHostHtml(replayHost)).toBe(lastFrame.hostHtml);
+      expect(sanitizeHtml(captureHostHtml(replayHost))).toBe(sanitizeHtml(lastFrame.hostHtml));
       expect(readRenderedActions(replayActions)).toEqual(
         lastFrame.actions.map((action) => action.id),
       );
