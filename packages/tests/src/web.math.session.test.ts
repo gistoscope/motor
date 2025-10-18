@@ -260,13 +260,15 @@ describe('math session export/import', () => {
 
     let importedSnapshot: ReturnType<MathEngine['export']>;
     let replayHtml = '';
+    const playback = replaySession.replay((actionId) => {
+      replayProxy.apply(actionId);
+    });
     try {
-      await replaySession.replay((actionId) => {
-        replayProxy.apply(actionId);
-      });
+      await playback.play();
       replayHtml = replayHost.innerHTML;
       importedSnapshot = replayProxy.export();
     } finally {
+      await playback.destroy();
       replayBridge.destroy();
     }
 
