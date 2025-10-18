@@ -198,6 +198,64 @@
   font-size: 0.85rem;
 }
 
+[data-role='math-host'] {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+[data-role='math-host'] [data-token-id] {
+  border-radius: 0.35rem;
+  padding: 0.05em 0.3em;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.math-token--hovered {
+  background: rgba(14, 165, 233, 0.15);
+  box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.3);
+}
+
+.math-token--selected {
+  background: rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+}
+
+[data-selection-mode='multi'] .math-token--selected {
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.5);
+}
+
+[data-role='math-actions-list'] {
+  display: grid;
+  gap: 0.5rem;
+}
+
+[data-role='math-action'] {
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+[data-role='math-action']:hover {
+  background: #e2e8f0;
+}
+
+[data-role='math-action'][data-state='active'] {
+  background: #1d4ed8;
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+}
+
+[data-role='math-action']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.6);
+}
+
 [data-role='math-history-diff'] {
   margin: 0;
   color: #334155;

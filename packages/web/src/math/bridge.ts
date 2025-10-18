@@ -10,6 +10,7 @@ import type {
 
 const DEFAULT_HOVER_CLASS = 'math-token--hovered';
 const DEFAULT_SELECTED_CLASS = 'math-token--selected';
+const LONG_PRESS_DELAY = 450;
 
 function isIterable(value: unknown): value is Iterable<unknown> {
   return typeof value === 'object' && value !== null && Symbol.iterator in value;
@@ -127,6 +128,39 @@ function normalizeTokenIds(
   return dedupe(extractTokenIdsFromPayload(payload));
 }
 
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  if (target instanceof HTMLInputElement) {
+    const type = target.type.toLowerCase();
+    return !['button', 'checkbox', 'radio', 'range', 'color', 'file', 'submit', 'reset', 'image'].includes(type);
+  }
+  if (target instanceof HTMLTextAreaElement) {
+    return true;
+  }
+  return false;
+}
+
+function findTokenElement(target: EventTarget | null): HTMLElement | null {
+  if (!(target instanceof HTMLElement)) {
+    return null;
+  }
+  return target.closest<HTMLElement>('[data-token-id]');
+}
+
+function getTokenIdFromEvent(target: EventTarget | null): string | null {
+  const tokenEl = findTokenElement(target);
+  if (!tokenEl) {
+    return null;
+  }
+  const tokenId = tokenEl.dataset.tokenId;
+  return typeof tokenId === 'string' && tokenId.length > 0 ? tokenId : null;
+}
+
 type ExtendedMathBridgeOptions = MathBridgeOptions & {
   historyContainer?: HTMLElement;
   warningsContainer?: HTMLElement;
@@ -171,6 +205,7 @@ export function attachMathEngine(
     ? createActionsPanel(options.actionsContainer, {
         onAction: (actionId) => {
           engine.apply(actionId);
+          actionsPanel?.highlight(actionId);
         },
       })
     : null;
@@ -243,6 +278,110 @@ export function attachMathEngine(
     }
   };
 
+  const ownerDocument = hostEl.ownerDocument ?? document;
+  const ownerWindow = ownerDocument.defaultView ?? window;
+  const rawSelect = (engine as { select?: ((mode: string) => void) | undefined }).select;
+  const engineSelect: ((mode: string) => void) | null =
+    typeof rawSelect === 'function' ? rawSelect.bind(engine) : null;
+
+  const callSelect = (mode: string) => {
+    if (!engineSelect) {
+      return;
+    }
+    engineSelect(mode);
+  };
+
+  let selectionModeTimer: number | null = null;
+  let longPressTimer: number | null = null;
+  let longPressActive = false;
+
+  const scheduleSelectionModeReset = () => {
+    if (selectionModeTimer !== null) {
+      ownerWindow.clearTimeout(selectionModeTimer);
+    }
+    selectionModeTimer = ownerWindow.setTimeout(() => {
+      delete hostEl.dataset.selectionMode;
+      selectionModeTimer = null;
+    }, 600);
+  };
+
+  const activateSelectionMode = (persistent: boolean) => {
+    hostEl.dataset.selectionMode = 'multi';
+    if (persistent) {
+      if (selectionModeTimer !== null) {
+        ownerWindow.clearTimeout(selectionModeTimer);
+        selectionModeTimer = null;
+      }
+    } else {
+      scheduleSelectionModeReset();
+    }
+  };
+
+  const deactivateSelectionMode = () => {
+    if (selectionModeTimer !== null) {
+      ownerWindow.clearTimeout(selectionModeTimer);
+      selectionModeTimer = null;
+    }
+    delete hostEl.dataset.selectionMode;
+  };
+
+  const toggleMultiSelect = (tokenId: string) => {
+    const mode = selectedIds.has(tokenId) ? 'remove' : 'add';
+    callSelect(mode);
+  };
+
+  const handleClick = (event: MouseEvent) => {
+    if (!(event.ctrlKey || event.metaKey)) {
+      return;
+    }
+    const tokenId = getTokenIdFromEvent(event.target);
+    if (!tokenId) {
+      return;
+    }
+    event.preventDefault();
+    activateSelectionMode(false);
+    toggleMultiSelect(tokenId);
+  };
+
+  const clearLongPress = () => {
+    if (longPressTimer !== null) {
+      ownerWindow.clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+  };
+
+  const handlePointerDown = (event: PointerEvent) => {
+    if (event.pointerType !== 'touch') {
+      return;
+    }
+    const tokenId = getTokenIdFromEvent(event.target);
+    if (!tokenId) {
+      return;
+    }
+    clearLongPress();
+    longPressActive = false;
+    longPressTimer = ownerWindow.setTimeout(() => {
+      longPressTimer = null;
+      longPressActive = true;
+      activateSelectionMode(true);
+      toggleMultiSelect(tokenId);
+    }, LONG_PRESS_DELAY);
+  };
+
+  const handlePointerEnd = (event: PointerEvent) => {
+    if (event.pointerType !== 'touch') {
+      return;
+    }
+    if (longPressTimer !== null) {
+      clearLongPress();
+      return;
+    }
+    if (longPressActive) {
+      longPressActive = false;
+      deactivateSelectionMode();
+    }
+  };
+
   const subscriptions: Array<() => void> = [];
   subscriptions.push(engine.on('hover', (payload) => updateHighlight('hover', payload)));
   subscriptions.push(engine.on('select', (payload) => updateHighlight('select', payload)));
@@ -293,6 +432,43 @@ export function attachMathEngine(
   );
 
   const handleKeydown = (event: KeyboardEvent) => {
+    if (isEditableTarget(event.target)) {
+      return;
+    }
+
+    if (!event.altKey && !event.ctrlKey && !event.metaKey) {
+      if (event.key === 'Enter') {
+        const highlighted = actionsPanel?.getHighlightedActionId();
+        if (highlighted) {
+          event.preventDefault();
+          engine.apply(highlighted);
+        }
+        return;
+      }
+      if (event.key === 'Escape') {
+        if (engineSelect) {
+          event.preventDefault();
+          deactivateSelectionMode();
+          callSelect('clear');
+        }
+        return;
+      }
+      if (event.key === '[' || event.key === '{') {
+        if (engineSelect) {
+          event.preventDefault();
+          callSelect('scopeDown');
+        }
+        return;
+      }
+      if (event.key === ']' || event.key === '}') {
+        if (engineSelect) {
+          event.preventDefault();
+          callSelect('scopeUp');
+        }
+        return;
+      }
+    }
+
     if (!(event.ctrlKey || event.metaKey)) {
       return;
     }
@@ -318,10 +494,19 @@ export function attachMathEngine(
     }
   };
 
-  const ownerDocument = hostEl.ownerDocument ?? document;
-  ownerDocument.addEventListener('keydown', handleKeydown);
+  ownerWindow.addEventListener('keydown', handleKeydown);
+  hostEl.addEventListener('click', handleClick);
+  hostEl.addEventListener('pointerdown', handlePointerDown);
+  hostEl.addEventListener('pointerup', handlePointerEnd);
+  hostEl.addEventListener('pointercancel', handlePointerEnd);
+  hostEl.addEventListener('pointerleave', handlePointerEnd);
   subscriptions.push(() => {
-    ownerDocument.removeEventListener('keydown', handleKeydown);
+    ownerWindow.removeEventListener('keydown', handleKeydown);
+    hostEl.removeEventListener('click', handleClick);
+    hostEl.removeEventListener('pointerdown', handlePointerDown);
+    hostEl.removeEventListener('pointerup', handlePointerEnd);
+    hostEl.removeEventListener('pointercancel', handlePointerEnd);
+    hostEl.removeEventListener('pointerleave', handlePointerEnd);
   });
 
   engine.mount(hostEl, options.initialExpression ?? '');
@@ -351,6 +536,9 @@ export function attachMathEngine(
       if (warningsPanel) {
         warningsPanel.destroy();
       }
+      clearLongPress();
+      deactivateSelectionMode();
+      longPressActive = false;
       removeClassFromIds(hostEl, hoveredIds, hoverClass);
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
@@ -363,6 +551,9 @@ export function attachMathEngine(
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
       selectedIds = new Set();
+      clearLongPress();
+      deactivateSelectionMode();
+      longPressActive = false;
       hostEl.innerHTML = '';
       historyEntries = [];
       appliedHistoryCount = 0;
