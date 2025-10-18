@@ -136,9 +136,12 @@ export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
     svg.appendChild(path);
   }
 
+  const supportsPointerEvents = typeof window !== 'undefined' && 'PointerEvent' in window;
+
   for (const node of nodes) {
     const group = createSvgElement('g');
     group.setAttribute('class', 'motor-node');
+    group.dataset.nodeId = node.id;
 
     const circle = createSvgElement('circle');
     circle.setAttribute('class', 'motor-node-circle');
@@ -159,7 +162,65 @@ export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
     }
 
     svg.appendChild(group);
+
+    const emitHover = () => dispatchNodeEvent('motor:node-hover', node.id);
+    const emitLeave = () => dispatchNodeEvent('motor:node-leave', node.id);
+    const emitSelect = () => dispatchNodeEvent('motor:node-select', node.id);
+    const handleLeave = (event: Event) => {
+      const related = (event as MouseEvent).relatedTarget as Node | null;
+      if (related && group.contains(related)) {
+        return;
+      }
+      emitLeave();
+    };
+
+    if (supportsPointerEvents) {
+      group.addEventListener('pointerover', emitHover);
+      group.addEventListener('pointerout', handleLeave);
+    } else {
+      group.addEventListener('mouseover', emitHover);
+      group.addEventListener('mouseout', handleLeave);
+    }
+
+    group.addEventListener('click', (event) => {
+      event.stopPropagation();
+      emitSelect();
+    });
   }
+
+  const findNodeElement = (target: EventTarget | null): Element | null => {
+    if (!(target instanceof Element)) {
+      return null;
+    }
+    let current: Element | null = target;
+    while (current) {
+      if (current.hasAttribute('data-node-id')) {
+        return current;
+      }
+      const parentElement: Element | null = current.parentElement;
+      if (parentElement) {
+        current = parentElement;
+        continue;
+      }
+      const parentNode: Node | null = current.parentNode;
+      current = parentNode instanceof Element ? parentNode : null;
+    }
+    return null;
+  };
+
+  const dispatchNodeEvent = (type: string, nodeId: string | null) => {
+    const event = new CustomEvent<{ nodeId: string | null }>(type, {
+      bubbles: true,
+      detail: { nodeId },
+    });
+    svg.dispatchEvent(event);
+  };
+
+  svg.addEventListener('click', (event) => {
+    const nodeElement = findNodeElement(event.target);
+    const nodeId = nodeElement?.getAttribute('data-node-id') ?? null;
+    dispatchNodeEvent('motor:node-select', nodeId);
+  });
 
   container.appendChild(svg);
 }
