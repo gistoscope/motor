@@ -11,6 +11,8 @@ import {
   type GraspGraph,
 } from '@motor/grasp';
 import { renderSVG } from './svg';
+import { analyzeGraph } from './analysis';
+import { createOverlayController, type AnalysisPanelElements } from './overlays';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -174,7 +176,31 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
             <dt class="viewer__stat-label">Edges</dt>
             <dd class="viewer__stat-value" data-role="stats-edges">${DASH}</dd>
           </div>
+          <div class="viewer__stat">
+            <dt class="viewer__stat-label">Has cycle</dt>
+            <dd class="viewer__stat-value" data-role="analysis-has-cycle">${DASH}</dd>
+          </div>
+          <div class="viewer__stat">
+            <dt class="viewer__stat-label">SCCs</dt>
+            <dd class="viewer__stat-value" data-role="analysis-scc-count">${DASH}</dd>
+          </div>
+          <div class="viewer__stat">
+            <dt class="viewer__stat-label">Cycle edges</dt>
+            <dd class="viewer__stat-value" data-role="analysis-cycle-edges">${DASH}</dd>
+          </div>
         </dl>
+        <div class="viewer__actions" data-role="overlay-toolbar">
+          <label>
+            <input type="checkbox" data-role="overlay-toggle" data-overlay="scc" />
+            <span>SCC overlay</span>
+          </label>
+          <label>
+            <input type="checkbox" data-role="overlay-toggle" data-overlay="cycles" />
+            <span>Cycle edges</span>
+          </label>
+        </div>
+        <h3 class="viewer__subtitle">Warnings</h3>
+        <ul class="viewer__edges" data-role="analysis-warnings"></ul>
         <h3 class="viewer__subtitle">Edges</h3>
         <ul class="viewer__edges" data-role="edges-list"></ul>
       </section>
@@ -246,6 +272,13 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const inspectEl = root.querySelector<HTMLElement>('[data-role="inspect-output"]');
   const statusEl = root.querySelector<HTMLElement>('[data-role="copy-status"]');
   const svgEl = root.querySelector<HTMLElement>('[data-role="svg-root"]');
+  const hasCycleEl = root.querySelector<HTMLElement>('[data-role="analysis-has-cycle"]');
+  const sccCountEl = root.querySelector<HTMLElement>('[data-role="analysis-scc-count"]');
+  const cycleEdgesEl = root.querySelector<HTMLElement>('[data-role="analysis-cycle-edges"]');
+  const warningsEl = root.querySelector<HTMLElement>('[data-role="analysis-warnings"]');
+  const overlayToggleInputs = Array.from(
+    root.querySelectorAll<HTMLInputElement>('input[data-role="overlay-toggle"]'),
+  );
   const nodeInfoEl = root.querySelector<HTMLElement>('[data-role="node-info"]');
   const nodeInfoIdEl = root.querySelector<HTMLElement>('[data-role="node-info-id"]');
   const nodeInfoLabelEl = root.querySelector<HTMLElement>('[data-role="node-info-label"]');
@@ -272,6 +305,11 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !inspectEl ||
     !statusEl ||
     !svgEl ||
+    !hasCycleEl ||
+    !sccCountEl ||
+    !cycleEdgesEl ||
+    !warningsEl ||
+    overlayToggleInputs.length === 0 ||
     !nodeInfoEl ||
     !nodeInfoIdEl ||
     !nodeInfoLabelEl ||
@@ -279,6 +317,13 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !nodeInfoOutEl
   ) {
     throw new Error('viewer: missing expected DOM nodes');
+  }
+
+  const overlaySccToggle = overlayToggleInputs.find((input) => input.dataset.overlay === 'scc');
+  const overlayCycleToggle = overlayToggleInputs.find((input) => input.dataset.overlay === 'cycles');
+
+  if (!overlaySccToggle || !overlayCycleToggle) {
+    throw new Error('viewer: missing overlay toggles');
   }
 
   const textareaEl = textarea;
@@ -298,6 +343,12 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const inspectNode = inspectEl;
   const statusNode = statusEl;
   const svgNode = svgEl;
+  const analysisPanel: AnalysisPanelElements = {
+    hasCycleValue: hasCycleEl,
+    sccCountValue: sccCountEl,
+    cycleEdgeCountValue: cycleEdgesEl,
+    warningsList: warningsEl,
+  };
   const nodeInfoElements: NodeInfoElements = {
     container: nodeInfoEl,
     idValue: nodeInfoIdEl,
@@ -305,6 +356,15 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     inDegreeValue: nodeInfoInEl,
     outDegreeValue: nodeInfoOutEl,
   };
+
+  const overlayController = createOverlayController({
+    svgRoot: svgNode,
+    toggles: {
+      scc: overlaySccToggle,
+      cycles: overlayCycleToggle,
+    },
+    panel: analysisPanel,
+  });
 
   const setStatus = createStatusSetter(statusNode);
   let nodeStats = new Map<string, NodeInfo>();
@@ -462,6 +522,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
       clearGraphOutputs();
+      overlayController.setAnalysis(null);
       return false;
     }
 
@@ -474,6 +535,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
       clearGraphOutputs();
+      overlayController.setAnalysis(null);
       return false;
     }
 
@@ -483,6 +545,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
       clearGraphOutputs();
+      overlayController.setAnalysis(null);
       return false;
     }
 
@@ -497,6 +560,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
     showErrors([]);
     renderGraphUI(graph, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, dotText, inspectText);
+    overlayController.setAnalysis(analyzeGraph(graph));
     nodeStats = computeNodeStats(graph);
     hoveredNodeId = null;
     selectedNodeId = null;
@@ -606,6 +670,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
         clearInteractionState();
         clearGraphOutputs();
+        overlayController.setAnalysis(null);
       })
       .finally(() => {
         importInputEl.value = '';
@@ -683,6 +748,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
   textareaEl.value = options.initialJSON ?? '';
   resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
+  overlayController.setAnalysis(null);
   clearInteractionState();
   if (textareaEl.value.trim()) {
     parseAndRender();
@@ -704,6 +770,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       svgNode.removeEventListener('motor:node-hover', handleNodeHoverEvent);
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);
+      overlayController.destroy();
       root.innerHTML = '';
     },
   };
