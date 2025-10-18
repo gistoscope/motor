@@ -107,10 +107,15 @@ export function createActionsPanel(
     if (typeof options.onAction !== 'function') {
       return;
     }
-    await session.replay((actionId) => {
+    const playback = session.replay((actionId) => {
       options.onAction?.(actionId);
       applyHighlight(actionId);
     });
+    try {
+      await playback.play();
+    } finally {
+      await playback.destroy();
+    }
   };
 
   const handleExportClick = () => {
