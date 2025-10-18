@@ -189,6 +189,7 @@ function parseArgs(argv) {
     if (a === '--kind') { flags.set('kind', args[++i]); continue; }
     if (a === '-k') { flags.set('k', args[++i]); continue; }
     if (a === '--n') { flags.set('n', args[++i]); continue; }
+    if (a === '--pretty' || a === '-p') { flags.set('pretty', args[++i]); continue; }
     if (a === '--rows') { flags.set('rows', args[++i]); continue; }
     if (a === '--cols') { flags.set('cols', args[++i]); continue; }
     if (a === '--arity') { flags.set('arity', args[++i]); continue; }
@@ -256,7 +257,17 @@ async function cmdJson(flags) {
   const j = readGraphJSON(flags);
   const g = fromJSON(j);
   const normalized = toJSON(g);
-  await writeOutput(JSON.stringify(normalized, null, 2), flags.get('out'));
+  let indent = 2;
+  const raw = flags.get('pretty');
+  if (raw != null) {
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 0 || n > 10) {
+      die('json: --pretty must be an integer between 0 and 10');
+    }
+    indent = n;
+  }
+  const text = JSON.stringify(normalized, null, indent);
+  await writeOutput(text, flags.get('out'));
 }
 
 async function cmdValidate(flags) {
