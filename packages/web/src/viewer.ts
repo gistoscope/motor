@@ -1,4 +1,5 @@
 import './styles.css';
+import './styles/viewer.css';
 
 import {
   fromJSON,
@@ -19,6 +20,7 @@ import {
   type ShortestPathResult,
 } from './analysis';
 import { createOverlayController, type AnalysisPanelElements } from './overlays';
+import { initHelp, type HelpOverlayHandle } from './ui/help';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -250,6 +252,19 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
             <input type="checkbox" data-role="overlay-toggle" data-overlay="cycles" />
             <span>Cycle edges</span>
           </label>
+          <label class="viewer__contrast-toggle">
+            <input type="checkbox" data-role="contrast-toggle" />
+            <span>High contrast</span>
+          </label>
+          <button
+            type="button"
+            class="viewer__button viewer__button--secondary viewer__button--icon"
+            data-action="open-help"
+            aria-label="Open help"
+            aria-haspopup="dialog"
+          >
+            ?
+          </button>
         </div>
         <section class="viewer__shortest" data-role="shortest-panel" data-state="disabled">
           <header class="viewer__shortest-header">
@@ -366,6 +381,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const pasteTextarea = root.querySelector<HTMLTextAreaElement>('textarea[data-role="paste-textarea"]');
   const pasteApplyButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-apply"]');
   const pasteCancelButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-cancel"]');
+  const viewerRoot = root.querySelector<HTMLElement>('[data-role="viewer-root"]');
+  const helpButton = root.querySelector<HTMLButtonElement>('button[data-action="open-help"]');
+  const contrastToggle = root.querySelector<HTMLInputElement>('input[data-role="contrast-toggle"]');
   const nodesEl = root.querySelector<HTMLElement>('[data-role="stats-nodes"]');
   const edgesEl = root.querySelector<HTMLElement>('[data-role="stats-edges"]');
   const listEl = root.querySelector<HTMLElement>('[data-role="edges-list"]');
@@ -437,7 +455,10 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !shortestTargetValue ||
     !shortestTotalValue ||
     !shortestStatusValue ||
-    !shortestResetButton
+    !shortestResetButton ||
+    !viewerRoot ||
+    !helpButton ||
+    !contrastToggle
   ) {
     throw new Error('viewer: missing expected DOM nodes');
   }
@@ -464,6 +485,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const pasteTextareaEl = pasteTextarea;
   const pasteApplyBtn = pasteApplyButton;
   const pasteCancelBtn = pasteCancelButton;
+  const viewerRootEl = viewerRoot;
+  const helpButtonEl = helpButton;
+  const contrastToggleEl = contrastToggle;
   const nodesNode = nodesEl;
   const edgesNode = edgesEl;
   const listNode = listEl;
@@ -497,6 +521,13 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     },
     panel: analysisPanel,
   });
+  const helpOverlay: HelpOverlayHandle = initHelp({ root: viewerRootEl, trigger: helpButtonEl });
+
+  const handleContrastChange = () => {
+    viewerRootEl.classList.toggle('motor-contrast--high', contrastToggleEl.checked);
+  };
+  contrastToggleEl.addEventListener('change', handleContrastChange);
+  handleContrastChange();
 
   const setStatus = createStatusSetter(statusNode);
   let nodeStats = new Map<string, NodeInfo>();
@@ -1079,6 +1110,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   return {
     parse: parseAndRender,
     destroy: () => {
+      contrastToggleEl.removeEventListener('change', handleContrastChange);
       parseBtn.removeEventListener('click', parseAndRender);
       textareaEl.removeEventListener('keydown', handleKeydown);
       importBtn.removeEventListener('click', handleImportButtonClick);
@@ -1096,6 +1128,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);
       overlayController.destroy();
+      helpOverlay.destroy();
       root.innerHTML = '';
     },
   };

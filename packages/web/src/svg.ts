@@ -119,6 +119,10 @@ export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
     path.setAttribute('marker-end', `url(#${MARKER_ID})`);
     path.dataset.from = fromId;
     path.dataset.to = toId;
+    path.setAttribute('tabindex', '0');
+    path.setAttribute('role', 'img');
+    path.setAttribute('aria-label', `Edge ${fromId}→${toId}`);
+    path.setAttribute('focusable', 'true');
 
     if (fromId === toId) {
       const c1x = from.x + NODE_RADIUS;
@@ -134,6 +138,11 @@ export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
     }
 
     svg.appendChild(path);
+
+    const handleEdgeFocus = () => path.classList.add('motor-edge--focus');
+    const handleEdgeBlur = () => path.classList.remove('motor-edge--focus');
+    path.addEventListener('focus', handleEdgeFocus);
+    path.addEventListener('blur', handleEdgeBlur);
   }
 
   const supportsPointerEvents = typeof window !== 'undefined' && 'PointerEvent' in window;
@@ -142,6 +151,10 @@ export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
     const group = createSvgElement('g');
     group.setAttribute('class', 'motor-node');
     group.dataset.nodeId = node.id;
+    group.setAttribute('tabindex', '0');
+    group.setAttribute('role', 'button');
+    group.setAttribute('aria-label', `Node ${node.id}`);
+    group.setAttribute('focusable', 'true');
 
     const circle = createSvgElement('circle');
     circle.setAttribute('class', 'motor-node-circle');
@@ -186,6 +199,19 @@ export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
       event.stopPropagation();
       emitSelect();
     });
+
+    const handleFocus = () => group.classList.add('motor-node--focus');
+    const handleBlur = () => group.classList.remove('motor-node--focus');
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        emitSelect();
+      }
+    };
+
+    group.addEventListener('focus', handleFocus);
+    group.addEventListener('blur', handleBlur);
+    group.addEventListener('keydown', handleKeyDown);
   }
 
   const findNodeElement = (target: EventTarget | null): Element | null => {
