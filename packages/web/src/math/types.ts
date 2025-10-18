@@ -24,6 +24,11 @@ export interface MathBridgeOptions {
     selected?: string;
   };
   getTokenIds?: (event: 'hover' | 'select', payload: unknown) => Iterable<string>;
+  toastContainer?: HTMLElement;
+  toastDurationMs?: number;
+  instrumentation?: {
+    onAction?: (actionId: string, durationMs: number, outcome: 'ok' | 'err') => void;
+  };
 }
 
 export interface MathBridgeHandle {

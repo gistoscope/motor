@@ -3,11 +3,13 @@ import { createGhostOverlay } from '../ui/ghost';
 import { createHistoryPanel, type HistoryEntry } from '../ui/history';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
+import { createToastManager } from '../ui/toast';
 import type {
   MathBridgeHandle,
   MathBridgeOptions,
   MathEngine,
   MathEngineEventName,
+  MathEngineAction,
 } from './types';
 
 const DEFAULT_HOVER_CLASS = 'math-token--hovered';
@@ -382,6 +384,14 @@ export function attachMathEngine(
 ): MathBridgeHandle {
   void viewer;
 
+  const ownerDocument = hostEl.ownerDocument ?? document;
+  const ownerWindow = ownerDocument.defaultView ?? window;
+  const toaster = createToastManager(ownerDocument, {
+    container: options.toastContainer ?? null,
+    durationMs: options.toastDurationMs,
+  });
+  const instrumentationOnAction = options.instrumentation?.onAction ?? null;
+
   const hoverClass = options.classNames?.hovered ?? DEFAULT_HOVER_CLASS;
   const selectedClass = options.classNames?.selected ?? DEFAULT_SELECTED_CLASS;
 
@@ -421,6 +431,8 @@ export function attachMathEngine(
   const clearPreviewFn = typeof clearPreviewCandidate === 'function' ? clearPreviewCandidate.bind(engine) : null;
 
   let previewRequestId: string | null = null;
+  let lastActions = new Map<string, MathEngineAction>();
+  let pendingAction: { id: string; label: string; startedAt: number } | null = null;
 
   const renderGhost = (ids: Iterable<string>) => {
     const tokens = dedupe(ids);
@@ -492,26 +504,120 @@ export function attachMathEngine(
     }
   };
 
-  const actionsPanel = options.actionsContainer
-    ? createActionsPanel(options.actionsContainer, {
-        onAction: (actionId) => {
-          clearPreview();
-          engine.apply(actionId);
-          actionsPanel?.highlight(actionId);
-        },
-      })
-    : null;
+  const getActionLabel = (actionId: string | null): string => {
+    if (!actionId) {
+      return '';
+    }
+    const action = lastActions.get(actionId);
+    if (action && typeof action.label === 'string' && action.label.trim().length > 0) {
+      return action.label;
+    }
+    if (pendingAction && pendingAction.id === actionId && pendingAction.label.trim().length > 0) {
+      return pendingAction.label;
+    }
+    return actionId;
+  };
+
+  const formatApplyError = (actionId: string, reason: unknown): string => {
+    const label = getActionLabel(actionId) || actionId;
+    let message = '';
+    if (reason instanceof Error) {
+      message = String(reason.message ?? '').trim();
+    } else if (typeof reason === 'string') {
+      message = reason.trim();
+    }
+    if (!message) {
+      if (reason && typeof reason === 'object') {
+        try {
+          message = JSON.stringify(reason);
+        } catch {
+          message = '';
+        }
+      }
+      if (!message) {
+        message = 'Unknown error';
+      }
+    }
+    return `Failed to apply ${label}: ${message}`;
+  };
+
+  const completePendingAction = (
+    outcome: 'ok' | 'err',
+    detail: { ruleId?: string | null; message?: string; error?: unknown } = {},
+  ) => {
+    if (!pendingAction) {
+      return;
+    }
+    const { id, label, startedAt } = pendingAction;
+    pendingAction = null;
+    const duration = Math.max(0, Date.now() - startedAt);
+    if (instrumentationOnAction) {
+      try {
+        instrumentationOnAction(id, duration, outcome);
+      } catch {
+        // ignore instrumentation errors
+      }
+    }
+    if (outcome === 'ok') {
+      const custom = detail.message ? detail.message.trim() : '';
+      if (custom) {
+        toaster.success(custom);
+        return;
+      }
+      const resolved = detail.ruleId ? getActionLabel(detail.ruleId) : '';
+      const finalLabel = (resolved && resolved.trim().length > 0 ? resolved : '') || label || id;
+      const safeLabel = finalLabel.trim().length > 0 ? finalLabel.trim() : 'Action';
+      toaster.success(`${safeLabel} applied`);
+      return;
+    }
+    const message = detail.message ?? formatApplyError(id, detail.error);
+    toaster.error(message);
+  };
+
+  let actionsPanel: ReturnType<typeof createActionsPanel> | null = null;
+
+  const applyAction = (actionId: string, { highlight }: { highlight?: boolean } = {}): boolean => {
+    const targetId = actionId.trim();
+    if (!targetId) {
+      return false;
+    }
+    if (pendingAction) {
+      return false;
+    }
+    clearPreview();
+    const label = getActionLabel(targetId).trim();
+    pendingAction = { id: targetId, label: label || targetId, startedAt: Date.now() };
+    try {
+      engine.apply(targetId);
+      if (highlight) {
+        actionsPanel?.highlight(targetId);
+      }
+      return true;
+    } catch (error) {
+      const message = formatApplyError(targetId, error);
+      completePendingAction('err', { message, error });
+      return false;
+    }
+  };
+
+  if (options.actionsContainer) {
+    actionsPanel = createActionsPanel(options.actionsContainer, {
+      onAction: (actionId) => {
+        applyAction(actionId, { highlight: true });
+      },
+    });
+  }
 
   const historyPanel = options.historyContainer
     ? createHistoryPanel(options.historyContainer, {
         onUndo: () => {
           if (supportsUndo) {
-            engine.apply('undo');
+            applyAction('undo');
           }
         },
         onRedo: () => {
           if (supportsRedo) {
-            engine.apply('redo');
+            applyAction('redo');
           }
         },
       })
@@ -539,6 +645,7 @@ export function attachMathEngine(
 
   const refreshActions = () => {
     const actions = engine.getLegalActions();
+    lastActions = new Map(actions.map((action) => [action.id, action]));
     supportsUndo = actions.some((action) => action.id === 'undo');
     supportsRedo = actions.some((action) => action.id === 'redo');
 
@@ -586,8 +693,6 @@ export function attachMathEngine(
     }
   };
 
-  const ownerDocument = hostEl.ownerDocument ?? document;
-  const ownerWindow = ownerDocument.defaultView ?? window;
   const rawSelect = (engine as { select?: ((mode: string) => void) | undefined }).select;
   const engineSelect: ((mode: string) => void) | null =
     typeof rawSelect === 'function' ? rawSelect.bind(engine) : null;
@@ -763,6 +868,14 @@ export function attachMathEngine(
   subscriptions.push(engine.on('select', (payload) => updateHighlight('select', payload)));
   subscriptions.push(
     engine.on('state', (payload) => {
+      const ruleId = typeof (payload as { ruleId?: unknown })?.ruleId === 'string'
+        ? ((payload as { ruleId?: unknown }).ruleId as string)
+        : null;
+
+      if (pendingAction) {
+        completePendingAction('ok', { ruleId });
+      }
+
       refreshActions();
 
       const previewInfo = extractPreviewInfo(payload);
@@ -779,10 +892,6 @@ export function attachMathEngine(
         const notes = normalizeNotes((payload as { domainNotes?: unknown })?.domainNotes);
         warningsPanel.render(notes);
       }
-
-      const ruleId = typeof (payload as { ruleId?: unknown })?.ruleId === 'string'
-        ? ((payload as { ruleId?: unknown }).ruleId as string)
-        : null;
 
       const nextExpression = captureExpression(hostEl);
 
@@ -827,8 +936,7 @@ export function attachMathEngine(
         const highlighted = actionsPanel?.getHighlightedActionId();
         if (highlighted) {
           event.preventDefault();
-          clearPreview();
-          engine.apply(highlighted);
+          applyAction(highlighted, { highlight: true });
         }
         return;
       }
@@ -868,16 +976,16 @@ export function attachMathEngine(
       if (event.shiftKey) {
         if (supportsRedo) {
           event.preventDefault();
-          engine.apply('redo');
+          applyAction('redo');
         }
       } else if (supportsUndo) {
         event.preventDefault();
-        engine.apply('undo');
+        applyAction('undo');
       }
     } else if (key === 'y') {
       if (supportsRedo) {
         event.preventDefault();
-        engine.apply('redo');
+        applyAction('redo');
       }
     }
   };
@@ -910,6 +1018,8 @@ export function attachMathEngine(
 
   return {
     destroy() {
+      pendingAction = null;
+      lastActions = new Map();
       for (const unsubscribe of subscriptions) {
         try {
           unsubscribe();
@@ -938,6 +1048,7 @@ export function attachMathEngine(
       hoveredIds = new Set();
       selectedIds = new Set();
       hostEl.innerHTML = '';
+      toaster.destroy();
     },
     refresh: refreshActions,
     setExpression(expr: string) {
@@ -952,6 +1063,8 @@ export function attachMathEngine(
       hostEl.innerHTML = '';
       historyEntries = [];
       appliedHistoryCount = 0;
+      pendingAction = null;
+      lastActions = new Map();
       engine.mount(hostEl, expr);
       hostEl.appendChild(ghostOverlay.element);
       ghostTokenIds = new Set();
