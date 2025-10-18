@@ -4,6 +4,7 @@ import { createHistoryPanel, type HistoryEntry } from '../ui/history';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import { createToastManager } from '../ui/toast';
+import { astToGraph } from './ast2graph';
 import type {
   MathBridgeHandle,
   MathBridgeOptions,
@@ -88,6 +89,23 @@ function removeClassFromIds(
   className: string,
 ): void {
   for (const id of ids) {
+    const selector = `[data-token-id="${escapeAttribute(id)}"]`;
+    host
+      .querySelectorAll<HTMLElement>(selector)
+      .forEach((el) => el.classList.remove(className));
+  }
+}
+
+function removeClassFromIdsExcept(
+  host: HTMLElement,
+  ids: Iterable<string>,
+  className: string,
+  except: Set<string>,
+): void {
+  for (const id of ids) {
+    if (except.has(id)) {
+      continue;
+    }
     const selector = `[data-token-id="${escapeAttribute(id)}"]`;
     host
       .querySelectorAll<HTMLElement>(selector)
@@ -397,6 +415,173 @@ export function attachMathEngine(
 
   let hoveredIds = new Set<string>();
   let selectedIds = new Set<string>();
+  let graphHoverIds = new Set<string>();
+  let graphSelectIds = new Set<string>();
+  let nodeToTokens: Record<string, string[]> = {};
+  let tokenToNodes: Record<string, string[]> = {};
+
+  const normalizeIdList = (value: unknown): string[] => {
+    if (value == null) {
+      return [];
+    }
+    const collected: string[] = [];
+    const collect = (candidate: unknown) => {
+      const normalized = coerceToString(candidate);
+      if (normalized !== null) {
+        collected.push(normalized);
+      }
+    };
+    if (Array.isArray(value)) {
+      value.forEach(collect);
+    } else if (isIterable(value)) {
+      for (const item of value as Iterable<unknown>) {
+        collect(item);
+      }
+    } else {
+      collect(value);
+    }
+    return dedupe(collected);
+  };
+
+  const computeNodesForTokens = (ids: Iterable<string>): string[] => {
+    const result = new Set<string>();
+    for (const tokenId of ids) {
+      result.add(tokenId);
+      const mapped = tokenToNodes[tokenId];
+      if (Array.isArray(mapped)) {
+        for (const nodeId of mapped) {
+          if (typeof nodeId === 'string' && nodeId.length > 0) {
+            result.add(nodeId);
+          }
+        }
+      }
+    }
+    return Array.from(result).sort((a, b) => a.localeCompare(b));
+  };
+
+  const computeTokensForNodes = (
+    nodeIds: Iterable<string>,
+    extraTokens: Iterable<string> = [],
+  ): string[] => {
+    const result = new Set<string>();
+    for (const token of extraTokens) {
+      if (typeof token === 'string' && token.length > 0) {
+        result.add(token);
+      }
+    }
+    for (const nodeId of nodeIds) {
+      const mapped = nodeToTokens[nodeId];
+      if (Array.isArray(mapped)) {
+        for (const token of mapped) {
+          if (typeof token === 'string' && token.length > 0) {
+            result.add(token);
+          }
+        }
+      }
+      if (tokenToNodes[nodeId]) {
+        result.add(nodeId);
+      }
+    }
+    return Array.from(result).sort((a, b) => a.localeCompare(b));
+  };
+
+  const dispatchTokenEvent = (event: 'hover' | 'select', tokens: Iterable<string>) => {
+    const list = dedupe(tokens);
+    const nodeIds = computeNodesForTokens(list);
+    const detail = { tokenIds: list, nodeIds };
+    const eventName = event === 'hover' ? 'motor:math-token-hover' : 'motor:math-token-select';
+    const customEvent = new CustomEvent<typeof detail>(eventName, {
+      bubbles: true,
+      detail,
+    });
+    hostEl.dispatchEvent(customEvent);
+  };
+
+  const applyGraphHighlight = (mode: 'hover' | 'select', ids: Iterable<string>) => {
+    const className = mode === 'hover' ? hoverClass : selectedClass;
+    const tracker = mode === 'hover' ? graphHoverIds : graphSelectIds;
+    const engineTracker = mode === 'hover' ? hoveredIds : selectedIds;
+    const normalized = dedupe(ids);
+    const next = new Set(normalized);
+    const skip = new Set<string>();
+    for (const id of next) {
+      skip.add(id);
+    }
+    for (const id of engineTracker) {
+      skip.add(id);
+    }
+    removeClassFromIdsExcept(hostEl, tracker, className, skip);
+    addClassToIds(hostEl, next, className);
+    if (mode === 'hover') {
+      graphHoverIds = next;
+    } else {
+      graphSelectIds = next;
+    }
+  };
+
+  const resetGraphHighlights = (validTokens: Set<string>) => {
+    const prune = (source: Set<string>, className: string, engine: Set<string>): Set<string> => {
+      const next = new Set<string>();
+      for (const id of source) {
+        if (validTokens.has(id)) {
+          next.add(id);
+        } else if (!engine.has(id)) {
+          removeClassFromIds(hostEl, [id], className);
+        }
+      }
+      return next;
+    };
+    graphHoverIds = prune(graphHoverIds, hoverClass, hoveredIds);
+    graphSelectIds = prune(graphSelectIds, selectedClass, selectedIds);
+  };
+
+  const applyAstGraph = (snapshot: unknown) => {
+    let detail;
+    try {
+      detail = astToGraph(snapshot);
+    } catch {
+      detail = astToGraph(null);
+    }
+    nodeToTokens = detail.nodeTokens;
+    tokenToNodes = detail.tokenNodes;
+    const validTokens = new Set<string>();
+    for (const tokens of Object.values(detail.nodeTokens)) {
+      for (const tokenId of tokens) {
+        validTokens.add(tokenId);
+      }
+    }
+    for (const tokenId of Object.keys(detail.tokenNodes)) {
+      validTokens.add(tokenId);
+    }
+    resetGraphHighlights(validTokens);
+    const event = new CustomEvent<typeof detail>('motor:math-graph-change', {
+      bubbles: true,
+      detail,
+    });
+    hostEl.dispatchEvent(event);
+  };
+
+  const syncAstGraphFromEngine = () => {
+    try {
+      const exported = engine.export();
+      if (exported && typeof exported === 'object' && 'ast' in exported) {
+        const snapshot = (exported as { ast?: unknown }).ast;
+        applyAstGraph(snapshot ?? null);
+        return;
+      }
+    } catch {
+      // ignore export errors
+    }
+    applyAstGraph(null);
+  };
+
+  const handleGraphInteraction = (mode: 'hover' | 'select', event: Event) => {
+    event.stopPropagation();
+    const detail = (event as CustomEvent<{ nodeIds?: unknown; tokenIds?: unknown }>).detail ?? {};
+    const nodeIds = normalizeIdList(detail.nodeIds);
+    const tokens = computeTokensForNodes(nodeIds, normalizeIdList(detail.tokenIds));
+    applyGraphHighlight(mode, tokens);
+  };
 
   const ghostOverlay = createGhostOverlay(hostEl);
   let ghostTokenIds = new Set<string>();
@@ -682,8 +867,16 @@ export function attachMathEngine(
     const ids = normalizeTokenIds(event, payload, options);
     const className = event === 'hover' ? hoverClass : selectedClass;
     const previous = event === 'hover' ? hoveredIds : selectedIds;
+    const external = event === 'hover' ? graphHoverIds : graphSelectIds;
+    const skip = new Set<string>();
+    for (const id of external) {
+      skip.add(id);
+    }
+    for (const id of ids) {
+      skip.add(id);
+    }
 
-    removeClassFromIds(hostEl, previous, className);
+    removeClassFromIdsExcept(hostEl, previous, className, skip);
     addClassToIds(hostEl, ids, className);
 
     const target = event === 'hover' ? hoveredIds : selectedIds;
@@ -691,6 +884,8 @@ export function attachMathEngine(
     for (const id of ids) {
       target.add(id);
     }
+
+    dispatchTokenEvent(event, target);
   };
 
   const rawSelect = (engine as { select?: ((mode: string) => void) | undefined }).select;
@@ -848,6 +1043,16 @@ export function attachMathEngine(
 
   const subscriptions: Array<() => void> = [];
 
+  const handleGraphHoverEvent = (event: Event) => handleGraphInteraction('hover', event);
+  const handleGraphSelectEvent = (event: Event) => handleGraphInteraction('select', event);
+
+  hostEl.addEventListener('motor:math-graph-hover', handleGraphHoverEvent as EventListener);
+  hostEl.addEventListener('motor:math-graph-select', handleGraphSelectEvent as EventListener);
+  subscriptions.push(() => {
+    hostEl.removeEventListener('motor:math-graph-hover', handleGraphHoverEvent as EventListener);
+    hostEl.removeEventListener('motor:math-graph-select', handleGraphSelectEvent as EventListener);
+  });
+
   if (options.actionsContainer) {
     const actionsContainer = options.actionsContainer;
     actionsContainer.addEventListener('pointerover', handleActionPointerOver);
@@ -877,6 +1082,16 @@ export function attachMathEngine(
       }
 
       refreshActions();
+
+      const astFromPayload =
+        payload && typeof payload === 'object' && 'ast' in (payload as Record<string, unknown>)
+          ? ((payload as { ast?: unknown }).ast ?? null)
+          : undefined;
+      if (astFromPayload !== undefined) {
+        applyAstGraph(astFromPayload);
+      } else {
+        syncAstGraphFromEngine();
+      }
 
       const previewInfo = extractPreviewInfo(payload);
       if (previewInfo) {
@@ -1009,6 +1224,7 @@ export function attachMathEngine(
   hostEl.appendChild(ghostOverlay.element);
   ghostTokenIds = new Set();
   ghostOverlay.clear();
+  syncAstGraphFromEngine();
   refreshActions();
   currentExpression = captureExpression(hostEl);
   updateHistoryPanel();
@@ -1045,8 +1261,14 @@ export function attachMathEngine(
       longPressActive = false;
       removeClassFromIds(hostEl, hoveredIds, hoverClass);
       removeClassFromIds(hostEl, selectedIds, selectedClass);
+      removeClassFromIds(hostEl, graphHoverIds, hoverClass);
+      removeClassFromIds(hostEl, graphSelectIds, selectedClass);
       hoveredIds = new Set();
       selectedIds = new Set();
+      graphHoverIds = new Set();
+      graphSelectIds = new Set();
+      nodeToTokens = {};
+      tokenToNodes = {};
       hostEl.innerHTML = '';
       toaster.destroy();
     },
@@ -1057,6 +1279,12 @@ export function attachMathEngine(
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
       selectedIds = new Set();
+      removeClassFromIds(hostEl, graphHoverIds, hoverClass);
+      removeClassFromIds(hostEl, graphSelectIds, selectedClass);
+      graphHoverIds = new Set();
+      graphSelectIds = new Set();
+      nodeToTokens = {};
+      tokenToNodes = {};
       clearLongPress();
       deactivateSelectionMode();
       longPressActive = false;
@@ -1069,6 +1297,7 @@ export function attachMathEngine(
       hostEl.appendChild(ghostOverlay.element);
       ghostTokenIds = new Set();
       ghostOverlay.clear();
+      syncAstGraphFromEngine();
       refreshActions();
       currentExpression = captureExpression(hostEl);
       updateHistoryPanel();

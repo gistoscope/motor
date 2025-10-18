@@ -235,6 +235,60 @@
   transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
+.viewer__math-graph {
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.viewer__math-graph-body {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.viewer__math-graph[data-state='empty'] .viewer__math-graph-body {
+  display: none;
+}
+
+.viewer__math-graph-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.viewer__math-graph[data-state='ready'] .viewer__math-graph-empty {
+  display: none;
+}
+
+.viewer__preview--mini {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.75rem;
+  padding: 0.5rem;
+  background: #f8fafc;
+}
+
+.viewer__code--mini {
+  max-height: 12rem;
+  overflow: auto;
+  font-size: 0.8rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  background: #f1f5f9;
+}
+
+.motor-node--math-hover .motor-node-circle {
+  stroke: #0ea5e9;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 0.35rem rgba(14, 165, 233, 0.55));
+}
+
+.motor-node--math-select .motor-node-circle {
+  stroke: #2563eb;
+  stroke-width: 3;
+  fill: rgba(59, 130, 246, 0.2);
+}
+
 .math-token--hovered {
   background: rgba(14, 165, 233, 0.15);
   box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.3);
@@ -344,6 +398,17 @@
   color: #041322;
 }
 
+.motor-contrast--high .viewer__preview--mini,
+.motor-contrast--high .viewer__code--mini {
+  background: #0b1120;
+  color: #f8fafc;
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+.motor-contrast--high .viewer__math-graph-empty {
+  color: #cbd5f5;
+}
+
 .motor-contrast--high .viewer__textarea {
   background: #0b1120;
   color: #f8fafc;
@@ -361,6 +426,15 @@
 
 .motor-contrast--high .motor-edge-marker-path {
   fill: #facc15;
+}
+
+.motor-contrast--high .motor-node--math-hover .motor-node-circle {
+  stroke: #38bdf8;
+}
+
+.motor-contrast--high .motor-node--math-select .motor-node-circle {
+  stroke: #38bdf8;
+  fill: rgba(148, 163, 184, 0.35);
 }
 
 .motor-contrast--high .motor-help-overlay__dialog {
