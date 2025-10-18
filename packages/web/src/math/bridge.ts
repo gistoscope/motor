@@ -1,5 +1,7 @@
 import { createActionsPanel } from '../ui/actions';
+import { createGhostOverlay } from '../ui/ghost';
 import { createHistoryPanel, type HistoryEntry } from '../ui/history';
+import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import type {
   MathBridgeHandle,
@@ -128,6 +130,191 @@ function normalizeTokenIds(
   return dedupe(extractTokenIdsFromPayload(payload));
 }
 
+function gatherPreviewTokenIds(source: unknown): string[] {
+  return gatherPreviewTokenIdsInternal(source, new Set());
+}
+
+function gatherPreviewTokenIdsInternal(source: unknown, visited: Set<unknown>): string[] {
+  if (source == null) {
+    return [];
+  }
+  if (typeof source === 'string') {
+    return [source];
+  }
+  if (typeof source === 'number' && Number.isFinite(source)) {
+    return [String(source)];
+  }
+  if (typeof source === 'boolean') {
+    return [];
+  }
+  if (Array.isArray(source)) {
+    const result: string[] = [];
+    for (const item of source) {
+      result.push(...gatherPreviewTokenIdsInternal(item, visited));
+    }
+    return result;
+  }
+  if (typeof source === 'object') {
+    if (visited.has(source)) {
+      return [];
+    }
+    visited.add(source);
+    const record = source as Record<string, unknown>;
+    const tokens: string[] = [];
+
+    if (typeof record.kind === 'string' && typeof record.value === 'string') {
+      const normalizedKind = record.kind.toLowerCase();
+      if (['token', 'identifier', 'id'].includes(normalizedKind)) {
+        tokens.push(record.value);
+      }
+    }
+
+    const directKeys: Array<[unknown, boolean]> = [
+      [record.token, true],
+      [record.tokenId, true],
+      [record.value, false],
+      [record.left, true],
+      [record.right, true],
+      [record.start, true],
+      [record.end, true],
+      [record.startId, true],
+      [record.endId, true],
+      [record.from, true],
+      [record.to, true],
+    ];
+
+    for (const [value, acceptStringsOnly] of directKeys) {
+      const str = coerceToString(value);
+      if (str && (acceptStringsOnly || typeof value === 'string')) {
+        tokens.push(str);
+      }
+    }
+
+    const nestedKeys = [
+      'tokens',
+      'tokenIds',
+      'ids',
+      'values',
+      'items',
+      'elements',
+      'nodes',
+      'list',
+      'path',
+      'targets',
+      'target',
+      'selection',
+      'selections',
+      'range',
+      'ranges',
+      'highlights',
+      'locations',
+      'expressions',
+    ];
+
+    for (const key of nestedKeys) {
+      if (key in record) {
+        tokens.push(...gatherPreviewTokenIdsInternal(record[key], visited));
+      }
+    }
+
+    return tokens;
+  }
+  return [];
+}
+
+function extractPreviewInfo(payload: unknown): { actionId: string | null; tokenIds: string[] } | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const candidateKeys = [
+    'preview',
+    'previewSelection',
+    'previewTarget',
+    'previewTokens',
+    'previewRange',
+    'ghost',
+    'ghostPreview',
+    'actionPreview',
+    'pendingPreview',
+    'suggestionPreview',
+  ];
+
+  let preview: unknown = undefined;
+  for (const key of candidateKeys) {
+    if (key in record) {
+      preview = record[key];
+      break;
+    }
+  }
+
+  if (preview === undefined) {
+    return null;
+  }
+
+  if (preview === null) {
+    return { actionId: null, tokenIds: [] };
+  }
+
+  if (typeof preview === 'string') {
+    return { actionId: preview, tokenIds: [] };
+  }
+
+  if (typeof preview === 'number' && Number.isFinite(preview)) {
+    return { actionId: String(preview), tokenIds: [] };
+  }
+
+  if (Array.isArray(preview)) {
+    return { actionId: null, tokenIds: dedupe(gatherPreviewTokenIds(preview)) };
+  }
+
+  if (typeof preview === 'object') {
+    const previewRecord = preview as Record<string, unknown>;
+    const actionId =
+      coerceToString(previewRecord.stepId) ??
+      coerceToString(previewRecord.actionId) ??
+      coerceToString(previewRecord.ruleId) ??
+      coerceToString(previewRecord.id) ??
+      coerceToString(previewRecord.key) ??
+      null;
+
+    const nested = [
+      'tokens',
+      'tokenIds',
+      'ids',
+      'values',
+      'items',
+      'elements',
+      'nodes',
+      'list',
+      'path',
+      'highlights',
+      'targets',
+      'target',
+      'selection',
+      'selections',
+      'range',
+      'ranges',
+      'locations',
+    ];
+
+    let tokens: string[] = [];
+    for (const key of nested) {
+      if (key in previewRecord) {
+        tokens.push(...gatherPreviewTokenIds(previewRecord[key]));
+      }
+    }
+    if (tokens.length === 0) {
+      tokens = gatherPreviewTokenIds(previewRecord);
+    }
+
+    return { actionId, tokenIds: dedupe(tokens) };
+  }
+
+  return null;
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
     return false;
@@ -201,9 +388,114 @@ export function attachMathEngine(
   let hoveredIds = new Set<string>();
   let selectedIds = new Set<string>();
 
+  const ghostOverlay = createGhostOverlay(hostEl);
+  let ghostTokenIds = new Set<string>();
+  const engineRecord = engine as unknown as Record<string, unknown>;
+  const previewNullableCandidates = ['preview', 'setPreview', 'previewStep', 'previewRule'] as const;
+  let previewFn: ((id: string | null) => void) | null = null;
+  for (const key of previewNullableCandidates) {
+    const candidate = engineRecord[key];
+    if (typeof candidate === 'function') {
+      previewFn = (candidate as (id: string | null) => void).bind(engine);
+      break;
+    }
+  }
+
+  const previewStrictCandidates = [
+    'previewAction',
+    'showPreview',
+    'suggestPreview',
+    'hintPreview',
+    'previewCommand',
+  ] as const;
+  let previewStrictFn: ((id: string) => void) | null = null;
+  for (const key of previewStrictCandidates) {
+    const candidate = engineRecord[key];
+    if (typeof candidate === 'function') {
+      previewStrictFn = (candidate as (id: string) => void).bind(engine);
+      break;
+    }
+  }
+
+  const clearPreviewCandidate = (engine as { clearPreview?: () => void }).clearPreview;
+  const clearPreviewFn = typeof clearPreviewCandidate === 'function' ? clearPreviewCandidate.bind(engine) : null;
+
+  let previewRequestId: string | null = null;
+
+  const renderGhost = (ids: Iterable<string>) => {
+    const tokens = dedupe(ids);
+    if (tokens.length === 0) {
+      if (ghostTokenIds.size > 0) {
+        ghostOverlay.clear();
+      }
+      ghostTokenIds = new Set();
+      return;
+    }
+    const next = new Set(tokens);
+    if (tokens.length === ghostTokenIds.size) {
+      let identical = true;
+      for (const token of next) {
+        if (!ghostTokenIds.has(token)) {
+          identical = false;
+          break;
+        }
+      }
+      if (identical) {
+        return;
+      }
+    }
+    ghostOverlay.render(tokens);
+    ghostTokenIds = next;
+  };
+
+  const clearPreview = () => {
+    const shouldNotify = previewRequestId !== null || ghostTokenIds.size > 0;
+    previewRequestId = null;
+    if (shouldNotify) {
+      if (clearPreviewFn) {
+        try {
+          clearPreviewFn();
+        } catch {
+          // ignore preview cleanup errors
+        }
+      } else if (previewFn) {
+        try {
+          previewFn(null);
+        } catch {
+          // ignore preview cleanup errors
+        }
+      }
+    }
+    renderGhost([]);
+  };
+
+  const requestPreview = (actionId: string | null) => {
+    if (actionId === null) {
+      clearPreview();
+      return;
+    }
+    previewRequestId = actionId;
+    if (previewFn) {
+      try {
+        previewFn(actionId);
+      } catch {
+        // ignore preview errors
+      }
+      return;
+    }
+    if (previewStrictFn) {
+      try {
+        previewStrictFn(actionId);
+      } catch {
+        // ignore preview errors
+      }
+    }
+  };
+
   const actionsPanel = options.actionsContainer
     ? createActionsPanel(options.actionsContainer, {
         onAction: (actionId) => {
+          clearPreview();
           engine.apply(actionId);
           actionsPanel?.highlight(actionId);
         },
@@ -246,17 +538,33 @@ export function attachMathEngine(
   };
 
   const refreshActions = () => {
-    if (!actionsPanel) {
-      const actions = engine.getLegalActions();
-      supportsUndo = actions.some((action) => action.id === 'undo');
-      supportsRedo = actions.some((action) => action.id === 'redo');
-      updateHistoryPanel();
-      return;
-    }
     const actions = engine.getLegalActions();
     supportsUndo = actions.some((action) => action.id === 'undo');
     supportsRedo = actions.some((action) => action.id === 'redo');
-    actionsPanel.render(actions);
+
+    if (actionsPanel) {
+      actionsPanel.render(actions);
+      if (options.actionsContainer) {
+        const lookup = new Map(actions.map((action) => [action.id, action]));
+        const buttons = options.actionsContainer.querySelectorAll<HTMLButtonElement>(
+          'button[data-role="math-action"]',
+        );
+        buttons.forEach((button) => {
+          const actionId = button.dataset.actionId ?? '';
+          if (!actionId) {
+            return;
+          }
+          const action = lookup.get(actionId);
+          const payload = action ?? { id: actionId, label: button.textContent ?? actionId };
+          applyRuleTooltip(button, payload);
+        });
+      }
+    }
+
+    if (actions.length === 0 || (previewRequestId && !actions.some((action) => action.id === previewRequestId))) {
+      clearPreview();
+    }
+
     updateHistoryPanel();
   };
 
@@ -330,6 +638,57 @@ export function attachMathEngine(
     callSelect(mode);
   };
 
+  const findActionButton = (target: EventTarget | null): HTMLButtonElement | null => {
+    if (!(target instanceof HTMLElement)) {
+      return null;
+    }
+    return target.closest<HTMLButtonElement>('button[data-role="math-action"]');
+  };
+
+  const handleActionPointerOver = (event: PointerEvent) => {
+    const button = findActionButton(event.target);
+    const actionId = button?.dataset.actionId ?? null;
+    if (actionId) {
+      requestPreview(actionId);
+    }
+  };
+
+  const handleActionFocusIn = (event: FocusEvent) => {
+    const button = findActionButton(event.target);
+    const actionId = button?.dataset.actionId ?? null;
+    if (actionId) {
+      requestPreview(actionId);
+    }
+  };
+
+  const handleActionPointerOut = (event: PointerEvent) => {
+    const current = findActionButton(event.target);
+    if (!current) {
+      return;
+    }
+    const related = findActionButton(event.relatedTarget);
+    if (related) {
+      return;
+    }
+    clearPreview();
+  };
+
+  const handleActionPointerLeave = () => {
+    clearPreview();
+  };
+
+  const handleActionFocusOut = (event: FocusEvent) => {
+    const current = findActionButton(event.target);
+    if (!current) {
+      return;
+    }
+    const related = findActionButton(event.relatedTarget);
+    if (related) {
+      return;
+    }
+    clearPreview();
+  };
+
   const handleClick = (event: MouseEvent) => {
     if (!(event.ctrlKey || event.metaKey)) {
       return;
@@ -383,11 +742,38 @@ export function attachMathEngine(
   };
 
   const subscriptions: Array<() => void> = [];
+
+  if (options.actionsContainer) {
+    const actionsContainer = options.actionsContainer;
+    actionsContainer.addEventListener('pointerover', handleActionPointerOver);
+    actionsContainer.addEventListener('focusin', handleActionFocusIn);
+    actionsContainer.addEventListener('pointerout', handleActionPointerOut);
+    actionsContainer.addEventListener('pointerleave', handleActionPointerLeave);
+    actionsContainer.addEventListener('focusout', handleActionFocusOut);
+    subscriptions.push(() => {
+      actionsContainer.removeEventListener('pointerover', handleActionPointerOver);
+      actionsContainer.removeEventListener('focusin', handleActionFocusIn);
+      actionsContainer.removeEventListener('pointerout', handleActionPointerOut);
+      actionsContainer.removeEventListener('pointerleave', handleActionPointerLeave);
+      actionsContainer.removeEventListener('focusout', handleActionFocusOut);
+    });
+  }
+
   subscriptions.push(engine.on('hover', (payload) => updateHighlight('hover', payload)));
   subscriptions.push(engine.on('select', (payload) => updateHighlight('select', payload)));
   subscriptions.push(
     engine.on('state', (payload) => {
       refreshActions();
+
+      const previewInfo = extractPreviewInfo(payload);
+      if (previewInfo) {
+        if (previewInfo.actionId !== null) {
+          previewRequestId = previewInfo.actionId;
+        }
+        renderGhost(previewInfo.tokenIds);
+      } else {
+        renderGhost([]);
+      }
 
       if (warningsPanel) {
         const notes = normalizeNotes((payload as { domainNotes?: unknown })?.domainNotes);
@@ -441,6 +827,7 @@ export function attachMathEngine(
         const highlighted = actionsPanel?.getHighlightedActionId();
         if (highlighted) {
           event.preventDefault();
+          clearPreview();
           engine.apply(highlighted);
         }
         return;
@@ -451,6 +838,7 @@ export function attachMathEngine(
           deactivateSelectionMode();
           callSelect('clear');
         }
+        clearPreview();
         return;
       }
       if (event.key === '[' || event.key === '{') {
@@ -510,6 +898,9 @@ export function attachMathEngine(
   });
 
   engine.mount(hostEl, options.initialExpression ?? '');
+  hostEl.appendChild(ghostOverlay.element);
+  ghostTokenIds = new Set();
+  ghostOverlay.clear();
   refreshActions();
   currentExpression = captureExpression(hostEl);
   updateHistoryPanel();
@@ -536,6 +927,9 @@ export function attachMathEngine(
       if (warningsPanel) {
         warningsPanel.destroy();
       }
+      clearPreview();
+      ghostOverlay.destroy();
+      ghostTokenIds = new Set();
       clearLongPress();
       deactivateSelectionMode();
       longPressActive = false;
@@ -547,6 +941,7 @@ export function attachMathEngine(
     },
     refresh: refreshActions,
     setExpression(expr: string) {
+      clearPreview();
       removeClassFromIds(hostEl, hoveredIds, hoverClass);
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
@@ -558,6 +953,9 @@ export function attachMathEngine(
       historyEntries = [];
       appliedHistoryCount = 0;
       engine.mount(hostEl, expr);
+      hostEl.appendChild(ghostOverlay.element);
+      ghostTokenIds = new Set();
+      ghostOverlay.clear();
       refreshActions();
       currentExpression = captureExpression(hostEl);
       updateHistoryPanel();

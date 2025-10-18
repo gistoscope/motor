@@ -202,6 +202,31 @@
   display: block;
   font-size: 1.05rem;
   line-height: 1.6;
+  position: relative;
+}
+
+.motor-ghost {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.motor-ghost[data-state='visible'] {
+  opacity: 1;
+}
+
+.motor-ghost__token {
+  position: absolute;
+  border-radius: 0.35rem;
+  background: rgba(59, 130, 246, 0.18);
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+}
+
+.motor-ghost[data-ready='true'] .motor-ghost__token {
+  transition: opacity 120ms ease, transform 120ms ease;
 }
 
 [data-role='math-host'] [data-token-id] {
