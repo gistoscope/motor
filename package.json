@@ -9,6 +9,7 @@
     "verify": "node scripts/verify-no-web.mjs",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "log2test": "node scripts/log2test.mjs",
     "dev:web": "pnpm --filter @motor/web dev",
     "start:cli": "pnpm --filter @motor/cli exec motor --demo",
     "prepare": "husky install"

@@ -1,0 +1,43 @@
+{
+  "name": "Example addition session",
+  "description": "Recorded in a development environment to exercise log playback.",
+  "initialExpression": "x",
+  "frames": [
+    {
+      "actionId": null,
+      "hostHtml": "<span data-token-id=\"var\">x</span>",
+      "actions": [
+        { "id": "add-3", "label": "Add three", "kind": "transform" }
+      ],
+      "state": {
+        "ruleId": null,
+        "legalActions": [
+          { "id": "add-3", "label": "Add three", "kind": "transform" }
+        ]
+      },
+      "exportSnapshot": {
+        "ast": { "expression": "x" },
+        "html": "<span data-token-id=\"var\">x</span>",
+        "tex": "x"
+      }
+    },
+    {
+      "actionId": "add-3",
+      "hostHtml": "<span data-token-id=\"var\">x</span> <span data-token-id=\"plus\">+</span> <span data-token-id=\"number\">3</span>",
+      "actions": [
+        { "id": "undo", "label": "Undo", "kind": "history" }
+      ],
+      "state": {
+        "ruleId": "rule:add-3",
+        "legalActions": [
+          { "id": "undo", "label": "Undo", "kind": "history" }
+        ]
+      },
+      "exportSnapshot": {
+        "ast": { "expression": "x + 3" },
+        "html": "<span data-token-id=\"var\">x</span> <span data-token-id=\"plus\">+</span> <span data-token-id=\"number\">3</span>",
+        "tex": "x + 3"
+      }
+    }
+  ]
+}
