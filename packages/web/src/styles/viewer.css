@@ -235,6 +235,21 @@
   transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
 }
 
+[data-role='math-host'] [data-token-id].motor-diff-add {
+  background: rgba(34, 197, 94, 0.18);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35);
+}
+
+[data-role='math-host'] [data-token-id].motor-diff-del {
+  background: rgba(248, 113, 113, 0.16);
+  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.35);
+}
+
+[data-role='math-host'] [data-token-id].motor-diff-chg {
+  background: rgba(250, 204, 21, 0.18);
+  box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.35);
+}
+
 .math-token--hovered {
   background: rgba(14, 165, 233, 0.15);
   box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.3);
@@ -284,6 +299,37 @@
 [data-role='math-history-diff'] {
   margin: 0;
   color: #334155;
+}
+
+.motor-node.motor-diff-add .motor-node-circle {
+  stroke: #22c55e;
+  stroke-width: 3;
+}
+
+.motor-node.motor-diff-del .motor-node-circle {
+  stroke: #ef4444;
+  stroke-width: 3;
+}
+
+.motor-node.motor-diff-chg .motor-node-circle {
+  stroke: #f97316;
+  stroke-width: 3;
+}
+
+.motor-edge.motor-diff-add {
+  stroke: #22c55e;
+}
+
+.motor-edge.motor-diff-del {
+  stroke: #ef4444;
+}
+
+.motor-edge.motor-diff-chg {
+  stroke: #f97316;
+}
+
+[data-role='math-host'].motor-diff-del {
+  box-shadow: inset 0 0 0 2px rgba(248, 113, 113, 0.35);
 }
 
 [data-role='math-history-timestamp'] {

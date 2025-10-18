@@ -1,6 +1,7 @@
 import { createActionsPanel } from '../ui/actions';
 import { createGhostOverlay } from '../ui/ghost';
 import { createHistoryPanel, type HistoryEntry } from '../ui/history';
+import { createMathDiffOverlay, type MathDiffSnapshot } from '../ui/diff';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import { createToastManager } from '../ui/toast';
@@ -400,6 +401,8 @@ export function attachMathEngine(
 
   const ghostOverlay = createGhostOverlay(hostEl);
   let ghostTokenIds = new Set<string>();
+  const diffOverlay = createMathDiffOverlay(hostEl);
+  let lastDiffSnapshot: MathDiffSnapshot | null = null;
   const engineRecord = engine as unknown as Record<string, unknown>;
   const previewNullableCandidates = ['preview', 'setPreview', 'previewStep', 'previewRule'] as const;
   let previewFn: ((id: string | null) => void) | null = null;
@@ -868,6 +871,12 @@ export function attachMathEngine(
   subscriptions.push(engine.on('select', (payload) => updateHighlight('select', payload)));
   subscriptions.push(
     engine.on('state', (payload) => {
+      const nextDiffSnapshot = diffOverlay.captureSnapshot();
+      if (lastDiffSnapshot) {
+        diffOverlay.applyDiff(lastDiffSnapshot, nextDiffSnapshot);
+      }
+      lastDiffSnapshot = nextDiffSnapshot;
+
       const ruleId = typeof (payload as { ruleId?: unknown })?.ruleId === 'string'
         ? ((payload as { ruleId?: unknown }).ruleId as string)
         : null;
@@ -1010,6 +1019,7 @@ export function attachMathEngine(
   ghostTokenIds = new Set();
   ghostOverlay.clear();
   refreshActions();
+  lastDiffSnapshot = diffOverlay.captureSnapshot();
   currentExpression = captureExpression(hostEl);
   updateHistoryPanel();
   if (warningsPanel) {
@@ -1040,6 +1050,7 @@ export function attachMathEngine(
       clearPreview();
       ghostOverlay.destroy();
       ghostTokenIds = new Set();
+      diffOverlay.destroy();
       clearLongPress();
       deactivateSelectionMode();
       longPressActive = false;
@@ -1070,6 +1081,8 @@ export function attachMathEngine(
       ghostTokenIds = new Set();
       ghostOverlay.clear();
       refreshActions();
+      diffOverlay.clear();
+      lastDiffSnapshot = diffOverlay.captureSnapshot();
       currentExpression = captureExpression(hostEl);
       updateHistoryPanel();
       if (warningsPanel) {
