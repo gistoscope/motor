@@ -1,4 +1,4 @@
-import { initViewer, initMath } from '../src/viewer.js';
+import createViewer, { initMath } from '../src/viewer.js';
 
 const GRAPH_EXAMPLES = [
   {
@@ -79,7 +79,7 @@ function createViewerSection() {
   populateGraphExamples(selectEl);
   selectEl.value = GRAPH_EXAMPLES[0].id;
 
-  const viewerHandle = initViewer(container, {
+  const viewerHandle = createViewer(container, {
     initialJSON: formatGraphJSON(GRAPH_EXAMPLES[0]),
   });
 
