@@ -35,3 +35,8 @@ export function getOwnerId(ast: any, id: NodeId): NodeId | null {
     return null;
   }
 }
+
+export function isParenRole(el: Element | null): boolean {
+  const role = el?.getAttribute?.('data-ast-role');
+  return role === 'paren-open' || role === 'paren-close';
+}
