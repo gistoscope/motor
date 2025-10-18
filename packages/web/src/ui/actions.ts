@@ -1,8 +1,14 @@
+import type { MathSessionController, MathSessionLog } from '../math/session';
 import type { MathEngineAction } from '../math/types';
 
 export interface ActionsPanelOptions {
   onAction?: (actionId: string) => void;
   emptyLabel?: string;
+  session?: MathSessionController | null;
+  onSessionExport?: (log: MathSessionLog, session: MathSessionController) => void;
+  onSessionImport?: (session: MathSessionController) => unknown | Promise<unknown>;
+  onSessionImported?: (log: MathSessionLog, session: MathSessionController) => void;
+  onSessionReplay?: (session: MathSessionController) => void | Promise<void>;
 }
 
 export interface ActionsPanelHandle {
@@ -10,6 +16,11 @@ export interface ActionsPanelHandle {
   render(actions: MathEngineAction[]): void;
   highlight(actionId: string | null): void;
   getHighlightedActionId(): string | null;
+  getSession(): MathSessionController | null;
+  setSession(session: MathSessionController | null): void;
+  exportSession(): MathSessionLog | null;
+  importSession(source: unknown): MathSessionLog | null;
+  replaySession(): Promise<void>;
   destroy(): void;
 }
 
@@ -18,12 +29,135 @@ export function createActionsPanel(
   options: ActionsPanelOptions = {},
 ): ActionsPanelHandle {
   container.dataset.role = container.dataset.role ?? 'math-actions';
+  const controls = document.createElement('div');
+  controls.dataset.role = 'math-session-controls';
+  const exportButton = document.createElement('button');
+  exportButton.type = 'button';
+  exportButton.dataset.role = 'math-session-export';
+  exportButton.textContent = 'Export';
+  const importButton = document.createElement('button');
+  importButton.type = 'button';
+  importButton.dataset.role = 'math-session-import';
+  importButton.textContent = 'Import';
+  const replayButton = document.createElement('button');
+  replayButton.type = 'button';
+  replayButton.dataset.role = 'math-session-replay';
+  replayButton.textContent = 'Replay';
+  controls.append(exportButton, importButton, replayButton);
+  container.appendChild(controls);
   const list = document.createElement('div');
   list.dataset.role = 'math-actions-list';
   container.appendChild(list);
 
   let highlightedId: string | null = null;
   let buttons = new Map<string, HTMLButtonElement>();
+  let session: MathSessionController | null = options.session ?? null;
+  let busy = false;
+
+  const dispatch = <DetailType>(type: string, detail: DetailType) => {
+    container.dispatchEvent(new CustomEvent(type, { bubbles: true, detail }));
+  };
+
+  const updateControls = () => {
+    const hasSession = session !== null;
+    controls.dataset.state = hasSession ? (busy ? 'busy' : 'ready') : 'disabled';
+    exportButton.disabled = !hasSession || busy;
+    importButton.disabled =
+      !hasSession || busy || typeof options.onSessionImport !== 'function';
+    const canReplay =
+      hasSession && !busy && (typeof options.onSessionReplay === 'function' || typeof options.onAction === 'function');
+    replayButton.disabled = !canReplay;
+  };
+
+  const getSession = () => session;
+
+  const setSession = (next: MathSessionController | null) => {
+    session = next;
+    updateControls();
+  };
+
+  const exportSession = (): MathSessionLog | null => {
+    if (!session) {
+      return null;
+    }
+    const log = session.export();
+    options.onSessionExport?.(log, session);
+    dispatch('math-session-export', { log, serialized: JSON.stringify(log) });
+    return log;
+  };
+
+  const importSession = (source: unknown): MathSessionLog | null => {
+    if (!session) {
+      return null;
+    }
+    const log = session.import(source);
+    options.onSessionImported?.(log, session);
+    dispatch('math-session-import', { log, serialized: JSON.stringify(log) });
+    return log;
+  };
+
+  const replaySession = async (): Promise<void> => {
+    if (!session) {
+      return;
+    }
+    if (typeof options.onSessionReplay === 'function') {
+      await options.onSessionReplay(session);
+      return;
+    }
+    if (typeof options.onAction !== 'function') {
+      return;
+    }
+    await session.replay((actionId) => {
+      options.onAction?.(actionId);
+      applyHighlight(actionId);
+    });
+  };
+
+  const handleExportClick = () => {
+    exportSession();
+  };
+
+  const handleImportClick = async () => {
+    if (!session || typeof options.onSessionImport !== 'function') {
+      return;
+    }
+    busy = true;
+    updateControls();
+    try {
+      const source = await options.onSessionImport(session);
+      if (source == null) {
+        return;
+      }
+      const log = importSession(source);
+      if (!log) {
+        return;
+      }
+      await replaySession();
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  };
+
+  const handleReplayClick = async () => {
+    if (!session) {
+      return;
+    }
+    busy = true;
+    updateControls();
+    try {
+      await replaySession();
+    } finally {
+      busy = false;
+      updateControls();
+    }
+  };
+
+  exportButton.addEventListener('click', handleExportClick);
+  importButton.addEventListener('click', handleImportClick);
+  replayButton.addEventListener('click', handleReplayClick);
+
+  updateControls();
 
   const applyHighlight = (nextId: string | null) => {
     if (highlightedId && buttons.has(highlightedId)) {
@@ -117,13 +251,23 @@ export function createActionsPanel(
     highlight: applyHighlight,
     getHighlightedActionId: () => highlightedId,
     render,
+    getSession,
+    setSession,
+    exportSession,
+    importSession,
+    replaySession,
     destroy: () => {
+      exportButton.removeEventListener('click', handleExportClick);
+      importButton.removeEventListener('click', handleImportClick);
+      replayButton.removeEventListener('click', handleReplayClick);
       list.removeEventListener('pointerover', handlePointerOver);
       list.removeEventListener('focusin', handleFocusIn);
       container.dataset.state = 'empty';
       container.textContent = '';
       highlightedId = null;
       buttons.clear();
+      session = null;
+      busy = false;
     },
   };
 }
