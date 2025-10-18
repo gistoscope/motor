@@ -22,7 +22,7 @@ import {
 import { createOverlayController, type AnalysisPanelElements } from './overlays';
 import { initHelp, type HelpOverlayHandle } from './ui/help';
 import { attachMathEngine } from './math/bridge';
-import type { MathBridgeHandle, MathBridgeOptions, MathEngine } from './math/types';
+import type { MathBridgeHandle, MathEngine } from './math/types';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -44,6 +44,106 @@ const SOURCE_BUTTON_LABEL = 'Set as Source';
 const TARGET_BUTTON_LABEL = 'Set as Target';
 
 type WeightMap = Map<EdgeKey, number>;
+
+type MathEngineProvider =
+  | { kind: 'instance'; engine: MathEngine }
+  | { kind: 'factory'; create: () => MathEngine };
+
+interface MathMountPoint {
+  panel: HTMLElement;
+  host: HTMLElement;
+  actions: HTMLElement;
+  handle: MathBridgeHandle | null;
+  engine: MathEngine | null;
+  providerKind: MathEngineProvider['kind'] | null;
+}
+
+const mathMountPoints = new Set<MathMountPoint>();
+let mathEngineProvider: MathEngineProvider | null = null;
+
+function detachMathMount(mount: MathMountPoint): void {
+  if (mount.handle) {
+    try {
+      mount.handle.destroy();
+    } catch {
+      // ignore destroy errors from engine bridge
+    }
+    mount.handle = null;
+  }
+  mount.engine = null;
+  mount.providerKind = null;
+  mount.panel.dataset.state = 'disabled';
+  mount.panel.hidden = true;
+}
+
+function connectMathMount(mount: MathMountPoint): void {
+  if (!mathEngineProvider) {
+    detachMathMount(mount);
+    return;
+  }
+
+  detachMathMount(mount);
+
+  let engine: MathEngine;
+  try {
+    engine =
+      mathEngineProvider.kind === 'factory'
+        ? mathEngineProvider.create()
+        : mathEngineProvider.engine;
+  } catch {
+    mount.panel.hidden = false;
+    mount.panel.dataset.state = 'error';
+    return;
+  }
+
+  try {
+    mount.handle = attachMathEngine(null, engine, mount.host, {
+      actionsContainer: mount.actions,
+    });
+    mount.engine = engine;
+    mount.providerKind = mathEngineProvider.kind;
+    mount.panel.hidden = false;
+    mount.panel.dataset.state = 'ready';
+  } catch {
+    mount.handle = null;
+    mount.engine = null;
+    mount.providerKind = null;
+    mount.panel.hidden = false;
+    mount.panel.dataset.state = 'error';
+  }
+}
+
+function registerMathMount(
+  panel: HTMLElement | null,
+  host: HTMLElement | null,
+  actions: HTMLElement | null,
+): MathMountPoint | null {
+  if (!panel || !host || !actions) {
+    return null;
+  }
+
+  const mount: MathMountPoint = {
+    panel,
+    host,
+    actions,
+    handle: null,
+    engine: null,
+    providerKind: null,
+  };
+  panel.dataset.state = panel.dataset.state ?? 'disabled';
+  panel.hidden = true;
+  mathMountPoints.add(mount);
+  connectMathMount(mount);
+  return mount;
+}
+
+function unregisterMathMount(mount: MathMountPoint | null): void {
+  if (!mount) {
+    return;
+  }
+  detachMathMount(mount);
+  mathMountPoints.delete(mount);
+}
 
 function parseWeightMap(data: unknown): WeightMap | null {
   if (typeof data !== 'object' || data === null) {
@@ -346,6 +446,11 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
             </button>
           </div>
         </aside>
+        <section class="viewer__math" data-role="math-panel" data-state="disabled" hidden>
+          <h3 class="viewer__subtitle">Math engine</h3>
+          <div class="viewer__math-host" data-role="math-host"></div>
+          <div class="viewer__math-actions viewer__actions" data-role="math-actions"></div>
+        </section>
       </section>
       <section class="viewer__section viewer__section--exports">
         <div class="viewer__export">
@@ -397,6 +502,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const sccCountEl = root.querySelector<HTMLElement>('[data-role="analysis-scc-count"]');
   const cycleEdgesEl = root.querySelector<HTMLElement>('[data-role="analysis-cycle-edges"]');
   const warningsEl = root.querySelector<HTMLElement>('[data-role="analysis-warnings"]');
+  const mathPanelEl = root.querySelector<HTMLElement>('[data-role="math-panel"]');
+  const mathHostEl = root.querySelector<HTMLElement>('[data-role="math-host"]');
+  const mathActionsEl = root.querySelector<HTMLElement>('[data-role="math-actions"]');
   const overlayToggleInputs = Array.from(
     root.querySelectorAll<HTMLInputElement>('input[data-role="overlay-toggle"]'),
   );
@@ -524,6 +632,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     panel: analysisPanel,
   });
   const helpOverlay: HelpOverlayHandle = initHelp({ root: viewerRootEl, trigger: helpButtonEl });
+  const mathMount = registerMathMount(mathPanelEl, mathHostEl, mathActionsEl);
 
   const handleContrastChange = () => {
     viewerRootEl.classList.toggle('motor-contrast--high', contrastToggleEl.checked);
@@ -1129,6 +1238,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       svgNode.removeEventListener('motor:node-hover', handleNodeHoverEvent);
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);
+      unregisterMathMount(mathMount);
       overlayController.destroy();
       helpOverlay.destroy();
       root.innerHTML = '';
@@ -1138,10 +1248,24 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
 export default createViewer;
 
-export function initMathBridge(
-  container: HTMLElement,
-  engine: MathEngine,
-  options: MathBridgeOptions = {},
-): MathBridgeHandle {
-  return attachMathEngine(null, engine, container, options);
+export function initMath(
+  engineOrFactory: MathEngine | (() => MathEngine) | null | undefined,
+): void {
+  for (const mount of mathMountPoints) {
+    detachMathMount(mount);
+  }
+
+  if (!engineOrFactory) {
+    mathEngineProvider = null;
+    return;
+  }
+
+  mathEngineProvider =
+    typeof engineOrFactory === 'function'
+      ? { kind: 'factory', create: engineOrFactory as () => MathEngine }
+      : { kind: 'instance', engine: engineOrFactory };
+
+  for (const mount of mathMountPoints) {
+    connectMathMount(mount);
+  }
 }
