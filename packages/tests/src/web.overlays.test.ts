@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('web overlays', () => {
-  it('assigns consistent SCC classes per component', () => {
+  it('assigns consistent SCC classes per component', async () => {
     const sample = {
       nodes: [
         { id: 'A', label: 'Alpha' },
@@ -55,10 +55,19 @@ describe('web overlays', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
+    await vi.waitFor(() => {
+      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="scc"]');
+      expect(toggle?.disabled).toBe(false);
+    });
     const sccToggle = root.querySelector<HTMLInputElement>('input[data-overlay="scc"]');
-    expect(sccToggle?.disabled).toBe(false);
     sccToggle!.checked = true;
     sccToggle!.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await vi.waitFor(() => {
+      const nodes = Array.from(root.querySelectorAll<SVGGElement>('g.motor-node'));
+      const hasOverlay = nodes.some((node) => Array.from(node.classList).some((cls) => cls.startsWith('motor-scc-')));
+      expect(hasOverlay).toBe(true);
+    });
 
     const nodes = Array.from(root.querySelectorAll<SVGGElement>('g.motor-node'));
     const classByNode = new Map<string, string | undefined>();
@@ -85,7 +94,7 @@ describe('web overlays', () => {
     expect(classC).not.toBe(classD);
   });
 
-  it('marks only cycle edges when enabled', () => {
+  it('marks only cycle edges when enabled', async () => {
     const sample = {
       nodes: [
         { id: 'A', label: 'A' },
@@ -107,10 +116,19 @@ describe('web overlays', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
+    await vi.waitFor(() => {
+      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="cycles"]');
+      expect(toggle?.disabled).toBe(false);
+    });
     const cycleToggle = root.querySelector<HTMLInputElement>('input[data-overlay="cycles"]');
-    expect(cycleToggle?.disabled).toBe(false);
     cycleToggle!.checked = true;
     cycleToggle!.dispatchEvent(new Event('change', { bubbles: true }));
+
+    await vi.waitFor(() => {
+      const edges = Array.from(root.querySelectorAll<SVGPathElement>('path.motor-edge'));
+      const anyHighlighted = edges.some((edge) => edge.classList.contains('motor-edge--cycle'));
+      expect(anyHighlighted).toBe(true);
+    });
 
     const edges = Array.from(root.querySelectorAll<SVGPathElement>('path.motor-edge'));
     const highlighted = edges
@@ -127,7 +145,7 @@ describe('web overlays', () => {
     ]);
   });
 
-  it('updates analysis panel metrics', () => {
+  it('updates analysis panel metrics', async () => {
     const sample = {
       nodes: [
         { id: 'X', label: 'X' },
@@ -147,14 +165,16 @@ describe('web overlays', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
-    const hasCycle = root.querySelector('[data-role="analysis-has-cycle"]')?.textContent?.trim();
-    const sccCount = root.querySelector('[data-role="analysis-scc-count"]')?.textContent?.trim();
-    const cycleEdges = root.querySelector('[data-role="analysis-cycle-edges"]')?.textContent?.trim();
-    const warningText = root.querySelector('[data-role="analysis-warnings"] li')?.textContent?.trim();
+    await vi.waitFor(() => {
+      const hasCycle = root.querySelector('[data-role="analysis-has-cycle"]')?.textContent?.trim();
+      const sccCount = root.querySelector('[data-role="analysis-scc-count"]')?.textContent?.trim();
+      const cycleEdges = root.querySelector('[data-role="analysis-cycle-edges"]')?.textContent?.trim();
+      const warningText = root.querySelector('[data-role="analysis-warnings"] li')?.textContent?.trim();
 
-    expect(hasCycle).toBe('Yes');
-    expect(sccCount).toBe('1');
-    expect(cycleEdges).toBe('3');
-    expect(warningText).toBe('Cycles detected in the graph.');
+      expect(hasCycle).toBe('Yes');
+      expect(sccCount).toBe('1');
+      expect(cycleEdges).toBe('3');
+      expect(warningText).toBe('Cycles detected in the graph.');
+    });
   });
 });

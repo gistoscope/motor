@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 describe('web shortest path overlay', () => {
-  it('highlights weighted shortest path and reports total cost', () => {
+  it('highlights weighted shortest path and reports total cost', async () => {
     const sample = {
       nodes: [
         { id: 'A', label: 'A' },
@@ -63,8 +63,11 @@ describe('web shortest path overlay', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
+    await vi.waitFor(() => {
+      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
+      expect(toggle?.disabled).toBe(false);
+    });
     const shortestToggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
-    expect(shortestToggle?.disabled).toBe(false);
 
     const svgRoot = root.querySelector<HTMLElement>('[data-role="svg-root"]');
     const selectA = new domWindow.CustomEvent('motor:node-select', {
@@ -73,8 +76,11 @@ describe('web shortest path overlay', () => {
     }) as unknown as Event;
     svgRoot?.dispatchEvent(selectA);
 
+    await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('button[data-role="node-info-set-source"]');
+      expect(button?.disabled).toBe(false);
+    });
     const setSourceButton = root.querySelector<HTMLButtonElement>('button[data-role="node-info-set-source"]');
-    expect(setSourceButton?.disabled).toBe(false);
     setSourceButton!.click();
 
     const selectD = new domWindow.CustomEvent('motor:node-select', {
@@ -83,12 +89,18 @@ describe('web shortest path overlay', () => {
     }) as unknown as Event;
     svgRoot?.dispatchEvent(selectD);
 
+    await vi.waitFor(() => {
+      const button = root.querySelector<HTMLButtonElement>('button[data-role="node-info-set-target"]');
+      expect(button?.disabled).toBe(false);
+    });
     const setTargetButton = root.querySelector<HTMLButtonElement>('button[data-role="node-info-set-target"]');
-    expect(setTargetButton?.disabled).toBe(false);
     setTargetButton!.click();
 
+    await vi.waitFor(() => {
+      const panel = root.querySelector<HTMLElement>('[data-role="shortest-panel"]');
+      expect(panel?.dataset.state).toBe('path');
+    });
     const shortestPanel = root.querySelector<HTMLElement>('[data-role="shortest-panel"]');
-    expect(shortestPanel?.dataset.state).toBe('path');
 
     const totalValue = root.querySelector<HTMLElement>('[data-role="shortest-total"]');
     expect(totalValue?.textContent?.trim()).toBe('4');
@@ -96,16 +108,20 @@ describe('web shortest path overlay', () => {
     shortestToggle!.checked = true;
     shortestToggle!.dispatchEvent(new domWindow.Event('change', { bubbles: true }) as unknown as Event);
 
-    const pathNodes = Array.from(root.querySelectorAll<SVGGElement>('g.motor-node.motor-node--path'))
-      .map((node) => node.getAttribute('data-node-id'))
-      .filter((id): id is string => Boolean(id))
-      .sort();
-    expect(pathNodes).toEqual(['A', 'B', 'C', 'D']);
+    await vi.waitFor(() => {
+      const pathNodes = Array.from(root.querySelectorAll<SVGGElement>('g.motor-node.motor-node--path'))
+        .map((node) => node.getAttribute('data-node-id'))
+        .filter((id): id is string => Boolean(id))
+        .sort();
+      expect(pathNodes).toEqual(['A', 'B', 'C', 'D']);
+    });
 
-    const pathEdges = Array.from(root.querySelectorAll<SVGPathElement>('path.motor-edge.motor-edge--path'))
-      .map((edge) => `${edge.getAttribute('data-from')}->${edge.getAttribute('data-to')}`)
-      .sort();
-    expect(pathEdges).toEqual(['A->B', 'B->C', 'C->D']);
+    await vi.waitFor(() => {
+      const pathEdges = Array.from(root.querySelectorAll<SVGPathElement>('path.motor-edge.motor-edge--path'))
+        .map((edge) => `${edge.getAttribute('data-from')}->${edge.getAttribute('data-to')}`)
+        .sort();
+      expect(pathEdges).toEqual(['A->B', 'B->C', 'C->D']);
+    });
 
     handle.destroy();
   });
@@ -147,7 +163,7 @@ describe('web shortest path overlay', () => {
     handle.destroy();
   });
 
-  it('uses deterministic tie-break for equal paths', () => {
+  it('uses deterministic tie-break for equal paths', async () => {
     const sample = {
       nodes: [
         { id: 'A', label: 'A' },
@@ -169,6 +185,11 @@ describe('web shortest path overlay', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
+    await vi.waitFor(() => {
+      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
+      expect(toggle?.disabled).toBe(false);
+    });
+
     const svgRoot = root.querySelector<HTMLElement>('[data-role="svg-root"]');
     svgRoot?.dispatchEvent(
       new domWindow.CustomEvent('motor:node-select', { detail: { nodeId: 'A' }, bubbles: true }) as unknown as Event,
@@ -180,23 +201,29 @@ describe('web shortest path overlay', () => {
     );
     root.querySelector<HTMLButtonElement>('button[data-role="node-info-set-target"]')!.click();
 
-    const totalValue = root.querySelector<HTMLElement>('[data-role="shortest-total"]');
-    expect(totalValue?.textContent?.trim()).toBe('3');
+    await vi.waitFor(() => {
+      const totalValue = root.querySelector<HTMLElement>('[data-role="shortest-total"]');
+      expect(totalValue?.textContent?.trim()).toBe('3');
+    });
 
     const shortestToggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
     shortestToggle!.checked = true;
     shortestToggle!.dispatchEvent(new domWindow.Event('change', { bubbles: true }) as unknown as Event);
 
-    const pathNodes = Array.from(root.querySelectorAll<SVGGElement>('g.motor-node.motor-node--path'))
-      .map((node) => node.getAttribute('data-node-id'))
-      .filter((id): id is string => Boolean(id))
-      .sort();
-    expect(pathNodes).toEqual(['A', 'B', 'D']);
+    await vi.waitFor(() => {
+      const pathNodes = Array.from(root.querySelectorAll<SVGGElement>('g.motor-node.motor-node--path'))
+        .map((node) => node.getAttribute('data-node-id'))
+        .filter((id): id is string => Boolean(id))
+        .sort();
+      expect(pathNodes).toEqual(['A', 'B', 'D']);
+    });
 
-    const pathEdges = Array.from(root.querySelectorAll<SVGPathElement>('path.motor-edge.motor-edge--path'))
-      .map((edge) => `${edge.getAttribute('data-from')}->${edge.getAttribute('data-to')}`)
-      .sort();
-    expect(pathEdges).toEqual(['A->B', 'B->D']);
+    await vi.waitFor(() => {
+      const pathEdges = Array.from(root.querySelectorAll<SVGPathElement>('path.motor-edge.motor-edge--path'))
+        .map((edge) => `${edge.getAttribute('data-from')}->${edge.getAttribute('data-to')}`)
+        .sort();
+      expect(pathEdges).toEqual(['A->B', 'B->D']);
+    });
 
     handle.destroy();
   });
