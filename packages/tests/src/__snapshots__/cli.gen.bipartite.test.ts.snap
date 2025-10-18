@@ -1,0 +1,15 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`motor gen bipartite > left=1 right=0 -> dot snapshot with trailing newline 1`] = `
+"digraph Bi {
+  "bL_1" [label="bL_1"];
+}
+"
+`;
+
+exports[`motor gen bipartite > left=1 right=0 -> inspect snapshot with trailing newline 1`] = `
+"nodes: "bL_1" [bL_1]
+edges:
+  (none)
+"
+`;

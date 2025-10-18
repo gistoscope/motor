@@ -16,10 +16,10 @@ function run(args: string[]) {
 
 describe('gen: flag validation errors', () => {
   it('invalid --kind', () => {
-    const r = run(['gen', '--kind', 'tree', '--n', '3', '--format', 'json']);
+    const r = run(['gen', '--kind', 'unknown', '--n', '3', '--format', 'json']);
     expect(r.code).toBe(1);
     expect(r.out).toBe('');
-    expect(r.err).toMatch(/(gen: --kind must be|invalid --kind)/);
+    expect(r.err).toMatch(/invalid --kind/);
   });
 
   it('missing --kind', () => {
@@ -27,6 +27,13 @@ describe('gen: flag validation errors', () => {
     expect(r.code).toBe(1);
     expect(r.out).toBe('');
     expect(r.err).toMatch(/--kind/);
+  });
+
+  it('tree missing parameters', () => {
+    const r = run(['gen', '--kind', 'tree', '--format', 'json']);
+    expect(r.code).toBe(1);
+    expect(r.out).toBe('');
+    expect(r.err).toMatch(/tree kind requires --arity and --depth/);
   });
 
   it('invalid --n (non-integer)', () => {

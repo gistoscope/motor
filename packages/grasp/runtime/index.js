@@ -212,34 +212,118 @@ export function toDOT(g, opts = {}) {
   return lines.join('\n');
 }
 
+function ensurePositiveInteger(value, name) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return n;
+}
+
+function ensureNonNegativeInteger(value, name) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
+  return n;
+}
+
 export function genChain(n) {
-  if (!Number.isInteger(n) || n <= 0) throw new Error('n must be a positive integer');
+  const count = ensurePositiveInteger(n, 'n');
   const g = createGraph();
-  for (let i = 1; i <= n; i++) {
+  for (let i = 1; i <= count; i++) {
     const id = String(i);
     addNode(g, node(id, id));
   }
-  for (let i = 1; i < n; i++) {
+  for (let i = 1; i < count; i++) {
     addEdge(g, edge(String(i), String(i + 1)));
   }
   return g;
 }
 
 export function genCycle(n) {
-  const g = genChain(n);
-  if (n > 1) addEdge(g, edge(String(n), String(1)));
+  const count = ensurePositiveInteger(n, 'n');
+  const g = genChain(count);
+  if (count > 1) addEdge(g, edge(String(count), '1'));
   return g;
 }
 
 export function genStar(n) {
-  if (!Number.isInteger(n) || n <= 0) throw new Error('n must be a positive integer');
+  const count = ensurePositiveInteger(n, 'n');
   const g = createGraph();
-  for (let i = 1; i <= n; i++) {
+  for (let i = 1; i <= count; i++) {
     const id = String(i);
     addNode(g, node(id, id));
   }
-  for (let i = 2; i <= n; i++) {
+  for (let i = 2; i <= count; i++) {
     addEdge(g, edge('1', String(i)));
+  }
+  return g;
+}
+
+export function genGrid(rows, cols) {
+  const rCount = ensurePositiveInteger(rows, 'rows');
+  const cCount = ensurePositiveInteger(cols, 'cols');
+  const g = createGraph();
+  for (let r = 1; r <= rCount; r++) {
+    for (let c = 1; c <= cCount; c++) {
+      const id = `g_r${r}_c${c}`;
+      addNode(g, node(id, id));
+    }
+  }
+  for (let r = 1; r <= rCount; r++) {
+    for (let c = 1; c <= cCount; c++) {
+      const id = `g_r${r}_c${c}`;
+      if (c < cCount) addEdge(g, edge(id, `g_r${r}_c${c + 1}`));
+      if (r < rCount) addEdge(g, edge(id, `g_r${r + 1}_c${c}`));
+    }
+  }
+  return g;
+}
+
+export function genTree(arity, depth) {
+  const k = ensurePositiveInteger(arity, 'arity');
+  const d = ensureNonNegativeInteger(depth, 'depth');
+  const g = createGraph();
+  const rootId = 't_0';
+  addNode(g, node(rootId, rootId));
+  if (d === 0) return g;
+  const queue = [{ id: rootId, depth: 0 }];
+  let nextIndex = 1;
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current) continue;
+    if (current.depth === d) continue;
+    for (let i = 0; i < k; i++) {
+      const childId = `t_${nextIndex++}`;
+      addNode(g, node(childId, childId));
+      addEdge(g, edge(current.id, childId));
+      queue.push({ id: childId, depth: current.depth + 1 });
+    }
+  }
+  return g;
+}
+
+export function genBipartite(left, right) {
+  const l = ensureNonNegativeInteger(left, 'left');
+  const r = ensureNonNegativeInteger(right, 'right');
+  const g = createGraph();
+  const leftIds = [];
+  const rightIds = [];
+  for (let i = 1; i <= l; i++) {
+    const id = `bL_${i}`;
+    leftIds.push(id);
+    addNode(g, node(id, id));
+  }
+  for (let j = 1; j <= r; j++) {
+    const id = `bR_${j}`;
+    rightIds.push(id);
+    addNode(g, node(id, id));
+  }
+  for (const from of leftIds) {
+    for (const to of rightIds) {
+      addEdge(g, edge(from, to));
+    }
   }
   return g;
 }

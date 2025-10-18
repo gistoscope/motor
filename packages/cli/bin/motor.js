@@ -12,7 +12,10 @@ import {
   graphStats,
   genChain,
   genCycle,
-  genStar
+  genStar,
+  genGrid,
+  genTree,
+  genBipartite
 } from '@motor/grasp';
 
 function getPkg() {
@@ -68,14 +71,20 @@ Flags:
   --in FILE     Read GraphJSON from file (else STDIN)
   --format F    text (default) or json
   --out FILE    Write output to file (adds trailing \\n)`,
-    gen: `motor gen --kind chain|cycle|star --n N [--format json|dot|inspect] [--name NAME] [--out FILE]
+    gen: `motor gen --kind chain|cycle|star|grid|tree|bipartite [FLAGS] [--format json|dot|inspect] [--name NAME] [--out FILE]
 
 Description:
   Generate synthetic graphs with deterministic outputs.
 
 Flags:
-  --kind K      Must be one of: chain, cycle, star
-  --n N         Positive integer
+  --kind K      Must be one of: chain, cycle, star, grid, tree, bipartite
+  --n N         Positive integer (chain|cycle|star)
+  --rows R      Positive integer (grid)
+  --cols C      Positive integer (grid)
+  --arity K     Positive integer (tree)
+  --depth D     Non-negative integer (tree)
+  --left L      Non-negative integer (bipartite)
+  --right R     Non-negative integer (bipartite)
   --format F    One of: json (default), dot, inspect
   --name NAME   Graph name for DOT (default: G)
   --out FILE    Write output to file (adds trailing \\n)`
@@ -100,14 +109,14 @@ Usage:
   motor json [--in FILE] [--out FILE]
   motor validate [--in FILE]
   motor stats [--in FILE] [--format text|json]
-  motor gen --kind chain|cycle|star --n N [--format json|dot|inspect] [--name NAME] [--out FILE]
+  motor gen --kind chain|cycle|star|grid|tree|bipartite [FLAGS] [--format json|dot|inspect] [--name NAME] [--out FILE]
 
 Commands:
   inspect    Print a human-readable dump
   dot        Emit Graphviz DOT
   json       Validate & normalize GraphJSON
   validate   Validate GraphJSON (OK/exit codes)
-  gen        Generate synthetic graphs (chain|cycle|star)
+  gen        Generate synthetic graphs (chain|cycle|star|grid|tree|bipartite)
   stats      Compute graph metrics
 
 Reads GraphJSON from FILE or STDIN (if --in not provided).
@@ -164,6 +173,12 @@ function parseArgs(argv) {
     if (a === '--kind') { flags.set('kind', args[++i]); continue; }
     if (a === '-k') { flags.set('k', args[++i]); continue; }
     if (a === '--n') { flags.set('n', args[++i]); continue; }
+    if (a === '--rows') { flags.set('rows', args[++i]); continue; }
+    if (a === '--cols') { flags.set('cols', args[++i]); continue; }
+    if (a === '--arity') { flags.set('arity', args[++i]); continue; }
+    if (a === '--depth') { flags.set('depth', args[++i]); continue; }
+    if (a === '--left') { flags.set('left', args[++i]); continue; }
+    if (a === '--right') { flags.set('right', args[++i]); continue; }
     rest.push(a);
   }
   return { cmd, flags, rest };
@@ -298,18 +313,13 @@ async function cmdStats(flags) {
 
 async function cmdGen(flags) {
   const kind = String(flags.get('kind') || flags.get('k') || '').trim();
-  const nRaw = flags.get('n');
   const fmt = (flags.get('format') || 'json').toLowerCase();
   const name = flags.get('name') || 'G';
   const outPath = flags.get('out');
 
-  if (!kind || !['chain','cycle','star'].includes(kind)) {
-    process.stderr.write('invalid --kind; expected chain|cycle|star\n');
-    process.exit(1);
-  }
-  const n = Number(nRaw);
-  if (!Number.isInteger(n) || n <= 0) {
-    process.stderr.write('invalid --n; must be a positive integer\n');
+  const allowedKinds = ['chain','cycle','star','grid','tree','bipartite'];
+  if (!kind || !allowedKinds.includes(kind)) {
+    process.stderr.write('invalid --kind; expected chain|cycle|star|grid|tree|bipartite\n');
     process.exit(1);
   }
   if (!['json','dot','inspect'].includes(fmt)) {
@@ -318,9 +328,64 @@ async function cmdGen(flags) {
   }
 
   let g;
-  if (kind === 'chain') g = genChain(n);
-  else if (kind === 'cycle') g = genCycle(n);
-  else g = genStar(n);
+  const ensurePositive = (val, flagName) => {
+    const n = Number(val);
+    if (!Number.isInteger(n) || n <= 0) {
+      process.stderr.write(`invalid --${flagName}; must be a positive integer\n`);
+      process.exit(1);
+    }
+    return n;
+  };
+  const ensureNonNegative = (val, flagName) => {
+    const n = Number(val);
+    if (!Number.isInteger(n) || n < 0) {
+      process.stderr.write(`invalid --${flagName}; must be a non-negative integer\n`);
+      process.exit(1);
+    }
+    return n;
+  };
+
+  if (kind === 'chain' || kind === 'cycle' || kind === 'star') {
+    const nRaw = flags.get('n');
+    if (nRaw === undefined) {
+      process.stderr.write('chain|cycle|star kinds require --n\n');
+      process.exit(1);
+    }
+    const n = ensurePositive(nRaw, 'n');
+    if (kind === 'chain') g = genChain(n);
+    else if (kind === 'cycle') g = genCycle(n);
+    else g = genStar(n);
+  } else if (kind === 'grid') {
+    const rowsRaw = flags.get('rows');
+    const colsRaw = flags.get('cols');
+    if (rowsRaw === undefined || colsRaw === undefined) {
+      process.stderr.write('grid kind requires --rows and --cols\n');
+      process.exit(1);
+    }
+    const rows = ensurePositive(rowsRaw, 'rows');
+    const cols = ensurePositive(colsRaw, 'cols');
+    g = genGrid(rows, cols);
+  } else if (kind === 'tree') {
+    const arityRaw = flags.get('arity');
+    const depthRaw = flags.get('depth');
+    if (arityRaw === undefined || depthRaw === undefined) {
+      process.stderr.write('tree kind requires --arity and --depth\n');
+      process.exit(1);
+    }
+    const arity = ensurePositive(arityRaw, 'arity');
+    const depth = ensureNonNegative(depthRaw, 'depth');
+    g = genTree(arity, depth);
+  } else {
+    const leftRaw = flags.get('left');
+    const rightRaw = flags.get('right');
+    if (leftRaw === undefined || rightRaw === undefined) {
+      process.stderr.write('bipartite kind requires --left and --right\n');
+      process.exit(1);
+    }
+    const left = ensureNonNegative(leftRaw, 'left');
+    const right = ensureNonNegative(rightRaw, 'right');
+    g = genBipartite(left, right);
+  }
 
   let text = '';
   if (fmt === 'json')      text = JSON.stringify(toJSON(g), null, 2);
