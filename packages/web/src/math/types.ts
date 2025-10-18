@@ -1,3 +1,4 @@
+// 'state' events may emit payloads containing legalActions/actions/nextActions arrays.
 export type MathEngineEventName = 'hover' | 'select' | 'state';
 
 export interface MathEngineAction {
