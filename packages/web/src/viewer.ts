@@ -11,6 +11,8 @@ import {
   type GraspGraph,
 } from '@motor/grasp';
 import { renderSVG } from './svg';
+import { computeSCC, findCycles, type CycleAnalysis, type SCCAnalysis } from './analysis';
+import { applyCycleOverlay, applySccOverlay } from './overlays';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -27,6 +29,7 @@ export interface ViewerHandle {
 }
 
 const DASH = '—';
+const NO_ANALYSIS_MESSAGE = 'Parse a graph to see analysis.';
 
 function resolveClipboard(option?: ClipboardWriter): ClipboardWriter {
   if (option) return option;
@@ -144,17 +147,54 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         <div class="viewer__errors" data-role="errors" aria-live="polite"></div>
       </section>
       <section class="viewer__section viewer__section--stats">
-        <h2 class="viewer__title">Stats</h2>
-        <dl class="viewer__stats">
-          <div class="viewer__stat">
-            <dt class="viewer__stat-label">Nodes</dt>
-            <dd class="viewer__stat-value" data-role="stats-nodes">${DASH}</dd>
+        <h2 class="viewer__title">Stats / Warnings</h2>
+        <div class="viewer__analysis-panel" data-role="analysis-panel">
+          <div class="viewer__analysis-toolbar">
+            <button
+              type="button"
+              class="viewer__toggle"
+              data-role="toggle-scc"
+              aria-pressed="false"
+              disabled
+            >
+              SCC
+            </button>
+            <button
+              type="button"
+              class="viewer__toggle"
+              data-role="toggle-cycles"
+              aria-pressed="false"
+              disabled
+            >
+              Cycles
+            </button>
           </div>
-          <div class="viewer__stat">
-            <dt class="viewer__stat-label">Edges</dt>
-            <dd class="viewer__stat-value" data-role="stats-edges">${DASH}</dd>
-          </div>
-        </dl>
+          <dl class="viewer__stats viewer__stats--analysis">
+            <div class="viewer__stat">
+              <dt class="viewer__stat-label">Nodes</dt>
+              <dd class="viewer__stat-value" data-role="stats-nodes">${DASH}</dd>
+            </div>
+            <div class="viewer__stat">
+              <dt class="viewer__stat-label">Edges</dt>
+              <dd class="viewer__stat-value" data-role="stats-edges">${DASH}</dd>
+            </div>
+            <div class="viewer__stat">
+              <dt class="viewer__stat-label">Has cycle</dt>
+              <dd class="viewer__stat-value" data-role="stats-has-cycle">${DASH}</dd>
+            </div>
+            <div class="viewer__stat">
+              <dt class="viewer__stat-label">SCC count</dt>
+              <dd class="viewer__stat-value" data-role="stats-scc-count">${DASH}</dd>
+            </div>
+            <div class="viewer__stat viewer__stat--cycle" data-role="stats-cycle-container" data-state="hidden">
+              <dt class="viewer__stat-label">Cycle edges</dt>
+              <dd class="viewer__stat-value" data-role="stats-cycle-edges">${DASH}</dd>
+            </div>
+          </dl>
+          <p class="viewer__warnings" data-role="analysis-warning" data-state="idle">
+            Parse a graph to see analysis.
+          </p>
+        </div>
         <h3 class="viewer__subtitle">Edges</h3>
         <ul class="viewer__edges" data-role="edges-list"></ul>
       </section>
@@ -208,17 +248,24 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const errorsEl = root.querySelector<HTMLElement>('[data-role="errors"]');
   const nodesEl = root.querySelector<HTMLElement>('[data-role="stats-nodes"]');
   const edgesEl = root.querySelector<HTMLElement>('[data-role="stats-edges"]');
+  const hasCycleEl = root.querySelector<HTMLElement>('[data-role="stats-has-cycle"]');
+  const sccCountEl = root.querySelector<HTMLElement>('[data-role="stats-scc-count"]');
+  const cycleContainerEl = root.querySelector<HTMLElement>('[data-role="stats-cycle-container"]');
+  const cycleEdgesEl = root.querySelector<HTMLElement>('[data-role="stats-cycle-edges"]');
+  const warningsEl = root.querySelector<HTMLElement>('[data-role="analysis-warning"]');
   const listEl = root.querySelector<HTMLElement>('[data-role="edges-list"]');
   const dotEl = root.querySelector<HTMLElement>('[data-role="dot-output"]');
-    const inspectEl = root.querySelector<HTMLElement>('[data-role="inspect-output"]');
-    const statusEl = root.querySelector<HTMLElement>('[data-role="copy-status"]');
-    const svgEl = root.querySelector<HTMLElement>('[data-role="svg-root"]');
-    const nodeInfoEl = root.querySelector<HTMLElement>('[data-role="node-info"]');
-    const nodeInfoIdEl = root.querySelector<HTMLElement>('[data-role="node-info-id"]');
-    const nodeInfoLabelEl = root.querySelector<HTMLElement>('[data-role="node-info-label"]');
-    const nodeInfoInEl = root.querySelector<HTMLElement>('[data-role="node-info-in"]');
-    const nodeInfoOutEl = root.querySelector<HTMLElement>('[data-role="node-info-out"]');
-    const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
+  const inspectEl = root.querySelector<HTMLElement>('[data-role="inspect-output"]');
+  const statusEl = root.querySelector<HTMLElement>('[data-role="copy-status"]');
+  const svgEl = root.querySelector<HTMLElement>('[data-role="svg-root"]');
+  const nodeInfoEl = root.querySelector<HTMLElement>('[data-role="node-info"]');
+  const nodeInfoIdEl = root.querySelector<HTMLElement>('[data-role="node-info-id"]');
+  const nodeInfoLabelEl = root.querySelector<HTMLElement>('[data-role="node-info-label"]');
+  const nodeInfoInEl = root.querySelector<HTMLElement>('[data-role="node-info-in"]');
+  const nodeInfoOutEl = root.querySelector<HTMLElement>('[data-role="node-info-out"]');
+  const toggleSccButton = root.querySelector<HTMLButtonElement>('button[data-role="toggle-scc"]');
+  const toggleCyclesButton = root.querySelector<HTMLButtonElement>('button[data-role="toggle-cycles"]');
+  const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
 
     if (
       !textarea ||
@@ -235,7 +282,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       !nodeInfoIdEl ||
       !nodeInfoLabelEl ||
       !nodeInfoInEl ||
-      !nodeInfoOutEl
+      !nodeInfoOutEl ||
+      !hasCycleEl ||
+      !sccCountEl ||
+      !cycleContainerEl ||
+      !cycleEdgesEl ||
+      !warningsEl ||
+      !toggleSccButton ||
+      !toggleCyclesButton
     ) {
       throw new Error('viewer: missing expected DOM nodes');
     }
@@ -250,6 +304,13 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     const inspectNode = inspectEl;
     const statusNode = statusEl;
     const svgNode = svgEl;
+    const hasCycleNode = hasCycleEl;
+    const sccCountNode = sccCountEl;
+    const cycleContainerNode = cycleContainerEl;
+    const cycleEdgesNode = cycleEdgesEl;
+    const warningsNode = warningsEl;
+    const toggleSccNode = toggleSccButton;
+    const toggleCyclesNode = toggleCyclesButton;
     const nodeInfoElements: NodeInfoElements = {
       container: nodeInfoEl,
       idValue: nodeInfoIdEl,
@@ -262,6 +323,11 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     let nodeStats = new Map<string, NodeInfo>();
     let hoveredNodeId: string | null = null;
     let selectedNodeId: string | null = null;
+    let sccAnalysis: SCCAnalysis | null = null;
+    let cycleAnalysis: CycleAnalysis | null = null;
+    let sccOverlayEnabled = false;
+    let cyclesOverlayEnabled = false;
+    let cycleEdgeCount = 0;
 
     function computeNodeStats(graph: GraspGraph): Map<string, NodeInfo> {
       const stats = new Map<string, NodeInfo>();
@@ -304,9 +370,56 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
             outDegree: 0,
           });
         }
+    }
+
+    return stats;
+    }
+
+    function setToggleState(button: HTMLButtonElement, active: boolean) {
+      button.setAttribute('aria-pressed', active ? 'true' : 'false');
+      button.classList.toggle('viewer__toggle--active', active);
+    }
+
+    function updateToggleAvailability(enabled: boolean) {
+      toggleSccNode.disabled = !enabled;
+      toggleCyclesNode.disabled = !enabled;
+    }
+
+    function resetAnalysisPanelUI() {
+      hasCycleNode.textContent = DASH;
+      sccCountNode.textContent = DASH;
+      cycleEdgesNode.textContent = DASH;
+      cycleContainerNode.dataset.state = 'hidden';
+      warningsNode.dataset.state = 'idle';
+      warningsNode.textContent = NO_ANALYSIS_MESSAGE;
+    }
+
+    function updateAnalysisStatsUI() {
+      if (!sccAnalysis) {
+        resetAnalysisPanelUI();
+        return;
       }
 
-      return stats;
+      hasCycleNode.textContent = sccAnalysis.hasCycle ? 'Yes' : 'No';
+      sccCountNode.textContent = String(sccAnalysis.componentCount);
+
+      if (cyclesOverlayEnabled) {
+        cycleContainerNode.dataset.state = 'visible';
+        cycleEdgesNode.textContent = String(cycleEdgeCount);
+      } else {
+        cycleContainerNode.dataset.state = 'hidden';
+        cycleEdgesNode.textContent = DASH;
+      }
+
+      if (sccAnalysis.hasCycle) {
+        warningsNode.dataset.state = 'warning';
+        warningsNode.textContent = cyclesOverlayEnabled
+          ? 'Cycles detected and highlighted.'
+          : 'Cycles detected. Enable the Cycles overlay to highlight them.';
+      } else {
+        warningsNode.dataset.state = 'ok';
+        warningsNode.textContent = 'No cycles detected.';
+      }
     }
 
     function syncNodeClasses() {
@@ -353,6 +466,26 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       nodeInfoElements.labelValue.textContent = info.label || DASH;
       nodeInfoElements.inDegreeValue.textContent = String(info.inDegree);
       nodeInfoElements.outDegreeValue.textContent = String(info.outDegree);
+    }
+
+    function updateOverlays() {
+      applySccOverlay(svgNode, sccAnalysis, sccOverlayEnabled);
+      cycleEdgeCount = applyCycleOverlay(svgNode, cycleAnalysis, cyclesOverlayEnabled);
+      updateAnalysisStatsUI();
+    }
+
+    function resetAnalysisState() {
+      sccAnalysis = null;
+      cycleAnalysis = null;
+      cycleEdgeCount = 0;
+      sccOverlayEnabled = false;
+      cyclesOverlayEnabled = false;
+      setToggleState(toggleSccNode, false);
+      setToggleState(toggleCyclesNode, false);
+      updateToggleAvailability(false);
+      applySccOverlay(svgNode, null, false);
+      applyCycleOverlay(svgNode, null, false);
+      resetAnalysisPanelUI();
     }
 
     function clearInteractionState() {
@@ -402,6 +535,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       showErrors(['Input is empty']);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
+      resetAnalysisState();
       return;
     }
 
@@ -413,6 +547,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       showErrors([`Invalid JSON: ${msg}`]);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
+      resetAnalysisState();
       return;
     }
 
@@ -421,6 +556,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       showErrors(validation.errors);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
+      resetAnalysisState();
       return;
     }
 
@@ -433,6 +569,10 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     resetNodeInfoPanel(nodeInfoElements);
     syncNodeClasses();
     syncEdgeClasses();
+    sccAnalysis = computeSCC(graph);
+    cycleAnalysis = findCycles(graph, sccAnalysis);
+    updateToggleAvailability(true);
+    updateOverlays();
   }
 
   function handleCopy(ev: Event) {
@@ -465,6 +605,20 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   };
   textareaEl.addEventListener('keydown', handleKeydown);
   copyButtons.forEach((btn) => btn.addEventListener('click', handleCopy));
+  const handleToggleScc = () => {
+    if (toggleSccNode.disabled) return;
+    sccOverlayEnabled = !sccOverlayEnabled;
+    setToggleState(toggleSccNode, sccOverlayEnabled);
+    updateOverlays();
+  };
+  const handleToggleCycles = () => {
+    if (toggleCyclesNode.disabled) return;
+    cyclesOverlayEnabled = !cyclesOverlayEnabled;
+    setToggleState(toggleCyclesNode, cyclesOverlayEnabled);
+    updateOverlays();
+  };
+  toggleSccNode.addEventListener('click', handleToggleScc);
+  toggleCyclesNode.addEventListener('click', handleToggleCycles);
   const handleNodeHoverEvent = (event: Event) => {
     const detail = (event as CustomEvent<{ nodeId: string | null }>).detail;
     handleHover(detail?.nodeId ?? null);
@@ -486,6 +640,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   textareaEl.value = options.initialJSON ?? '';
   resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
   clearInteractionState();
+  resetAnalysisState();
   if (textareaEl.value.trim()) {
     parseAndRender();
   }
@@ -496,6 +651,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       parseBtn.removeEventListener('click', parseAndRender);
       textareaEl.removeEventListener('keydown', handleKeydown);
       copyButtons.forEach((btn) => btn.removeEventListener('click', handleCopy));
+      toggleSccNode.removeEventListener('click', handleToggleScc);
+      toggleCyclesNode.removeEventListener('click', handleToggleCycles);
       svgNode.removeEventListener('motor:node-hover', handleNodeHoverEvent);
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);

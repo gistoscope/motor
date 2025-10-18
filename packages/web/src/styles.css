@@ -123,6 +123,82 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
 }
 
+.viewer__analysis-panel {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  background: #f8fafc;
+}
+
+.viewer__analysis-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.viewer__toggle {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: rgba(15, 23, 42, 0.08);
+  color: #0f172a;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.viewer__toggle:hover:not(:disabled) {
+  transform: translateY(-1px);
+  background: rgba(37, 99, 235, 0.16);
+  border-color: rgba(37, 99, 235, 0.3);
+}
+
+.viewer__toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.viewer__toggle--active,
+.viewer__toggle[aria-pressed='true'] {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: rgba(15, 23, 42, 0.9);
+}
+
+.viewer__stats--analysis {
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.viewer__stat--cycle[data-state='hidden'] {
+  display: none;
+}
+
+.viewer__stat--cycle[data-state='visible'] {
+  display: grid;
+}
+
+.viewer__warnings {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.viewer__warnings[data-state='warning'] {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.viewer__warnings[data-state='ok'] {
+  color: #047857;
+}
+
 .viewer__code {
   margin: 0;
   padding: 1rem;
@@ -266,4 +342,58 @@
 
 .motor-edge-marker-path {
   fill: #94a3b8;
+}
+
+.motor-edge--cycle {
+  stroke: #dc2626;
+  stroke-width: 3;
+}
+
+.motor-node--scc .motor-node-circle {
+  stroke-width: 2.6;
+}
+
+.motor-node.motor-scc-0 .motor-node-circle {
+  fill: #ede9fe;
+  stroke: #6d28d9;
+}
+
+.motor-node.motor-scc-1 .motor-node-circle {
+  fill: #cffafe;
+  stroke: #0f766e;
+}
+
+.motor-node.motor-scc-2 .motor-node-circle {
+  fill: #fef3c7;
+  stroke: #d97706;
+}
+
+.motor-node.motor-scc-3 .motor-node-circle {
+  fill: #dbeafe;
+  stroke: #1d4ed8;
+}
+
+.motor-node.motor-scc-4 .motor-node-circle {
+  fill: #fde68a;
+  stroke: #b45309;
+}
+
+.motor-node.motor-scc-5 .motor-node-circle {
+  fill: #fee2e2;
+  stroke: #b91c1c;
+}
+
+.motor-node.motor-scc-6 .motor-node-circle {
+  fill: #dcfce7;
+  stroke: #15803d;
+}
+
+.motor-node.motor-scc-7 .motor-node-circle {
+  fill: #fce7f3;
+  stroke: #be185d;
+}
+
+.motor-node--scc .motor-node-label {
+  fill: #0f172a;
+  font-weight: 600;
 }
