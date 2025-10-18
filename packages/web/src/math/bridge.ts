@@ -4,6 +4,7 @@ import { createHistoryPanel, type HistoryEntry } from '../ui/history';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import { createToastManager } from '../ui/toast';
+import { astToGraph } from './ast2graph';
 import type {
   MathBridgeHandle,
   MathBridgeOptions,
@@ -15,6 +16,15 @@ import type {
 const DEFAULT_HOVER_CLASS = 'math-token--hovered';
 const DEFAULT_SELECTED_CLASS = 'math-token--selected';
 const LONG_PRESS_DELAY = 450;
+
+type GraphJSONData = ReturnType<typeof astToGraph>;
+
+interface MathGraphViewerBridge {
+  setGraph?: (graph: GraphJSONData) => void;
+  setGraphError?: (message: string | null) => void;
+  highlight?: (event: 'hover' | 'select', ids: Iterable<string>) => void;
+  onHover?: (cb: (ids: string[]) => void) => (() => void) | void;
+}
 
 function isIterable(value: unknown): value is Iterable<unknown> {
   return typeof value === 'object' && value !== null && Symbol.iterator in value;
@@ -382,10 +392,10 @@ export function attachMathEngine(
   hostEl: HTMLElement,
   options: ExtendedMathBridgeOptions = {} as ExtendedMathBridgeOptions,
 ): MathBridgeHandle {
-  void viewer;
-
   const ownerDocument = hostEl.ownerDocument ?? document;
   const ownerWindow = ownerDocument.defaultView ?? window;
+  const graphViewer =
+    viewer && typeof viewer === 'object' && viewer !== null ? (viewer as MathGraphViewerBridge) : null;
   const toaster = createToastManager(ownerDocument, {
     container: options.toastContainer ?? null,
     durationMs: options.toastDurationMs,
@@ -397,9 +407,123 @@ export function attachMathEngine(
 
   let hoveredIds = new Set<string>();
   let selectedIds = new Set<string>();
+  let lastGraphSignature: string | null = null;
 
   const ghostOverlay = createGhostOverlay(hostEl);
   let ghostTokenIds = new Set<string>();
+  const sendGraphHighlight = (event: 'hover' | 'select', ids: Iterable<string>) => {
+    if (!graphViewer?.highlight) {
+      return;
+    }
+    graphViewer.highlight(event, dedupe(ids));
+  };
+
+  const setTokenHighlight = (event: 'hover' | 'select', ids: Iterable<string>) => {
+    const className = event === 'hover' ? hoverClass : selectedClass;
+    const target = event === 'hover' ? hoveredIds : selectedIds;
+    removeClassFromIds(hostEl, target, className);
+    target.clear();
+    for (const id of ids) {
+      if (typeof id !== 'string') {
+        continue;
+      }
+      const trimmed = id.trim();
+      if (trimmed) {
+        target.add(trimmed);
+      }
+    }
+    addClassToIds(hostEl, target, className);
+  };
+
+  const updateGraphFromAst = (ast: unknown) => {
+    if (!graphViewer?.setGraph) {
+      return;
+    }
+    if (ast == null) {
+      graphViewer.setGraph(null);
+      graphViewer.setGraphError?.(null);
+      lastGraphSignature = null;
+      return;
+    }
+
+    try {
+      const graph = astToGraph(ast);
+      if (!graph || graph.nodes.length === 0) {
+        graphViewer.setGraph(null);
+        graphViewer.setGraphError?.(null);
+        lastGraphSignature = null;
+        return;
+      }
+
+      const signature = JSON.stringify(graph);
+      if (signature !== lastGraphSignature) {
+        graphViewer.setGraph(graph);
+        graphViewer.setGraphError?.(null);
+        lastGraphSignature = signature;
+      }
+    } catch (err) {
+      lastGraphSignature = null;
+      graphViewer.setGraph?.(null);
+      if (graphViewer?.setGraphError) {
+        const message = err instanceof Error ? err.message : String(err);
+        graphViewer.setGraphError(message);
+      }
+    }
+  };
+
+  const readAstFromEngine = (): unknown | null => {
+    const exportFn = (engine as { export?: () => { ast: unknown } | null | undefined }).export;
+    if (typeof exportFn === 'function') {
+      try {
+        const result = exportFn.call(engine);
+        if (result && typeof result === 'object' && 'ast' in result) {
+          return (result as { ast: unknown }).ast ?? null;
+        }
+      } catch {
+        // ignore export errors
+      }
+    }
+
+    const exportStateFn = (engine as { exportState?: () => { ast: unknown } | null | undefined }).exportState;
+    if (typeof exportStateFn === 'function') {
+      try {
+        const result = exportStateFn.call(engine);
+        if (result && typeof result === 'object' && 'ast' in result) {
+          return (result as { ast: unknown }).ast ?? null;
+        }
+      } catch {
+        // ignore exportState errors
+      }
+    }
+
+    return null;
+  };
+
+  const extractAstFromPayload = (payload: unknown): unknown | undefined => {
+    if (!payload || typeof payload !== 'object') {
+      return undefined;
+    }
+    const record = payload as Record<string, unknown>;
+    if ('ast' in record) {
+      return (record as { ast: unknown }).ast ?? null;
+    }
+    const state = record.state;
+    if (state && typeof state === 'object' && 'ast' in (state as Record<string, unknown>)) {
+      return ((state as Record<string, unknown>).ast as unknown) ?? null;
+    }
+    return undefined;
+  };
+
+  const syncGraphFromAstCandidate = (candidate: unknown | undefined) => {
+    if (!graphViewer) {
+      return;
+    }
+    if (candidate !== undefined) {
+      updateGraphFromAst(candidate);
+      return;
+    }
+    updateGraphFromAst(readAstFromEngine());
+  };
   const engineRecord = engine as unknown as Record<string, unknown>;
   const previewNullableCandidates = ['preview', 'setPreview', 'previewStep', 'previewRule'] as const;
   let previewFn: ((id: string | null) => void) | null = null;
@@ -680,17 +804,8 @@ export function attachMathEngine(
     payload: unknown,
   ) => {
     const ids = normalizeTokenIds(event, payload, options);
-    const className = event === 'hover' ? hoverClass : selectedClass;
-    const previous = event === 'hover' ? hoveredIds : selectedIds;
-
-    removeClassFromIds(hostEl, previous, className);
-    addClassToIds(hostEl, ids, className);
-
-    const target = event === 'hover' ? hoveredIds : selectedIds;
-    target.clear();
-    for (const id of ids) {
-      target.add(id);
-    }
+    setTokenHighlight(event, ids);
+    sendGraphHighlight(event, ids);
   };
 
   const rawSelect = (engine as { select?: ((mode: string) => void) | undefined }).select;
@@ -848,6 +963,16 @@ export function attachMathEngine(
 
   const subscriptions: Array<() => void> = [];
 
+  if (graphViewer?.onHover) {
+    const unsubscribe = graphViewer.onHover((ids) => {
+      const normalized = dedupe(ids);
+      setTokenHighlight('hover', normalized);
+    });
+    if (typeof unsubscribe === 'function') {
+      subscriptions.push(unsubscribe);
+    }
+  }
+
   if (options.actionsContainer) {
     const actionsContainer = options.actionsContainer;
     actionsContainer.addEventListener('pointerover', handleActionPointerOver);
@@ -871,6 +996,8 @@ export function attachMathEngine(
       const ruleId = typeof (payload as { ruleId?: unknown })?.ruleId === 'string'
         ? ((payload as { ruleId?: unknown }).ruleId as string)
         : null;
+
+      syncGraphFromAstCandidate(extractAstFromPayload(payload));
 
       if (pendingAction) {
         completePendingAction('ok', { ruleId });
@@ -1009,6 +1136,7 @@ export function attachMathEngine(
   hostEl.appendChild(ghostOverlay.element);
   ghostTokenIds = new Set();
   ghostOverlay.clear();
+  syncGraphFromAstCandidate(readAstFromEngine());
   refreshActions();
   currentExpression = captureExpression(hostEl);
   updateHistoryPanel();
@@ -1047,7 +1175,14 @@ export function attachMathEngine(
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
       selectedIds = new Set();
+      lastGraphSignature = null;
       hostEl.innerHTML = '';
+      if (graphViewer?.highlight) {
+        graphViewer.highlight('hover', []);
+        graphViewer.highlight('select', []);
+      }
+      graphViewer?.setGraph?.(null);
+      graphViewer?.setGraphError?.(null);
       toaster.destroy();
     },
     refresh: refreshActions,
@@ -1065,10 +1200,18 @@ export function attachMathEngine(
       appliedHistoryCount = 0;
       pendingAction = null;
       lastActions = new Map();
+      lastGraphSignature = null;
+      if (graphViewer?.highlight) {
+        graphViewer.highlight('hover', []);
+        graphViewer.highlight('select', []);
+      }
+      graphViewer?.setGraph?.(null);
+      graphViewer?.setGraphError?.(null);
       engine.mount(hostEl, expr);
       hostEl.appendChild(ghostOverlay.element);
       ghostTokenIds = new Set();
       ghostOverlay.clear();
+      syncGraphFromAstCandidate(readAstFromEngine());
       refreshActions();
       currentExpression = captureExpression(hostEl);
       updateHistoryPanel();

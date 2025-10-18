@@ -205,6 +205,57 @@
   position: relative;
 }
 
+.viewer__math-layout {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+
+.viewer__math-graph {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: #f8fafc;
+}
+
+.viewer__math-graph[hidden] {
+  display: none !important;
+}
+
+.motor-contrast--high .viewer__math-graph {
+  background: #111827;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.viewer__math-graph-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.motor-contrast--high .viewer__math-graph-title {
+  color: #e2e8f0;
+}
+
+.viewer__math-graph-view {
+  min-height: 160px;
+}
+
+.viewer__math-graph-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.viewer__math-graph[data-state='error'] .viewer__math-graph-status {
+  color: #b91c1c;
+}
+
+.motor-contrast--high .viewer__math-graph[data-state='error'] .viewer__math-graph-status {
+  color: #fca5a5;
+}
+
 .motor-ghost {
   position: absolute;
   inset: 0;

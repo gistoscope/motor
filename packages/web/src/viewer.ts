@@ -10,6 +10,7 @@ import {
   edges as listEdges,
   nodes as listNodes,
   type GraspGraph,
+  type GraphJSON,
 } from '@motor/grasp';
 import { renderSVG } from './svg';
 import {
@@ -49,10 +50,19 @@ type MathEngineProvider =
   | { kind: 'instance'; engine: MathEngine }
   | { kind: 'factory'; create: () => MathEngine };
 
+interface MathGraphPane {
+  setGraph(graph: GraphJSON | null): void;
+  setGraphError(message: string | null): void;
+  highlight(kind: 'hover' | 'select', ids: Iterable<string>): void;
+  onHover(cb: (ids: string[]) => void): () => void;
+  destroy(): void;
+}
+
 interface MathMountPoint {
   panel: HTMLElement;
   host: HTMLElement;
   actions: HTMLElement;
+  graph: MathGraphPane | null;
   handle: MathBridgeHandle | null;
   engine: MathEngine | null;
   providerKind: MathEngineProvider['kind'] | null;
@@ -60,6 +70,208 @@ interface MathMountPoint {
 
 const mathMountPoints = new Set<MathMountPoint>();
 let mathEngineProvider: MathEngineProvider | null = null;
+
+function createMathGraphPane(
+  panel: HTMLElement,
+  view: HTMLElement,
+  status: HTMLElement | null,
+): MathGraphPane {
+  const EMPTY_MESSAGE = 'AST graph unavailable.';
+  const ERROR_MESSAGE = 'Failed to render AST graph.';
+
+  panel.dataset.state = panel.dataset.state ?? 'empty';
+  panel.hidden = true;
+  if (status) {
+    status.textContent = '';
+  }
+
+  const hoverExternal = new Set<string>();
+  const hoverInternal = new Set<string>();
+  const selectExternal = new Set<string>();
+  const selectInternal = new Set<string>();
+  const hoverCallbacks = new Set<(ids: string[]) => void>();
+
+  const applyStatus = (state: 'empty' | 'ready' | 'error', message?: string) => {
+    panel.dataset.state = state;
+    if (state === 'ready') {
+      panel.hidden = false;
+      if (status) {
+        status.textContent = '';
+      }
+      return;
+    }
+
+    if (state === 'error') {
+      panel.hidden = false;
+      if (status) {
+        status.textContent = message ?? ERROR_MESSAGE;
+      }
+      return;
+    }
+
+    panel.hidden = true;
+    if (status) {
+      status.textContent = message ?? '';
+    }
+  };
+
+  const applyHighlights = () => {
+    const svg = view.querySelector('svg');
+    if (!svg) {
+      return;
+    }
+
+    const hoverUnion = new Set<string>();
+    hoverExternal.forEach((id) => hoverUnion.add(id));
+    hoverInternal.forEach((id) => hoverUnion.add(id));
+
+    const selectUnion = new Set<string>();
+    selectExternal.forEach((id) => selectUnion.add(id));
+    selectInternal.forEach((id) => selectUnion.add(id));
+
+    svg.querySelectorAll<SVGGElement>('.motor-node').forEach((node) => {
+      const id = node.getAttribute('data-node-id');
+      const isHover = !!id && hoverUnion.has(id);
+      const isSelect = !!id && selectUnion.has(id);
+      node.classList.toggle('motor-node--hover', isHover);
+      node.classList.toggle('motor-node--selected', isSelect);
+    });
+
+    svg.querySelectorAll<SVGPathElement>('.motor-edge').forEach((edge) => {
+      const fromId = edge.getAttribute('data-from');
+      const toId = edge.getAttribute('data-to');
+      const hoverMatch =
+        (!!fromId && hoverUnion.has(fromId)) || (!!toId && hoverUnion.has(toId));
+      const selectMatch =
+        (!!fromId && selectUnion.has(fromId)) || (!!toId && selectUnion.has(toId));
+      edge.classList.toggle('motor-edge--hover', hoverMatch);
+      edge.classList.toggle('motor-edge--selected', selectMatch);
+    });
+  };
+
+  const updateSet = (target: Set<string>, ids: Iterable<string>) => {
+    target.clear();
+    for (const id of ids) {
+      const trimmed = typeof id === 'string' ? id.trim() : '';
+      if (trimmed) {
+        target.add(trimmed);
+      }
+    }
+  };
+
+  const notifyHover = (ids: string[]) => {
+    for (const cb of hoverCallbacks) {
+      cb([...ids]);
+    }
+  };
+
+  const setGraph = (graph: GraphJSON | null) => {
+    hoverInternal.clear();
+    selectInternal.clear();
+
+    if (!graph || graph.nodes.length === 0) {
+      view.innerHTML = '';
+      if (hoverExternal.size === 0 && selectExternal.size === 0) {
+        applyStatus('empty', EMPTY_MESSAGE);
+      } else {
+        applyStatus('empty');
+      }
+      return;
+    }
+
+    try {
+      const grasp = fromJSON(graph);
+      view.innerHTML = '';
+      renderSVG(view, grasp);
+      applyStatus('ready');
+      applyHighlights();
+    } catch (error) {
+      view.innerHTML = '';
+      const message = error instanceof Error ? error.message : ERROR_MESSAGE;
+      applyStatus('error', message);
+    }
+  };
+
+  const setGraphError = (message: string | null) => {
+    if (!message) {
+      if (!view.querySelector('svg')) {
+        applyStatus('empty', EMPTY_MESSAGE);
+      }
+      return;
+    }
+
+    hoverInternal.clear();
+    selectInternal.clear();
+    view.innerHTML = '';
+    applyStatus('error', message);
+  };
+
+  const highlight = (kind: 'hover' | 'select', ids: Iterable<string>) => {
+    if (kind === 'hover') {
+      updateSet(hoverExternal, ids);
+    } else {
+      updateSet(selectExternal, ids);
+    }
+    applyHighlights();
+  };
+
+  const handleNodeHover = (event: Event) => {
+    const detail = (event as CustomEvent<{ nodeId: string | null }>).detail;
+    hoverInternal.clear();
+    const nodeId = detail?.nodeId ?? null;
+    if (typeof nodeId === 'string') {
+      const trimmed = nodeId.trim();
+      if (trimmed) {
+        hoverInternal.add(trimmed);
+      }
+    }
+    applyHighlights();
+    if (typeof nodeId === 'string' && nodeId.trim()) {
+      notifyHover([nodeId.trim()]);
+    } else {
+      notifyHover([]);
+    }
+  };
+
+  const handleNodeLeave = () => {
+    if (hoverInternal.size === 0) {
+      return;
+    }
+    hoverInternal.clear();
+    applyHighlights();
+    notifyHover([]);
+  };
+
+  view.addEventListener('motor:node-hover', handleNodeHover);
+  view.addEventListener('motor:node-leave', handleNodeLeave);
+
+  const onHover = (cb: (ids: string[]) => void) => {
+    hoverCallbacks.add(cb);
+    return () => {
+      hoverCallbacks.delete(cb);
+    };
+  };
+
+  const destroy = () => {
+    hoverCallbacks.clear();
+    hoverExternal.clear();
+    hoverInternal.clear();
+    selectExternal.clear();
+    selectInternal.clear();
+    view.removeEventListener('motor:node-hover', handleNodeHover);
+    view.removeEventListener('motor:node-leave', handleNodeLeave);
+    view.innerHTML = '';
+    applyStatus('empty', EMPTY_MESSAGE);
+  };
+
+  return {
+    setGraph,
+    setGraphError,
+    highlight,
+    onHover,
+    destroy,
+  };
+}
 
 function detachMathMount(mount: MathMountPoint): void {
   if (mount.handle) {
@@ -72,6 +284,12 @@ function detachMathMount(mount: MathMountPoint): void {
   }
   mount.engine = null;
   mount.providerKind = null;
+  if (mount.graph) {
+    mount.graph.highlight('hover', []);
+    mount.graph.highlight('select', []);
+    mount.graph.setGraph(null);
+    mount.graph.setGraphError(null);
+  }
   mount.panel.dataset.state = 'disabled';
   mount.panel.hidden = true;
 }
@@ -97,7 +315,11 @@ function connectMathMount(mount: MathMountPoint): void {
   }
 
   try {
-    mount.handle = attachMathEngine(null, engine, mount.host, {
+    if (mount.graph) {
+      mount.graph.setGraphError(null);
+      mount.graph.setGraph(null);
+    }
+    mount.handle = attachMathEngine(mount.graph, engine, mount.host, {
       actionsContainer: mount.actions,
     });
     mount.engine = engine;
@@ -117,15 +339,22 @@ function registerMathMount(
   panel: HTMLElement | null,
   host: HTMLElement | null,
   actions: HTMLElement | null,
+  graphPanel?: HTMLElement | null,
+  graphView?: HTMLElement | null,
+  graphStatus?: HTMLElement | null,
 ): MathMountPoint | null {
   if (!panel || !host || !actions) {
     return null;
   }
 
+  const graph =
+    graphPanel && graphView ? createMathGraphPane(graphPanel, graphView, graphStatus ?? null) : null;
+
   const mount: MathMountPoint = {
     panel,
     host,
     actions,
+    graph,
     handle: null,
     engine: null,
     providerKind: null,
@@ -142,6 +371,9 @@ function unregisterMathMount(mount: MathMountPoint | null): void {
     return;
   }
   detachMathMount(mount);
+  if (mount.graph) {
+    mount.graph.destroy();
+  }
   mathMountPoints.delete(mount);
 }
 
@@ -448,7 +680,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         </aside>
         <section class="viewer__math" data-role="math-panel" data-state="disabled" hidden>
           <h3 class="viewer__subtitle">Math engine</h3>
-          <div class="viewer__math-host" data-role="math-host"></div>
+          <div class="viewer__math-layout">
+            <div class="viewer__math-host" data-role="math-host"></div>
+            <aside class="viewer__math-graph" data-role="math-graph" data-state="empty" hidden>
+              <h4 class="viewer__math-graph-title">AST graph</h4>
+              <div class="viewer__math-graph-view" data-role="math-graph-view"></div>
+              <p class="viewer__math-graph-status" data-role="math-graph-status"></p>
+            </aside>
+          </div>
           <div class="viewer__math-actions viewer__actions" data-role="math-actions"></div>
         </section>
       </section>
@@ -505,6 +744,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const mathPanelEl = root.querySelector<HTMLElement>('[data-role="math-panel"]');
   const mathHostEl = root.querySelector<HTMLElement>('[data-role="math-host"]');
   const mathActionsEl = root.querySelector<HTMLElement>('[data-role="math-actions"]');
+  const mathGraphPanelEl = root.querySelector<HTMLElement>('[data-role="math-graph"]');
+  const mathGraphViewEl = root.querySelector<HTMLElement>('[data-role="math-graph-view"]');
+  const mathGraphStatusEl = root.querySelector<HTMLElement>('[data-role="math-graph-status"]');
   const overlayToggleInputs = Array.from(
     root.querySelectorAll<HTMLInputElement>('input[data-role="overlay-toggle"]'),
   );
@@ -568,7 +810,13 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !shortestResetButton ||
     !viewerRoot ||
     !helpButton ||
-    !contrastToggle
+    !contrastToggle ||
+    !mathPanelEl ||
+    !mathHostEl ||
+    !mathActionsEl ||
+    !mathGraphPanelEl ||
+    !mathGraphViewEl ||
+    !mathGraphStatusEl
   ) {
     throw new Error('viewer: missing expected DOM nodes');
   }
@@ -632,7 +880,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     panel: analysisPanel,
   });
   const helpOverlay: HelpOverlayHandle = initHelp({ root: viewerRootEl, trigger: helpButtonEl });
-  const mathMount = registerMathMount(mathPanelEl, mathHostEl, mathActionsEl);
+  const mathMount = registerMathMount(
+    mathPanelEl,
+    mathHostEl,
+    mathActionsEl,
+    mathGraphPanelEl,
+    mathGraphViewEl,
+    mathGraphStatusEl,
+  );
 
   const handleContrastChange = () => {
     viewerRootEl.classList.toggle('motor-contrast--high', contrastToggleEl.checked);
