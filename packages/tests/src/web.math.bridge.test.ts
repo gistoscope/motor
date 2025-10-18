@@ -1,9 +1,18 @@
-import { beforeEach, afterEach, describe, expect, it } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { Window } from 'happy-dom';
 
 import { attachMathEngine } from '../../web/src/math/bridge';
 import { fromRealEngine } from '../../web/src/math/engineAdapter';
-import type { MathBridgeHandle, MathEngine, MathEngineAction, MathEngineEventCallback } from '../../web/src/math/types';
+import type {
+  MathBridgeHandle,
+  MathEngine,
+  MathEngineAction,
+  MathEngineEventCallback,
+} from '../../web/src/math/types';
+
+interface MockMathEngineOptions {
+  autoEmitState?: boolean;
+}
 
 class MockMathEngine implements MathEngine {
   #host: HTMLElement | null = null;
@@ -13,7 +22,12 @@ class MockMathEngine implements MathEngine {
     select: new Set(),
     state: new Set(),
   };
+  #autoEmitState: boolean;
   applied: string[] = [];
+
+  constructor(options: MockMathEngineOptions = {}) {
+    this.#autoEmitState = options.autoEmitState ?? true;
+  }
 
   mount(host: HTMLElement, initial: string): void {
     this.#host = host;
@@ -46,7 +60,11 @@ class MockMathEngine implements MathEngine {
     if (actionId === 'simplify') {
       this.#expression = '5';
       this.#render();
-      this.#emit('state', { expression: this.#expression });
+      if (this.#autoEmitState) {
+        this.#emit('state', { expression: this.#expression, ruleId: actionId });
+      }
+    } else if (this.#autoEmitState) {
+      this.#emit('state', { ruleId: actionId });
     }
   }
 
@@ -63,6 +81,10 @@ class MockMathEngine implements MathEngine {
 
   emitSelect(payload: unknown): void {
     this.#emit('select', payload);
+  }
+
+  emitState(payload: unknown): void {
+    this.#emit('state', payload);
   }
 
   #emit(event: 'hover' | 'select' | 'state', payload: unknown): void {
@@ -84,6 +106,41 @@ class MockMathEngine implements MathEngine {
     } else {
       this.#host.innerHTML = '<span data-token-id="result">5</span>';
     }
+  }
+}
+
+class ThrowingMathEngine implements MathEngine {
+  #inner: MockMathEngine;
+  #message: string;
+
+  constructor(message = 'boom') {
+    this.#inner = new MockMathEngine();
+    this.#message = message;
+  }
+
+  get applied(): string[] {
+    return this.#inner.applied;
+  }
+
+  mount(host: HTMLElement, initial: string): void {
+    this.#inner.mount(host, initial);
+  }
+
+  on(event: string, cb: MathEngineEventCallback): () => void {
+    return this.#inner.on(event, cb);
+  }
+
+  getLegalActions(): MathEngineAction[] {
+    return this.#inner.getLegalActions();
+  }
+
+  apply(actionId: string): void {
+    this.#inner.applied.push(actionId);
+    throw new Error(this.#message);
+  }
+
+  export(): { ast: unknown; html?: string | undefined; tex?: string | undefined } {
+    return this.#inner.export();
   }
 }
 
@@ -136,7 +193,7 @@ class FakeRealMathEngine {
     if (actionId === 'simplify') {
       this.#expression = '5';
       this.#render();
-      this.#emit('state', { legalActions: this.listActions() });
+      this.#emit('state', { legalActions: this.listActions(), ruleId: actionId });
     }
   }
 
@@ -288,5 +345,95 @@ describe('math bridge', () => {
     bridge?.setExpression('2+3');
     const resetButtons = actionsHost.querySelectorAll<HTMLButtonElement>('button[data-role="math-action"]');
     expect(resetButtons.length).toBe(2);
+  });
+
+  it('suppresses concurrent apply calls until state and surfaces success toast', () => {
+    const engine = new MockMathEngine({ autoEmitState: false });
+    const viewerStub = { name: 'viewer' };
+    const host = document.createElement('div');
+    const actionsHost = document.createElement('div');
+    document.body.append(host, actionsHost);
+
+    bridge = attachMathEngine(viewerStub, engine, host, {
+      initialExpression: '2+3',
+      actionsContainer: actionsHost,
+    });
+
+    const actionButtons = actionsHost.querySelectorAll<HTMLButtonElement>('button[data-role="math-action"]');
+    expect(actionButtons.length).toBe(2);
+
+    actionButtons[0].click();
+    expect(engine.applied).toEqual(['simplify']);
+
+    actionButtons[0].click();
+    expect(engine.applied).toEqual(['simplify']);
+
+    expect(document.body.querySelectorAll('[data-role="toast"]').length).toBe(0);
+
+    engine.emitState({ ruleId: 'simplify', expression: '5' });
+
+    const successToasts = document.body.querySelectorAll('[data-role="toast"][data-kind="success"]');
+    expect(successToasts.length).toBeGreaterThanOrEqual(1);
+    expect(successToasts[successToasts.length - 1]?.textContent).toMatch(/Simplify/i);
+  });
+
+  it('handles apply errors via toast notifications and instrumentation', () => {
+    const engine = new ThrowingMathEngine('not allowed');
+    const onAction = vi.fn();
+    const viewerStub = { name: 'viewer' };
+    const host = document.createElement('div');
+    const actionsHost = document.createElement('div');
+    document.body.append(host, actionsHost);
+
+    bridge = attachMathEngine(viewerStub, engine, host, {
+      initialExpression: '2+3',
+      actionsContainer: actionsHost,
+      instrumentation: { onAction },
+    });
+
+    const [simplifyButton] = actionsHost.querySelectorAll<HTMLButtonElement>('button[data-role="math-action"]');
+    expect(simplifyButton).toBeDefined();
+
+    simplifyButton?.click();
+    expect(engine.applied).toEqual(['simplify']);
+
+    const errorToasts = document.body.querySelectorAll('[data-role="toast"][data-kind="error"]');
+    expect(errorToasts.length).toBe(1);
+    expect(errorToasts[0]?.textContent).toBe('Failed to apply Simplify: not allowed');
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onAction.mock.calls[0]?.[0]).toBe('simplify');
+    expect(onAction.mock.calls[0]?.[2]).toBe('err');
+
+    simplifyButton?.click();
+    expect(engine.applied).toEqual(['simplify', 'simplify']);
+    expect(onAction).toHaveBeenCalledTimes(2);
+  });
+
+  it('cleans up toast container on destroy and refreshes actions', () => {
+    const engine = new MockMathEngine();
+    const spy = vi.spyOn(engine, 'getLegalActions');
+    const viewerStub = { name: 'viewer' };
+    const host = document.createElement('div');
+    const actionsHost = document.createElement('div');
+    document.body.append(host, actionsHost);
+
+    bridge = attachMathEngine(viewerStub, engine, host, {
+      initialExpression: '2+3',
+      actionsContainer: actionsHost,
+    });
+
+    const toastContainer = document.body.querySelector('[data-role="toast-container"]');
+    expect(toastContainer).toBeTruthy();
+
+    spy.mockClear();
+    bridge?.refresh();
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+
+    bridge?.destroy();
+    bridge = null;
+
+    expect(document.body.querySelector('[data-role="toast-container"]')).toBeNull();
+    expect(document.body.querySelector('[data-role="toast"]')).toBeNull();
   });
 });
