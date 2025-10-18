@@ -1,7 +1,7 @@
 import type { GraphAnalysis } from './analysis';
 import { edgeKey } from './analysis';
 
-type OverlayName = 'scc' | 'cycles';
+type OverlayName = 'scc' | 'cycles' | 'shortest';
 
 type ToggleMap = Record<OverlayName, HTMLInputElement>;
 
@@ -12,8 +12,15 @@ export interface AnalysisPanelElements {
   warningsList: HTMLElement;
 }
 
+export interface ShortestPathOverlayState {
+  readonly available: boolean;
+  readonly nodes: readonly string[];
+  readonly edges: ReadonlyArray<{ from: string; to: string }>;
+}
+
 export interface OverlayController {
   setAnalysis(analysis: GraphAnalysis | null): void;
+  setShortestPath(state: ShortestPathOverlayState): void;
   destroy(): void;
 }
 
@@ -89,12 +96,58 @@ function applyCycleOverlay(svgRoot: HTMLElement, analysis: GraphAnalysis | null,
   });
 }
 
+function applyShortestOverlay(
+  svgRoot: HTMLElement,
+  state: ShortestPathOverlayState,
+  enabled: boolean,
+): void {
+  const svg = svgRoot.querySelector('svg');
+  if (!svg) return;
+
+  const nodes = svg.querySelectorAll<SVGGElement>('.motor-node');
+  const edges = svg.querySelectorAll<SVGPathElement>('.motor-edge');
+
+  nodes.forEach((node) => {
+    node.classList.remove('motor-node--path');
+  });
+  edges.forEach((edge) => {
+    edge.classList.remove('motor-edge--path');
+  });
+
+  if (!enabled || !state.available || state.nodes.length === 0) {
+    return;
+  }
+
+  const nodeSet = new Set(state.nodes.map((id) => String(id)));
+  nodes.forEach((node) => {
+    const nodeId = node.getAttribute('data-node-id');
+    if (nodeId && nodeSet.has(nodeId)) {
+      node.classList.add('motor-node--path');
+    }
+  });
+
+  const edgeSet = new Set(state.edges.map(({ from, to }) => edgeKey(String(from), String(to))));
+  edges.forEach((edge) => {
+    const from = edge.getAttribute('data-from');
+    const to = edge.getAttribute('data-to');
+    if (from && to && edgeSet.has(edgeKey(from, to))) {
+      edge.classList.add('motor-edge--path');
+    }
+  });
+}
+
 export function createOverlayController(options: OverlayOptions): OverlayController {
   let currentAnalysis: GraphAnalysis | null = null;
+  let currentShortest: ShortestPathOverlayState = { available: false, nodes: [], edges: [] };
 
   const apply = () => {
     applySccOverlay(options.svgRoot, currentAnalysis, options.toggles.scc.checked);
     applyCycleOverlay(options.svgRoot, currentAnalysis, options.toggles.cycles.checked);
+    applyShortestOverlay(
+      options.svgRoot,
+      currentShortest,
+      options.toggles.shortest.checked && currentShortest.available,
+    );
   };
 
   const updatePanel = () => {
@@ -122,11 +175,36 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
 
   const setAnalysis = (analysis: GraphAnalysis | null) => {
     currentAnalysis = analysis;
-    const enabled = Boolean(analysis);
-    Object.values(options.toggles).forEach((toggle) => {
-      toggle.disabled = !enabled;
-    });
+    const hasData = Boolean(analysis);
+    options.toggles.scc.disabled = !hasData;
+    options.toggles.cycles.disabled = !hasData;
+    if (!hasData) {
+      options.toggles.scc.checked = false;
+      options.toggles.cycles.checked = false;
+    }
+
+    const shortestToggle = options.toggles.shortest;
+    if (!hasData || !currentShortest.available) {
+      shortestToggle.checked = false;
+    }
+    shortestToggle.disabled = !hasData || !currentShortest.available;
+
     updatePanel();
+    apply();
+  };
+
+  const setShortestPath = (state: ShortestPathOverlayState) => {
+    currentShortest = {
+      available: state.available,
+      nodes: state.nodes.map((id) => String(id)),
+      edges: state.edges.map((edge) => ({ from: String(edge.from), to: String(edge.to) })),
+    };
+
+    if (!currentAnalysis || !currentShortest.available) {
+      options.toggles.shortest.checked = false;
+    }
+    options.toggles.shortest.disabled = !currentAnalysis || !currentShortest.available;
+
     apply();
   };
 
@@ -135,12 +213,14 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
       toggle.removeEventListener('change', handleToggleChange);
     });
     currentAnalysis = null;
+    currentShortest = { available: false, nodes: [], edges: [] };
   };
 
   setAnalysis(null);
 
   return {
     setAnalysis,
+    setShortestPath,
     destroy,
   };
 }

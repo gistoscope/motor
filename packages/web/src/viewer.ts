@@ -11,7 +11,13 @@ import {
   type GraspGraph,
 } from '@motor/grasp';
 import { renderSVG } from './svg';
-import { analyzeGraph } from './analysis';
+import {
+  analyzeGraph,
+  computeShortestPath,
+  edgeKey,
+  type EdgeKey,
+  type ShortestPathResult,
+} from './analysis';
 import { createOverlayController, type AnalysisPanelElements } from './overlays';
 
 type ClipboardWriter = {
@@ -29,6 +35,42 @@ export interface ViewerHandle {
 }
 
 const DASH = '—';
+
+const SOURCE_BUTTON_LABEL = 'Set as Source';
+const TARGET_BUTTON_LABEL = 'Set as Target';
+
+type WeightMap = Map<EdgeKey, number>;
+
+function parseWeightMap(data: unknown): WeightMap | null {
+  if (typeof data !== 'object' || data === null) {
+    return null;
+  }
+
+  const edges = (data as { edges?: unknown }).edges;
+  if (!Array.isArray(edges) || edges.length === 0) {
+    return null;
+  }
+
+  const map: WeightMap = new Map();
+  for (const entry of edges) {
+    if (typeof entry !== 'object' || entry === null) {
+      return null;
+    }
+    const raw = entry as { from?: unknown; to?: unknown; weight?: unknown };
+    if (typeof raw.from !== 'string' || typeof raw.to !== 'string') {
+      return null;
+    }
+    if (typeof raw.weight !== 'number' || Number.isNaN(raw.weight) || !Number.isFinite(raw.weight)) {
+      return null;
+    }
+    if (raw.weight < 0) {
+      return null;
+    }
+    map.set(edgeKey(raw.from, raw.to), raw.weight);
+  }
+
+  return map;
+}
 
 function ensureTrailingNewline(text: string): string {
   return text.endsWith('\n') ? text : `${text}\n`;
@@ -66,6 +108,9 @@ interface NodeInfoElements {
   labelValue: HTMLElement;
   inDegreeValue: HTMLElement;
   outDegreeValue: HTMLElement;
+  actions: HTMLElement;
+  setSourceButton: HTMLButtonElement;
+  setTargetButton: HTMLButtonElement;
 }
 
 function resetNodeInfoPanel(elements: NodeInfoElements): void {
@@ -74,6 +119,13 @@ function resetNodeInfoPanel(elements: NodeInfoElements): void {
   elements.labelValue.textContent = DASH;
   elements.inDegreeValue.textContent = DASH;
   elements.outDegreeValue.textContent = DASH;
+  elements.actions.dataset.state = 'hidden';
+  elements.setSourceButton.disabled = true;
+  elements.setTargetButton.disabled = true;
+  elements.setSourceButton.setAttribute('aria-pressed', 'false');
+  elements.setTargetButton.setAttribute('aria-pressed', 'false');
+  elements.setSourceButton.textContent = SOURCE_BUTTON_LABEL;
+  elements.setTargetButton.textContent = TARGET_BUTTON_LABEL;
 }
 
 function resetGraphUI(
@@ -199,6 +251,37 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
             <span>Cycle edges</span>
           </label>
         </div>
+        <section class="viewer__shortest" data-role="shortest-panel" data-state="disabled">
+          <header class="viewer__shortest-header">
+            <label class="viewer__shortest-toggle">
+              <input type="checkbox" data-role="overlay-toggle" data-overlay="shortest" />
+              <span>Shortest path</span>
+            </label>
+            <button
+              type="button"
+              class="viewer__button viewer__button--secondary viewer__button--small"
+              data-role="shortest-reset"
+              disabled
+            >
+              Reset
+            </button>
+          </header>
+          <dl class="viewer__shortest-list">
+            <div class="viewer__shortest-row">
+              <dt class="viewer__shortest-label">Source</dt>
+              <dd class="viewer__shortest-value" data-role="shortest-source">${DASH}</dd>
+            </div>
+            <div class="viewer__shortest-row">
+              <dt class="viewer__shortest-label">Target</dt>
+              <dd class="viewer__shortest-value" data-role="shortest-target">${DASH}</dd>
+            </div>
+            <div class="viewer__shortest-row">
+              <dt class="viewer__shortest-label">Total weight</dt>
+              <dd class="viewer__shortest-value" data-role="shortest-total">${DASH}</dd>
+            </div>
+          </dl>
+          <p class="viewer__shortest-status" data-role="shortest-status">Edge weights required.</p>
+        </section>
         <h3 class="viewer__subtitle">Warnings</h3>
         <ul class="viewer__edges" data-role="analysis-warnings"></ul>
         <h3 class="viewer__subtitle">Edges</h3>
@@ -227,6 +310,24 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
               <dd class="viewer__node-info-value" data-role="node-info-out">${DASH}</dd>
             </div>
           </dl>
+          <div class="viewer__node-info-actions" data-role="node-info-actions" data-state="hidden">
+            <button
+              type="button"
+              class="viewer__button viewer__button--small viewer__node-info-button"
+              data-role="node-info-set-source"
+              aria-pressed="false"
+            >
+              Set as Source
+            </button>
+            <button
+              type="button"
+              class="viewer__button viewer__button--small viewer__node-info-button"
+              data-role="node-info-set-target"
+              aria-pressed="false"
+            >
+              Set as Target
+            </button>
+          </div>
         </aside>
       </section>
       <section class="viewer__section viewer__section--exports">
@@ -284,6 +385,19 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const nodeInfoLabelEl = root.querySelector<HTMLElement>('[data-role="node-info-label"]');
   const nodeInfoInEl = root.querySelector<HTMLElement>('[data-role="node-info-in"]');
   const nodeInfoOutEl = root.querySelector<HTMLElement>('[data-role="node-info-out"]');
+  const nodeInfoActionsEl = root.querySelector<HTMLElement>('[data-role="node-info-actions"]');
+  const nodeInfoSetSourceButton = root.querySelector<HTMLButtonElement>(
+    'button[data-role="node-info-set-source"]',
+  );
+  const nodeInfoSetTargetButton = root.querySelector<HTMLButtonElement>(
+    'button[data-role="node-info-set-target"]',
+  );
+  const shortestPanel = root.querySelector<HTMLElement>('[data-role="shortest-panel"]');
+  const shortestSourceValue = root.querySelector<HTMLElement>('[data-role="shortest-source"]');
+  const shortestTargetValue = root.querySelector<HTMLElement>('[data-role="shortest-target"]');
+  const shortestTotalValue = root.querySelector<HTMLElement>('[data-role="shortest-total"]');
+  const shortestStatusValue = root.querySelector<HTMLElement>('[data-role="shortest-status"]');
+  const shortestResetButton = root.querySelector<HTMLButtonElement>('button[data-role="shortest-reset"]');
   const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
 
   if (
@@ -314,17 +428,31 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !nodeInfoIdEl ||
     !nodeInfoLabelEl ||
     !nodeInfoInEl ||
-    !nodeInfoOutEl
+    !nodeInfoOutEl ||
+    !nodeInfoActionsEl ||
+    !nodeInfoSetSourceButton ||
+    !nodeInfoSetTargetButton ||
+    !shortestPanel ||
+    !shortestSourceValue ||
+    !shortestTargetValue ||
+    !shortestTotalValue ||
+    !shortestStatusValue ||
+    !shortestResetButton
   ) {
     throw new Error('viewer: missing expected DOM nodes');
   }
 
   const overlaySccToggle = overlayToggleInputs.find((input) => input.dataset.overlay === 'scc');
   const overlayCycleToggle = overlayToggleInputs.find((input) => input.dataset.overlay === 'cycles');
+  const overlayShortestToggleCandidate = overlayToggleInputs.find(
+    (input) => input.dataset.overlay === 'shortest',
+  );
 
-  if (!overlaySccToggle || !overlayCycleToggle) {
+  if (!overlaySccToggle || !overlayCycleToggle || !overlayShortestToggleCandidate) {
     throw new Error('viewer: missing overlay toggles');
   }
+
+  const overlayShortestToggle = overlayShortestToggleCandidate;
 
   const textareaEl = textarea;
   const parseBtn = parseButton;
@@ -355,6 +483,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     labelValue: nodeInfoLabelEl,
     inDegreeValue: nodeInfoInEl,
     outDegreeValue: nodeInfoOutEl,
+    actions: nodeInfoActionsEl,
+    setSourceButton: nodeInfoSetSourceButton,
+    setTargetButton: nodeInfoSetTargetButton,
   };
 
   const overlayController = createOverlayController({
@@ -362,6 +493,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     toggles: {
       scc: overlaySccToggle,
       cycles: overlayCycleToggle,
+      shortest: overlayShortestToggle,
     },
     panel: analysisPanel,
   });
@@ -374,12 +506,173 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   let currentJSONText = '';
   let currentDOTText = '';
   let currentInspectText = '';
+  let shortestAvailable = false;
+  let shortestSourceId: string | null = null;
+  let shortestTargetId: string | null = null;
+  let shortestResult: ShortestPathResult | null = null;
 
   function clearGraphOutputs() {
     currentGraph = null;
     currentJSONText = '';
     currentDOTText = '';
     currentInspectText = '';
+    resetShortestState(false);
+  }
+
+  function syncShortestOverlay() {
+    overlayController.setShortestPath({
+      available: shortestAvailable,
+      nodes: shortestResult ? shortestResult.nodes : [],
+      edges: shortestResult ? shortestResult.edges : [],
+    });
+  }
+
+  function updateShortestPanel() {
+    const panel = shortestPanel;
+    const sourceValue = shortestSourceValue;
+    const targetValue = shortestTargetValue;
+    const totalValue = shortestTotalValue;
+    const statusValue = shortestStatusValue;
+    const resetButton = shortestResetButton;
+
+    if (!panel || !sourceValue || !targetValue || !totalValue || !statusValue || !resetButton) {
+      return;
+    }
+
+    sourceValue.textContent = shortestSourceId ?? DASH;
+    targetValue.textContent = shortestTargetId ?? DASH;
+    totalValue.textContent = shortestResult ? String(shortestResult.totalWeight) : DASH;
+
+    let panelState: string;
+    let statusText: string;
+
+    if (!shortestAvailable) {
+      panelState = 'disabled';
+      statusText = 'Edge weights (≥ 0) required.';
+    } else if (!shortestSourceId && !shortestTargetId) {
+      panelState = 'idle';
+      statusText = 'Select source and target nodes to compute a path.';
+    } else if (!shortestSourceId || !shortestTargetId) {
+      panelState = 'incomplete';
+      statusText = 'Select the remaining node.';
+    } else if (!shortestResult) {
+      panelState = 'no-path';
+      statusText = 'No path found.';
+    } else {
+      panelState = 'path';
+      statusText = 'Shortest path ready.';
+    }
+
+    panel.dataset.state = panelState;
+    statusValue.textContent = statusText;
+
+    const hasSelection = Boolean(shortestSourceId || shortestTargetId);
+    resetButton.disabled = !shortestAvailable || !hasSelection;
+  }
+
+  function syncNodeActions() {
+    const actions = nodeInfoElements.actions;
+    const sourceButton = nodeInfoElements.setSourceButton;
+    const targetButton = nodeInfoElements.setTargetButton;
+
+    if (!selectedNodeId || !nodeStats.has(selectedNodeId)) {
+      actions.dataset.state = 'hidden';
+      sourceButton.disabled = true;
+      targetButton.disabled = true;
+      sourceButton.textContent = SOURCE_BUTTON_LABEL;
+      targetButton.textContent = TARGET_BUTTON_LABEL;
+      sourceButton.setAttribute('aria-pressed', 'false');
+      targetButton.setAttribute('aria-pressed', 'false');
+      return;
+    }
+
+    if (!shortestAvailable) {
+      actions.dataset.state = 'disabled';
+      sourceButton.disabled = true;
+      targetButton.disabled = true;
+      sourceButton.textContent = SOURCE_BUTTON_LABEL;
+      targetButton.textContent = TARGET_BUTTON_LABEL;
+      sourceButton.setAttribute('aria-pressed', 'false');
+      targetButton.setAttribute('aria-pressed', 'false');
+      return;
+    }
+
+    actions.dataset.state = 'active';
+    sourceButton.disabled = false;
+    targetButton.disabled = false;
+
+    const isSource = selectedNodeId === shortestSourceId;
+    const isTarget = selectedNodeId === shortestTargetId;
+
+    sourceButton.setAttribute('aria-pressed', isSource ? 'true' : 'false');
+    targetButton.setAttribute('aria-pressed', isTarget ? 'true' : 'false');
+    sourceButton.textContent = isSource ? 'Source' : SOURCE_BUTTON_LABEL;
+    targetButton.textContent = isTarget ? 'Target' : TARGET_BUTTON_LABEL;
+  }
+
+  function resetShortestState(available: boolean) {
+    shortestSourceId = null;
+    shortestTargetId = null;
+    shortestResult = null;
+
+    if (overlayShortestToggle.checked) {
+      overlayShortestToggle.checked = false;
+      overlayShortestToggle.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    shortestAvailable = available;
+
+    syncShortestOverlay();
+    updateShortestPanel();
+    syncNodeActions();
+  }
+
+  function recomputeShortestPath() {
+    if (!shortestAvailable || !currentGraph || !shortestSourceId || !shortestTargetId) {
+      shortestResult = null;
+      syncShortestOverlay();
+      updateShortestPanel();
+      return;
+    }
+
+    shortestResult = computeShortestPath(currentGraph, shortestSourceId, shortestTargetId);
+    syncShortestOverlay();
+    updateShortestPanel();
+  }
+
+  function clearShortestSelections() {
+    shortestSourceId = null;
+    shortestTargetId = null;
+    shortestResult = null;
+
+    if (overlayShortestToggle.checked) {
+      overlayShortestToggle.checked = false;
+      overlayShortestToggle.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    syncShortestOverlay();
+    updateShortestPanel();
+    syncNodeActions();
+  }
+
+  function setShortestSource(nodeId: string | null) {
+    if (!nodeId || !shortestAvailable || !nodeStats.has(nodeId)) {
+      return;
+    }
+
+    shortestSourceId = nodeId;
+    recomputeShortestPath();
+    syncNodeActions();
+  }
+
+  function setShortestTarget(nodeId: string | null) {
+    if (!nodeId || !shortestAvailable || !nodeStats.has(nodeId)) {
+      return;
+    }
+
+    shortestTargetId = nodeId;
+    recomputeShortestPath();
+    syncNodeActions();
   }
 
     function computeNodeStats(graph: GraspGraph): Map<string, NodeInfo> {
@@ -458,12 +751,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     function updateNodeInfoPanel(nodeId: string | null) {
       if (!nodeId) {
         resetNodeInfoPanel(nodeInfoElements);
+        syncNodeActions();
         return;
       }
 
       const info = nodeStats.get(nodeId);
       if (!info) {
         resetNodeInfoPanel(nodeInfoElements);
+        syncNodeActions();
         return;
       }
 
@@ -472,6 +767,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       nodeInfoElements.labelValue.textContent = info.label || DASH;
       nodeInfoElements.inDegreeValue.textContent = String(info.inDegree);
       nodeInfoElements.outDegreeValue.textContent = String(info.outDegree);
+      syncNodeActions();
     }
 
     function clearInteractionState() {
@@ -481,6 +777,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       resetNodeInfoPanel(nodeInfoElements);
       syncNodeClasses();
       syncEdgeClasses();
+      syncNodeActions();
     }
 
     function handleHover(nodeId: string | null) {
@@ -550,6 +847,23 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
 
     const graph = fromJSON(data);
+    const weightMap = parseWeightMap(data);
+    let weightsAttached = false;
+
+    if (weightMap) {
+      const edgesWithWeights = listEdges(graph);
+      weightsAttached = edgesWithWeights.every((edge) =>
+        weightMap.has(edgeKey(String(edge.from), String(edge.to))),
+      );
+      if (weightsAttached) {
+        (graph as { weights?: WeightMap }).weights = weightMap;
+      } else {
+        delete (graph as { weights?: WeightMap }).weights;
+      }
+    } else {
+      delete (graph as { weights?: WeightMap }).weights;
+    }
+
     const jsonText = ensureTrailingNewline(JSON.stringify(data, null, 2));
     const dotText = ensureTrailingNewline(toDOT(graph));
     const inspectText = ensureTrailingNewline(inspect(graph));
@@ -567,6 +881,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     resetNodeInfoPanel(nodeInfoElements);
     syncNodeClasses();
     syncEdgeClasses();
+    resetShortestState(weightsAttached);
 
     currentGraph = graph;
     currentJSONText = jsonText;
@@ -728,6 +1043,12 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   pasteTextareaEl.addEventListener('keydown', handlePasteKeydown);
   copyButtons.forEach((btn) => btn.addEventListener('click', handleCopy));
   downloadButtons.forEach((btn) => btn.addEventListener('click', handleDownload));
+  const handleSetSourceClick = () => setShortestSource(selectedNodeId);
+  const handleSetTargetClick = () => setShortestTarget(selectedNodeId);
+  const handleShortestReset = () => clearShortestSelections();
+  nodeInfoSetSourceButton.addEventListener('click', handleSetSourceClick);
+  nodeInfoSetTargetButton.addEventListener('click', handleSetTargetClick);
+  shortestResetButton.addEventListener('click', handleShortestReset);
   const handleNodeHoverEvent = (event: Event) => {
     const detail = (event as CustomEvent<{ nodeId: string | null }>).detail;
     handleHover(detail?.nodeId ?? null);
@@ -750,6 +1071,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
   overlayController.setAnalysis(null);
   clearInteractionState();
+  resetShortestState(false);
   if (textareaEl.value.trim()) {
     parseAndRender();
   }
@@ -767,6 +1089,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       pasteTextareaEl.removeEventListener('keydown', handlePasteKeydown);
       copyButtons.forEach((btn) => btn.removeEventListener('click', handleCopy));
       downloadButtons.forEach((btn) => btn.removeEventListener('click', handleDownload));
+      nodeInfoSetSourceButton.removeEventListener('click', handleSetSourceClick);
+      nodeInfoSetTargetButton.removeEventListener('click', handleSetTargetClick);
+      shortestResetButton.removeEventListener('click', handleShortestReset);
       svgNode.removeEventListener('motor:node-hover', handleNodeHoverEvent);
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);

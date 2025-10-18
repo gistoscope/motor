@@ -3,7 +3,11 @@ import {
   hasCycleDirected,
   scc,
   size,
+  nodes as listNodes,
+  makeId,
+  dijkstra,
   type GraspGraph,
+  type GraspId,
 } from '@motor/grasp';
 
 const EDGE_KEY_SEPARATOR = '\u2192';
@@ -20,6 +24,17 @@ export interface GraphAnalysis {
   readonly cyclicComponents: ReadonlySet<number>;
   readonly cycleEdgeCount: number;
   readonly cycleEdgeKeys: ReadonlySet<EdgeKey>;
+}
+
+export interface ShortestPathEdge {
+  readonly from: string;
+  readonly to: string;
+}
+
+export interface ShortestPathResult {
+  readonly totalWeight: number;
+  readonly nodes: readonly string[];
+  readonly edges: readonly ShortestPathEdge[];
 }
 
 export function edgeKey(from: string, to: string): EdgeKey {
@@ -107,5 +122,110 @@ export function analyzeGraph(graph: GraspGraph): GraphAnalysis {
     cyclicComponents,
     cycleEdgeCount,
     cycleEdgeKeys,
+  };
+}
+
+function ensureDeterministicAdjacency(graph: GraspGraph): Map<GraspId, Set<GraspId>> {
+  const adjacency = new Map<GraspId, Set<GraspId>>();
+  const nodes = listNodes(graph);
+  nodes.forEach((id) => {
+    adjacency.set(id, new Set());
+  });
+
+  const edges = listEdges(graph)
+    .map((edge) => ({
+      from: edge.from,
+      to: edge.to,
+      key: edgeKey(String(edge.from), String(edge.to)),
+      fromLabel: String(edge.from),
+      toLabel: String(edge.to),
+    }))
+    .sort((a, b) => {
+      if (a.fromLabel === b.fromLabel) {
+        return a.toLabel.localeCompare(b.toLabel);
+      }
+      return a.fromLabel.localeCompare(b.fromLabel);
+    });
+
+  edges.forEach((entry) => {
+    if (!adjacency.has(entry.from)) {
+      adjacency.set(entry.from, new Set());
+    }
+    if (!adjacency.has(entry.to)) {
+      adjacency.set(entry.to, new Set());
+    }
+    adjacency.get(entry.from)!.add(entry.to);
+  });
+
+  return adjacency;
+}
+
+function resolveWeightMap(graph: GraspGraph): ReadonlyMap<EdgeKey, number> | null {
+  const weights = (graph as { weights?: ReadonlyMap<EdgeKey, number> | undefined }).weights;
+  if (!weights || weights.size === 0) {
+    return null;
+  }
+
+  for (const { from, to } of listEdges(graph)) {
+    const key = edgeKey(String(from), String(to));
+    const weight = weights.get(key);
+    if (weight === undefined || Number.isNaN(weight) || !Number.isFinite(weight) || weight < 0) {
+      return null;
+    }
+  }
+
+  return weights;
+}
+
+export function computeShortestPath(
+  graph: GraspGraph,
+  sourceId: string,
+  targetId: string,
+): ShortestPathResult | null {
+  if (!sourceId || !targetId) {
+    return null;
+  }
+
+  const weights = resolveWeightMap(graph);
+  if (!weights) {
+    return null;
+  }
+
+  const adjacency = ensureDeterministicAdjacency(graph);
+  const source = makeId(sourceId);
+  const target = makeId(targetId);
+
+  if (!adjacency.has(source) || !adjacency.has(target)) {
+    return null;
+  }
+
+  if (source === target) {
+    return { totalWeight: 0, nodes: [sourceId], edges: [] };
+  }
+
+  const view = { adj: adjacency };
+  const result = dijkstra(view, source, target, (from, to) => {
+    const key = edgeKey(String(from), String(to));
+    const value = weights.get(key);
+    if (value === undefined) {
+      throw new Error(`computeShortestPath: missing weight for edge ${key}`);
+    }
+    return value;
+  });
+
+  if (!result) {
+    return null;
+  }
+
+  const nodes = result.path.map((id) => String(id));
+  const edges: ShortestPathEdge[] = [];
+  for (let index = 0; index < nodes.length - 1; index += 1) {
+    edges.push({ from: nodes[index], to: nodes[index + 1] });
+  }
+
+  return {
+    totalWeight: result.distance,
+    nodes,
+    edges,
   };
 }
