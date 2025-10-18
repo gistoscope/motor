@@ -1,4 +1,6 @@
 import { createActionsPanel } from '../ui/actions';
+import { createHistoryPanel, type HistoryEntry } from '../ui/history';
+import { createWarningsPanel } from '../ui/warnings';
 import type {
   MathBridgeHandle,
   MathBridgeOptions,
@@ -125,11 +127,37 @@ function normalizeTokenIds(
   return dedupe(extractTokenIdsFromPayload(payload));
 }
 
+type ExtendedMathBridgeOptions = MathBridgeOptions & {
+  historyContainer?: HTMLElement;
+  warningsContainer?: HTMLElement;
+};
+
+function normalizeNotes(notes: unknown): string[] {
+  if (!Array.isArray(notes)) {
+    return [];
+  }
+  const result: string[] = [];
+  for (const note of notes) {
+    if (typeof note === 'string') {
+      const trimmed = note.trim();
+      if (trimmed.length > 0) {
+        result.push(trimmed);
+      }
+    }
+  }
+  return result;
+}
+
+function captureExpression(hostEl: HTMLElement): string {
+  const text = hostEl.textContent ?? '';
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 export function attachMathEngine(
   viewer: unknown,
   engine: MathEngine,
   hostEl: HTMLElement,
-  options: MathBridgeOptions = {},
+  options: ExtendedMathBridgeOptions = {} as ExtendedMathBridgeOptions,
 ): MathBridgeHandle {
   void viewer;
 
@@ -147,12 +175,54 @@ export function attachMathEngine(
       })
     : null;
 
+  const historyPanel = options.historyContainer
+    ? createHistoryPanel(options.historyContainer, {
+        onUndo: () => {
+          if (supportsUndo) {
+            engine.apply('undo');
+          }
+        },
+        onRedo: () => {
+          if (supportsRedo) {
+            engine.apply('redo');
+          }
+        },
+      })
+    : null;
+
+  const warningsPanel = options.warningsContainer
+    ? createWarningsPanel(options.warningsContainer)
+    : null;
+
+  let historyEntries: HistoryEntry[] = [];
+  let appliedHistoryCount = 0;
+  let supportsUndo = false;
+  let supportsRedo = false;
+  let currentExpression = '';
+
+  const updateHistoryPanel = () => {
+    if (!historyPanel) {
+      return;
+    }
+    historyPanel.render(historyEntries, appliedHistoryCount, {
+      canUndo: supportsUndo && appliedHistoryCount > 0,
+      canRedo: supportsRedo && appliedHistoryCount < historyEntries.length,
+    });
+  };
+
   const refreshActions = () => {
     if (!actionsPanel) {
+      const actions = engine.getLegalActions();
+      supportsUndo = actions.some((action) => action.id === 'undo');
+      supportsRedo = actions.some((action) => action.id === 'redo');
+      updateHistoryPanel();
       return;
     }
     const actions = engine.getLegalActions();
+    supportsUndo = actions.some((action) => action.id === 'undo');
+    supportsRedo = actions.some((action) => action.id === 'redo');
     actionsPanel.render(actions);
+    updateHistoryPanel();
   };
 
   const updateHighlight = (
@@ -177,13 +247,90 @@ export function attachMathEngine(
   subscriptions.push(engine.on('hover', (payload) => updateHighlight('hover', payload)));
   subscriptions.push(engine.on('select', (payload) => updateHighlight('select', payload)));
   subscriptions.push(
-    engine.on('state', () => {
+    engine.on('state', (payload) => {
       refreshActions();
+
+      if (warningsPanel) {
+        const notes = normalizeNotes((payload as { domainNotes?: unknown })?.domainNotes);
+        warningsPanel.render(notes);
+      }
+
+      const ruleId = typeof (payload as { ruleId?: unknown })?.ruleId === 'string'
+        ? ((payload as { ruleId?: unknown }).ruleId as string)
+        : null;
+
+      const nextExpression = captureExpression(hostEl);
+
+      if (ruleId === 'undo') {
+        if (appliedHistoryCount > 0) {
+          appliedHistoryCount -= 1;
+        }
+      } else if (ruleId === 'redo') {
+        if (appliedHistoryCount < historyEntries.length) {
+          appliedHistoryCount += 1;
+        }
+      } else if (ruleId) {
+        if (appliedHistoryCount < historyEntries.length) {
+          historyEntries = historyEntries.slice(0, appliedHistoryCount);
+        }
+        const entry: HistoryEntry = {
+          ruleId,
+          before: currentExpression,
+          after: nextExpression,
+          timestamp: Date.now(),
+        };
+        historyEntries = [...historyEntries, entry];
+        appliedHistoryCount = historyEntries.length;
+      } else {
+        currentExpression = nextExpression;
+        updateHistoryPanel();
+        return;
+      }
+
+      currentExpression = nextExpression;
+      updateHistoryPanel();
     }),
   );
 
+  const handleKeydown = (event: KeyboardEvent) => {
+    if (!(event.ctrlKey || event.metaKey)) {
+      return;
+    }
+    if (event.altKey) {
+      return;
+    }
+    const key = event.key.toLowerCase();
+    if (key === 'z') {
+      if (event.shiftKey) {
+        if (supportsRedo) {
+          event.preventDefault();
+          engine.apply('redo');
+        }
+      } else if (supportsUndo) {
+        event.preventDefault();
+        engine.apply('undo');
+      }
+    } else if (key === 'y') {
+      if (supportsRedo) {
+        event.preventDefault();
+        engine.apply('redo');
+      }
+    }
+  };
+
+  const ownerDocument = hostEl.ownerDocument ?? document;
+  ownerDocument.addEventListener('keydown', handleKeydown);
+  subscriptions.push(() => {
+    ownerDocument.removeEventListener('keydown', handleKeydown);
+  });
+
   engine.mount(hostEl, options.initialExpression ?? '');
   refreshActions();
+  currentExpression = captureExpression(hostEl);
+  updateHistoryPanel();
+  if (warningsPanel) {
+    warningsPanel.render([]);
+  }
 
   return {
     destroy() {
@@ -198,6 +345,12 @@ export function attachMathEngine(
       if (actionsPanel) {
         actionsPanel.destroy();
       }
+      if (historyPanel) {
+        historyPanel.destroy();
+      }
+      if (warningsPanel) {
+        warningsPanel.destroy();
+      }
       removeClassFromIds(hostEl, hoveredIds, hoverClass);
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
@@ -211,8 +364,15 @@ export function attachMathEngine(
       hoveredIds = new Set();
       selectedIds = new Set();
       hostEl.innerHTML = '';
+      historyEntries = [];
+      appliedHistoryCount = 0;
       engine.mount(hostEl, expr);
       refreshActions();
+      currentExpression = captureExpression(hostEl);
+      updateHistoryPanel();
+      if (warningsPanel) {
+        warningsPanel.render([]);
+      }
     },
   };
 }
