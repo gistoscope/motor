@@ -22,3 +22,4 @@ export * from './weighted';
 export * from './dot';
 export * from './subgraph';
 export * from './inspect';
+export * from './gen';

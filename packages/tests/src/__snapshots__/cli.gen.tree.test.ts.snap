@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`motor gen tree > arity=3 depth=1 -> dot snapshot with trailing newline 1`] = `
+"digraph Tree {
+  "t_0" [label="t_0"];
+  "t_1" [label="t_1"];
+  "t_2" [label="t_2"];
+  "t_3" [label="t_3"];
+  "t_0" -> "t_1";
+  "t_0" -> "t_2";
+  "t_0" -> "t_3";
+}
+"
+`;
+
+exports[`motor gen tree > arity=3 depth=1 -> inspect snapshot with trailing newline 1`] = `
+"nodes: "t_0" [t_0], "t_1" [t_1], "t_2" [t_2], "t_3" [t_3]
+edges:
+  "t_0" -> "t_1"
+  "t_0" -> "t_2"
+  "t_0" -> "t_3"
+"
+`;
