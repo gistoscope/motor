@@ -119,12 +119,12 @@ describe('web viewer', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
-    const copyDot = root.querySelector<HTMLButtonElement>('button[data-target="dot"]');
+    const copyDot = root.querySelector<HTMLButtonElement>('button[data-action="copy"][data-target="dot"]');
     copyDot!.click();
     await Promise.resolve();
     expect(clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('digraph'));
 
-    const copyInspect = root.querySelector<HTMLButtonElement>('button[data-target="inspect"]');
+    const copyInspect = root.querySelector<HTMLButtonElement>('button[data-action="copy"][data-target="inspect"]');
     copyInspect!.click();
     await Promise.resolve();
     expect(clipboard.writeText).toHaveBeenCalledWith(expect.stringContaining('nodes:'));

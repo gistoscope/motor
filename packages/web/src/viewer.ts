@@ -28,6 +28,10 @@ export interface ViewerHandle {
 
 const DASH = '—';
 
+function ensureTrailingNewline(text: string): string {
+  return text.endsWith('\n') ? text : `${text}\n`;
+}
+
 function resolveClipboard(option?: ClipboardWriter): ClipboardWriter {
   if (option) return option;
   if (typeof navigator !== 'undefined' && navigator?.clipboard?.writeText) {
@@ -100,6 +104,8 @@ function renderGraphUI(
   dotEl: HTMLElement,
   inspectEl: HTMLElement,
   svgEl: HTMLElement,
+  dotText: string,
+  inspectText: string,
 ) {
   const stats = size(graph);
   nodesEl.textContent = String(stats.nodes);
@@ -121,11 +127,9 @@ function renderGraphUI(
     }
   }
 
-  const dot = toDOT(graph);
-  dotEl.textContent = dot;
+  dotEl.textContent = dotText;
 
-  const inspectDump = inspect(graph);
-  inspectEl.textContent = inspectDump;
+  inspectEl.textContent = inspectText;
 
   renderSVG(svgEl, graph);
 }
@@ -138,10 +142,26 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       <section class="viewer__section viewer__section--input">
         <header class="viewer__section-header">
           <h2 class="viewer__title">Graph JSON</h2>
-          <button type="button" class="viewer__button" data-action="parse">Parse</button>
+          <div class="viewer__actions">
+            <button type="button" class="viewer__button" data-action="parse">Parse</button>
+            <button type="button" class="viewer__button viewer__button--secondary" data-action="import">Import</button>
+            <button type="button" class="viewer__button viewer__button--secondary" data-action="paste-open">Paste JSON</button>
+            <button type="button" class="viewer__button viewer__button--secondary" data-action="download" data-target="json">Download JSON</button>
+          </div>
         </header>
+        <input type="file" accept=".json,application/json" data-role="import-input" class="viewer__file-input" hidden />
         <textarea class="viewer__textarea" data-role="input" spellcheck="false"></textarea>
         <div class="viewer__errors" data-role="errors" aria-live="polite"></div>
+        <div class="viewer__paste" data-role="paste-panel" data-state="hidden" aria-hidden="true">
+          <div class="viewer__paste-card">
+            <h3 class="viewer__subtitle">Paste Graph JSON</h3>
+            <textarea class="viewer__textarea viewer__textarea--paste" data-role="paste-textarea" spellcheck="false"></textarea>
+            <div class="viewer__paste-actions">
+              <button type="button" class="viewer__button" data-action="paste-apply">Apply</button>
+              <button type="button" class="viewer__button viewer__button--secondary" data-action="paste-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
       </section>
       <section class="viewer__section viewer__section--stats">
         <h2 class="viewer__title">Stats</h2>
@@ -187,14 +207,19 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         <div class="viewer__export">
           <header class="viewer__section-header">
             <h2 class="viewer__title">DOT</h2>
-            <button type="button" class="viewer__button" data-action="copy" data-target="dot">Copy</button>
+            <div class="viewer__actions">
+              <button type="button" class="viewer__button viewer__button--secondary" data-action="download" data-target="dot">Download DOT</button>
+              <button type="button" class="viewer__button" data-action="copy" data-target="dot">Copy</button>
+            </div>
           </header>
           <pre class="viewer__code" data-role="dot-output"></pre>
         </div>
         <div class="viewer__export">
           <header class="viewer__section-header">
             <h2 class="viewer__title">Inspect</h2>
-            <button type="button" class="viewer__button" data-action="copy" data-target="inspect">Copy</button>
+            <div class="viewer__actions">
+              <button type="button" class="viewer__button" data-action="copy" data-target="inspect">Copy</button>
+            </div>
           </header>
           <pre class="viewer__code" data-role="inspect-output"></pre>
         </div>
@@ -205,63 +230,97 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
   const textarea = root.querySelector<HTMLTextAreaElement>('textarea[data-role="input"]');
   const parseButton = root.querySelector<HTMLButtonElement>('button[data-action="parse"]');
+  const importButton = root.querySelector<HTMLButtonElement>('button[data-action="import"]');
+  const pasteOpenButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-open"]');
+  const downloadButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="download"]'));
+  const importInput = root.querySelector<HTMLInputElement>('input[data-role="import-input"]');
   const errorsEl = root.querySelector<HTMLElement>('[data-role="errors"]');
+  const pastePanel = root.querySelector<HTMLElement>('[data-role="paste-panel"]');
+  const pasteTextarea = root.querySelector<HTMLTextAreaElement>('textarea[data-role="paste-textarea"]');
+  const pasteApplyButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-apply"]');
+  const pasteCancelButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-cancel"]');
   const nodesEl = root.querySelector<HTMLElement>('[data-role="stats-nodes"]');
   const edgesEl = root.querySelector<HTMLElement>('[data-role="stats-edges"]');
   const listEl = root.querySelector<HTMLElement>('[data-role="edges-list"]');
   const dotEl = root.querySelector<HTMLElement>('[data-role="dot-output"]');
-    const inspectEl = root.querySelector<HTMLElement>('[data-role="inspect-output"]');
-    const statusEl = root.querySelector<HTMLElement>('[data-role="copy-status"]');
-    const svgEl = root.querySelector<HTMLElement>('[data-role="svg-root"]');
-    const nodeInfoEl = root.querySelector<HTMLElement>('[data-role="node-info"]');
-    const nodeInfoIdEl = root.querySelector<HTMLElement>('[data-role="node-info-id"]');
-    const nodeInfoLabelEl = root.querySelector<HTMLElement>('[data-role="node-info-label"]');
-    const nodeInfoInEl = root.querySelector<HTMLElement>('[data-role="node-info-in"]');
-    const nodeInfoOutEl = root.querySelector<HTMLElement>('[data-role="node-info-out"]');
-    const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
+  const inspectEl = root.querySelector<HTMLElement>('[data-role="inspect-output"]');
+  const statusEl = root.querySelector<HTMLElement>('[data-role="copy-status"]');
+  const svgEl = root.querySelector<HTMLElement>('[data-role="svg-root"]');
+  const nodeInfoEl = root.querySelector<HTMLElement>('[data-role="node-info"]');
+  const nodeInfoIdEl = root.querySelector<HTMLElement>('[data-role="node-info-id"]');
+  const nodeInfoLabelEl = root.querySelector<HTMLElement>('[data-role="node-info-label"]');
+  const nodeInfoInEl = root.querySelector<HTMLElement>('[data-role="node-info-in"]');
+  const nodeInfoOutEl = root.querySelector<HTMLElement>('[data-role="node-info-out"]');
+  const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
 
-    if (
-      !textarea ||
-      !parseButton ||
-      !errorsEl ||
-      !nodesEl ||
-      !edgesEl ||
-      !listEl ||
-      !dotEl ||
-      !inspectEl ||
-      !statusEl ||
-      !svgEl ||
-      !nodeInfoEl ||
-      !nodeInfoIdEl ||
-      !nodeInfoLabelEl ||
-      !nodeInfoInEl ||
-      !nodeInfoOutEl
-    ) {
-      throw new Error('viewer: missing expected DOM nodes');
-    }
+  if (
+    !textarea ||
+    !parseButton ||
+    !importButton ||
+    !pasteOpenButton ||
+    downloadButtons.length === 0 ||
+    !importInput ||
+    !errorsEl ||
+    !pastePanel ||
+    !pasteTextarea ||
+    !pasteApplyButton ||
+    !pasteCancelButton ||
+    !nodesEl ||
+    !edgesEl ||
+    !listEl ||
+    !dotEl ||
+    !inspectEl ||
+    !statusEl ||
+    !svgEl ||
+    !nodeInfoEl ||
+    !nodeInfoIdEl ||
+    !nodeInfoLabelEl ||
+    !nodeInfoInEl ||
+    !nodeInfoOutEl
+  ) {
+    throw new Error('viewer: missing expected DOM nodes');
+  }
 
-    const textareaEl = textarea;
-    const parseBtn = parseButton;
-    const errorsNode = errorsEl;
-    const nodesNode = nodesEl;
-    const edgesNode = edgesEl;
-    const listNode = listEl;
-    const dotNode = dotEl;
-    const inspectNode = inspectEl;
-    const statusNode = statusEl;
-    const svgNode = svgEl;
-    const nodeInfoElements: NodeInfoElements = {
-      container: nodeInfoEl,
-      idValue: nodeInfoIdEl,
-      labelValue: nodeInfoLabelEl,
-      inDegreeValue: nodeInfoInEl,
-      outDegreeValue: nodeInfoOutEl,
-    };
+  const textareaEl = textarea;
+  const parseBtn = parseButton;
+  const importBtn = importButton;
+  const importInputEl = importInput;
+  const pasteBtn = pasteOpenButton;
+  const errorsNode = errorsEl;
+  const pastePanelEl = pastePanel;
+  const pasteTextareaEl = pasteTextarea;
+  const pasteApplyBtn = pasteApplyButton;
+  const pasteCancelBtn = pasteCancelButton;
+  const nodesNode = nodesEl;
+  const edgesNode = edgesEl;
+  const listNode = listEl;
+  const dotNode = dotEl;
+  const inspectNode = inspectEl;
+  const statusNode = statusEl;
+  const svgNode = svgEl;
+  const nodeInfoElements: NodeInfoElements = {
+    container: nodeInfoEl,
+    idValue: nodeInfoIdEl,
+    labelValue: nodeInfoLabelEl,
+    inDegreeValue: nodeInfoInEl,
+    outDegreeValue: nodeInfoOutEl,
+  };
 
-    const setStatus = createStatusSetter(statusNode);
-    let nodeStats = new Map<string, NodeInfo>();
-    let hoveredNodeId: string | null = null;
-    let selectedNodeId: string | null = null;
+  const setStatus = createStatusSetter(statusNode);
+  let nodeStats = new Map<string, NodeInfo>();
+  let hoveredNodeId: string | null = null;
+  let selectedNodeId: string | null = null;
+  let currentGraph: GraspGraph | null = null;
+  let currentJSONText = '';
+  let currentDOTText = '';
+  let currentInspectText = '';
+
+  function clearGraphOutputs() {
+    currentGraph = null;
+    currentJSONText = '';
+    currentDOTText = '';
+    currentInspectText = '';
+  }
 
     function computeNodeStats(graph: GraspGraph): Map<string, NodeInfo> {
       const stats = new Map<string, NodeInfo>();
@@ -395,25 +454,27 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
   }
 
-  function parseAndRender() {
+  function processGraphInput(raw: string, options: { updateTextarea: boolean }): boolean {
     setStatus('');
-    const raw = textareaEl.value.trim();
-    if (!raw) {
+    const trimmed = raw.trim();
+    if (!trimmed) {
       showErrors(['Input is empty']);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
-      return;
+      clearGraphOutputs();
+      return false;
     }
 
     let data: unknown;
     try {
-      data = JSON.parse(raw);
+      data = JSON.parse(trimmed);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown JSON parse error';
       showErrors([`Invalid JSON: ${msg}`]);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
-      return;
+      clearGraphOutputs();
+      return false;
     }
 
     const validation = validateGraphJSON(data);
@@ -421,18 +482,134 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       showErrors(validation.errors);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
       clearInteractionState();
-      return;
+      clearGraphOutputs();
+      return false;
     }
 
     const graph = fromJSON(data);
+    const jsonText = ensureTrailingNewline(JSON.stringify(data, null, 2));
+    const dotText = ensureTrailingNewline(toDOT(graph));
+    const inspectText = ensureTrailingNewline(inspect(graph));
+
+    if (options.updateTextarea) {
+      textareaEl.value = jsonText;
+    }
+
     showErrors([]);
-    renderGraphUI(graph, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode);
+    renderGraphUI(graph, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, dotText, inspectText);
     nodeStats = computeNodeStats(graph);
     hoveredNodeId = null;
     selectedNodeId = null;
     resetNodeInfoPanel(nodeInfoElements);
     syncNodeClasses();
     syncEdgeClasses();
+
+    currentGraph = graph;
+    currentJSONText = jsonText;
+    currentDOTText = dotText;
+    currentInspectText = inspectText;
+
+    return true;
+  }
+
+  function parseAndRender() {
+    processGraphInput(textareaEl.value, { updateTextarea: true });
+  }
+
+  function startDownload(filename: string, content: string, mimeType: string) {
+    const blob = new Blob([content], { type: mimeType });
+    const canUseObjectURL = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function';
+    const href = canUseObjectURL ? URL.createObjectURL(blob) : `data:${mimeType},${encodeURIComponent(content)}`;
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    if (canUseObjectURL && typeof URL.revokeObjectURL === 'function') {
+      URL.revokeObjectURL(href);
+    }
+  }
+
+  function handleDownload(ev: Event) {
+    const button = ev.currentTarget as HTMLButtonElement | null;
+    if (!button) return;
+    const target = button.dataset.target;
+    let content = '';
+    let filename = '';
+    let mimeType = 'text/plain;charset=utf-8';
+    let label = 'Export';
+    if (target === 'json') {
+      content = currentJSONText;
+      filename = 'graph.json';
+      mimeType = 'application/json;charset=utf-8';
+      label = 'JSON';
+    } else if (target === 'dot') {
+      content = currentDOTText;
+      filename = 'graph.dot';
+      mimeType = 'text/vnd.graphviz;charset=utf-8';
+      label = 'DOT';
+    } else {
+      return;
+    }
+
+    if (!content) {
+      setStatus(`No ${label} available to download`, 'error');
+      return;
+    }
+
+    try {
+      startDownload(filename, content, mimeType);
+      setStatus(`${label} download started.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setStatus(`Download failed: ${message}`, 'error');
+    }
+  }
+
+  function openPastePanel() {
+    pastePanelEl.dataset.state = 'visible';
+    pastePanelEl.setAttribute('aria-hidden', 'false');
+    pasteTextareaEl.value = '';
+    pasteTextareaEl.focus();
+  }
+
+  function closePastePanel() {
+    pastePanelEl.dataset.state = 'hidden';
+    pastePanelEl.setAttribute('aria-hidden', 'true');
+    pasteTextareaEl.value = '';
+  }
+
+  function handlePasteApply() {
+    const ok = processGraphInput(pasteTextareaEl.value, { updateTextarea: true });
+    if (ok) {
+      closePastePanel();
+    }
+  }
+
+  function handleImportChange(files: FileList | null) {
+    if (!files || files.length === 0) {
+      return;
+    }
+    const file = files[0];
+    file
+      .text()
+      .then((content) => {
+        const ok = processGraphInput(content, { updateTextarea: true });
+        if (ok) {
+          setStatus('File imported successfully.');
+        }
+      })
+      .catch((err) => {
+        const message = err instanceof Error ? err.message : String(err);
+        showErrors([`Failed to read file: ${message}`]);
+        resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
+        clearInteractionState();
+        clearGraphOutputs();
+      })
+      .finally(() => {
+        importInputEl.value = '';
+      });
   }
 
   function handleCopy(ev: Event) {
@@ -440,9 +617,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     if (!button) return;
     const target = button.dataset.target;
     const label = target === 'inspect' ? 'Inspect' : 'DOT';
-    const source = target === 'inspect' ? inspectNode : dotNode;
-    const raw = source.textContent ?? '';
-    if (raw.trim() === '') {
+    const raw = target === 'inspect' ? currentInspectText : currentDOTText;
+    if (!raw) {
       setStatus(`${label} output is empty`, 'error');
       return;
     }
@@ -456,6 +632,21 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       });
   }
 
+  const handleImportButtonClick = () => importInputEl.click();
+  const handleImportInputChange = () => handleImportChange(importInputEl.files);
+  const handlePasteCancel = () => closePastePanel();
+  const handlePasteKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closePastePanel();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      handlePasteApply();
+    }
+  };
+
   parseBtn.addEventListener('click', parseAndRender);
   const handleKeydown = (event: KeyboardEvent) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
@@ -464,7 +655,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
   };
   textareaEl.addEventListener('keydown', handleKeydown);
+  importBtn.addEventListener('click', handleImportButtonClick);
+  importInputEl.addEventListener('change', handleImportInputChange);
+  pasteBtn.addEventListener('click', openPastePanel);
+  pasteApplyBtn.addEventListener('click', handlePasteApply);
+  pasteCancelBtn.addEventListener('click', handlePasteCancel);
+  pasteTextareaEl.addEventListener('keydown', handlePasteKeydown);
   copyButtons.forEach((btn) => btn.addEventListener('click', handleCopy));
+  downloadButtons.forEach((btn) => btn.addEventListener('click', handleDownload));
   const handleNodeHoverEvent = (event: Event) => {
     const detail = (event as CustomEvent<{ nodeId: string | null }>).detail;
     handleHover(detail?.nodeId ?? null);
@@ -495,7 +693,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     destroy: () => {
       parseBtn.removeEventListener('click', parseAndRender);
       textareaEl.removeEventListener('keydown', handleKeydown);
+      importBtn.removeEventListener('click', handleImportButtonClick);
+      importInputEl.removeEventListener('change', handleImportInputChange);
+      pasteBtn.removeEventListener('click', openPastePanel);
+      pasteApplyBtn.removeEventListener('click', handlePasteApply);
+      pasteCancelBtn.removeEventListener('click', handlePasteCancel);
+      pasteTextareaEl.removeEventListener('keydown', handlePasteKeydown);
       copyButtons.forEach((btn) => btn.removeEventListener('click', handleCopy));
+      downloadButtons.forEach((btn) => btn.removeEventListener('click', handleDownload));
       svgNode.removeEventListener('motor:node-hover', handleNodeHoverEvent);
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);
