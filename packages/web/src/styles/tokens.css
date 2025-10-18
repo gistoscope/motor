@@ -1,0 +1,155 @@
+:root {
+  color-scheme: light dark;
+
+  /* Neutral ramp */
+  --motor-neutral-0: #ffffff;
+  --motor-neutral-5: #f8fafc;
+  --motor-neutral-10: #f1f5f9;
+  --motor-neutral-20: #e2e8f0;
+  --motor-neutral-40: #cbd5f5;
+  --motor-neutral-60: #94a3b8;
+  --motor-neutral-70: #64748b;
+  --motor-neutral-80: #475569;
+  --motor-neutral-90: #1f2937;
+  --motor-neutral-95: #0f172a;
+
+  /* Accent ramp */
+  --motor-accent-primary: #2563eb;
+  --motor-accent-primary-soft: #dbeafe;
+  --motor-accent-secondary: #0f766e;
+  --motor-accent-secondary-soft: #ccfbf1;
+  --motor-accent-highlight: #f97316;
+  --motor-accent-cycle: #dc2626;
+  --motor-accent-focus: #0ea5e9;
+
+  /* Viewer tokens */
+  --motor-surface-base: var(--motor-neutral-5);
+  --motor-surface-raised: var(--motor-neutral-0);
+  --motor-surface-overlay: rgba(15, 23, 42, 0.35);
+  --motor-border-subtle: rgba(15, 23, 42, 0.08);
+  --motor-border-strong: rgba(15, 23, 42, 0.12);
+  --motor-shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.06);
+  --motor-shadow-strong: 0 18px 36px rgba(15, 23, 42, 0.2);
+  --motor-text-primary: var(--motor-neutral-95);
+  --motor-text-secondary: var(--motor-neutral-80);
+  --motor-text-muted: var(--motor-neutral-70);
+  --motor-text-disabled: rgba(148, 163, 184, 0.8);
+  --motor-focus-ring: rgba(14, 116, 144, 0.4);
+  --motor-accent-info: #0369a1;
+  --motor-button-primary-bg: #0f172a;
+  --motor-button-primary-fg: #ffffff;
+  --motor-button-primary-shadow: 0 6px 12px rgba(15, 23, 42, 0.12);
+  --motor-button-secondary-bg: #e2e8f0;
+  --motor-button-secondary-fg: #0f172a;
+  --motor-button-secondary-shadow: 0 6px 12px rgba(148, 163, 184, 0.35);
+  --motor-border-card: var(--motor-border-subtle);
+  --motor-surface-muted: var(--motor-neutral-5);
+  --motor-code-surface: #0f172a;
+  --motor-code-text: #e2e8f0;
+
+  /* Graph tokens */
+  --motor-graph-node-fill: var(--motor-neutral-0);
+  --motor-graph-node-stroke: #1e293b;
+  --motor-graph-node-label: var(--motor-text-primary);
+  --motor-graph-node-hover-stroke: var(--motor-accent-highlight);
+  --motor-graph-node-hover-fill: var(--motor-neutral-0);
+  --motor-graph-node-selected-stroke: var(--motor-accent-primary);
+  --motor-graph-node-selected-fill: color-mix(in srgb, var(--motor-accent-primary) 12%, transparent);
+  --motor-graph-node-path-stroke: var(--motor-accent-secondary);
+  --motor-graph-node-path-fill: color-mix(in srgb, var(--motor-accent-secondary) 18%, transparent);
+  --motor-graph-node-cycle-stroke: #f87171;
+  --motor-graph-node-cycle-fill: color-mix(in srgb, var(--motor-accent-cycle) 18%, transparent);
+  --motor-graph-edge-stroke: #94a3b8;
+  --motor-graph-edge-marker: #94a3b8;
+  --motor-graph-edge-hover-stroke: var(--motor-accent-highlight);
+  --motor-graph-edge-selected-stroke: var(--motor-accent-primary);
+  --motor-graph-edge-path-stroke: var(--motor-accent-secondary);
+  --motor-graph-edge-cycle-stroke: var(--motor-accent-cycle);
+  --motor-graph-node-stroke-width: 1.5;
+  --motor-graph-node-hover-stroke-width: 1.75;
+  --motor-graph-node-selected-stroke-width: 2;
+  --motor-graph-node-path-stroke-width: 2;
+  --motor-graph-node-cycle-stroke-width: 2;
+  --motor-graph-edge-stroke-width: 1;
+  --motor-graph-edge-hover-stroke-width: 1.5;
+  --motor-graph-edge-strong-stroke-width: 2;
+  --motor-graph-disabled-opacity: 0.35;
+  --motor-transition-fast: 140ms ease;
+  --motor-transition-medium: 160ms ease;
+
+  /* SCC buckets */
+  --motor-scc-0-fill: color-mix(in srgb, var(--motor-accent-primary) 18%, transparent);
+  --motor-scc-0-stroke: var(--motor-accent-primary);
+  --motor-scc-1-fill: color-mix(in srgb, var(--motor-accent-secondary) 22%, transparent);
+  --motor-scc-1-stroke: var(--motor-accent-secondary);
+  --motor-scc-2-fill: color-mix(in srgb, #f59e0b 22%, transparent);
+  --motor-scc-2-stroke: #b45309;
+  --motor-scc-3-fill: color-mix(in srgb, var(--motor-accent-cycle) 22%, transparent);
+  --motor-scc-3-stroke: #b91c1c;
+  --motor-scc-4-fill: color-mix(in srgb, #9333ea 22%, transparent);
+  --motor-scc-4-stroke: #7c3aed;
+  --motor-scc-5-fill: color-mix(in srgb, #22c55e 22%, transparent);
+  --motor-scc-5-stroke: #16a34a;
+  --motor-scc-6-fill: color-mix(in srgb, #0d9488 24%, transparent);
+  --motor-scc-6-stroke: #0f766e;
+  --motor-scc-7-fill: color-mix(in srgb, #f472b6 24%, transparent);
+  --motor-scc-7-stroke: #db2777;
+}
+
+.motor-contrast--high {
+  color-scheme: dark;
+
+  --motor-neutral-0: #0b1120;
+  --motor-neutral-5: #0f172a;
+  --motor-neutral-10: #111827;
+  --motor-neutral-20: #1e293b;
+  --motor-neutral-40: #334155;
+  --motor-neutral-60: #64748b;
+  --motor-neutral-70: #94a3b8;
+  --motor-neutral-80: #cbd5f5;
+  --motor-neutral-90: #e2e8f0;
+  --motor-neutral-95: #f8fafc;
+
+  --motor-accent-primary: #60a5fa;
+  --motor-accent-primary-soft: color-mix(in srgb, var(--motor-accent-primary) 24%, transparent);
+  --motor-accent-secondary: #2dd4bf;
+  --motor-accent-secondary-soft: color-mix(in srgb, var(--motor-accent-secondary) 28%, transparent);
+  --motor-accent-highlight: #fbbf24;
+  --motor-accent-cycle: #f87171;
+  --motor-accent-focus: rgba(125, 211, 252, 0.65);
+
+  --motor-surface-base: var(--motor-neutral-0);
+  --motor-surface-raised: var(--motor-neutral-10);
+  --motor-surface-overlay: rgba(15, 23, 42, 0.55);
+  --motor-border-subtle: rgba(226, 232, 240, 0.24);
+  --motor-border-strong: rgba(226, 232, 240, 0.35);
+  --motor-shadow-soft: 0 8px 24px rgba(2, 6, 23, 0.65);
+  --motor-shadow-strong: 0 20px 40px rgba(2, 6, 23, 0.75);
+  --motor-text-primary: var(--motor-neutral-95);
+  --motor-text-secondary: var(--motor-neutral-80);
+  --motor-text-muted: color-mix(in srgb, var(--motor-neutral-80) 80%, transparent);
+  --motor-text-disabled: rgba(148, 163, 184, 0.6);
+  --motor-focus-ring: var(--motor-accent-focus);
+  --motor-accent-info: #38bdf8;
+  --motor-button-primary-bg: var(--motor-accent-primary);
+  --motor-button-primary-fg: #0b1120;
+  --motor-button-primary-shadow: 0 6px 14px rgba(96, 165, 250, 0.35);
+  --motor-button-secondary-bg: #1f2937;
+  --motor-button-secondary-fg: var(--motor-neutral-95);
+  --motor-button-secondary-shadow: 0 6px 14px rgba(148, 163, 184, 0.45);
+  --motor-border-card: var(--motor-border-subtle);
+  --motor-surface-muted: color-mix(in srgb, var(--motor-neutral-10) 92%, transparent);
+  --motor-code-surface: color-mix(in srgb, var(--motor-neutral-0) 92%, transparent);
+  --motor-code-text: var(--motor-neutral-90);
+
+  --motor-graph-node-fill: var(--motor-neutral-10);
+  --motor-graph-node-stroke: var(--motor-neutral-95);
+  --motor-graph-node-label: var(--motor-neutral-95);
+  --motor-graph-node-hover-fill: var(--motor-neutral-10);
+  --motor-graph-node-selected-fill: color-mix(in srgb, var(--motor-accent-primary) 35%, transparent);
+  --motor-graph-node-path-fill: color-mix(in srgb, var(--motor-accent-secondary) 38%, transparent);
+  --motor-graph-node-cycle-fill: color-mix(in srgb, var(--motor-accent-cycle) 36%, transparent);
+  --motor-graph-edge-stroke: var(--motor-neutral-80);
+  --motor-graph-edge-marker: var(--motor-neutral-80);
+  --motor-graph-disabled-opacity: 0.45;
+}
