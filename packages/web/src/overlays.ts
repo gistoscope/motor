@@ -19,7 +19,7 @@ export interface ShortestPathOverlayState {
 }
 
 export interface OverlayController {
-  setAnalysis(analysis: GraphAnalysis | null): void;
+  setAnalysis(analysis: GraphAnalysis | null | PromiseLike<GraphAnalysis | null>): void;
   setShortestPath(state: ShortestPathOverlayState): void;
   destroy(): void;
 }
@@ -28,6 +28,32 @@ export interface OverlayOptions {
   svgRoot: HTMLElement;
   toggles: ToggleMap;
   panel: AnalysisPanelElements;
+}
+
+type FrameHandle = number;
+
+type PendingOptions = { pending?: boolean };
+
+const canUseRaf =
+  typeof requestAnimationFrame === 'function' && typeof cancelAnimationFrame === 'function';
+const isHappyDom =
+  typeof navigator !== 'undefined' && /HappyDOM/i.test(navigator.userAgent ?? '');
+const shouldUseRaf = canUseRaf && !isHappyDom;
+
+const scheduleMicrotask: (callback: () => void) => void =
+  typeof queueMicrotask === 'function'
+    ? queueMicrotask
+    : (callback) => {
+        Promise.resolve().then(callback);
+      };
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'then' in (value as { then?: unknown }) &&
+    typeof (value as { then?: unknown }).then === 'function'
+  );
 }
 
 function findSccClass(list: DOMTokenList): string | null {
@@ -139,8 +165,11 @@ function applyShortestOverlay(
 export function createOverlayController(options: OverlayOptions): OverlayController {
   let currentAnalysis: GraphAnalysis | null = null;
   let currentShortest: ShortestPathOverlayState = { available: false, nodes: [], edges: [] };
+  let frameHandle: FrameHandle | null = null;
+  let pendingAnalysisToken = 0;
+  let microtaskPending = false;
 
-  const apply = () => {
+  const flush = () => {
     applySccOverlay(options.svgRoot, currentAnalysis, options.toggles.scc.checked);
     applyCycleOverlay(options.svgRoot, currentAnalysis, options.toggles.cycles.checked);
     applyShortestOverlay(
@@ -148,6 +177,43 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
       currentShortest,
       options.toggles.shortest.checked && currentShortest.available,
     );
+  };
+
+  const scheduleFlush = () => {
+    if (shouldUseRaf) {
+      if (frameHandle !== null) {
+        return;
+      }
+      frameHandle = requestAnimationFrame(() => {
+        frameHandle = null;
+        flush();
+      });
+      return;
+    }
+
+    if (microtaskPending) {
+      return;
+    }
+    microtaskPending = true;
+    scheduleMicrotask(() => {
+      if (!microtaskPending) {
+        return;
+      }
+      microtaskPending = false;
+      flush();
+    });
+  };
+
+  const cancelFlush = () => {
+    if (shouldUseRaf) {
+      if (frameHandle !== null) {
+        cancelAnimationFrame(frameHandle);
+        frameHandle = null;
+      }
+      return;
+    }
+
+    microtaskPending = false;
   };
 
   const updatePanel = () => {
@@ -165,32 +231,65 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
     }
   };
 
+  const applyAnalysisValue = (analysis: GraphAnalysis | null, optionsOverride: PendingOptions = {}) => {
+    const pending = Boolean(optionsOverride.pending);
+    currentAnalysis = analysis;
+
+    const hasData = Boolean(analysis);
+    const sccToggle = options.toggles.scc;
+    const cyclesToggle = options.toggles.cycles;
+    const shortestToggle = options.toggles.shortest;
+
+    sccToggle.disabled = pending || !hasData;
+    cyclesToggle.disabled = pending || !hasData;
+    if (!hasData && !pending) {
+      sccToggle.checked = false;
+      cyclesToggle.checked = false;
+    }
+
+    if (pending) {
+      shortestToggle.disabled = true;
+    } else {
+      if (!hasData || !currentShortest.available) {
+        shortestToggle.checked = false;
+      }
+      shortestToggle.disabled = !hasData || !currentShortest.available;
+    }
+
+    updatePanel();
+    scheduleFlush();
+  };
+
   const handleToggleChange = () => {
-    apply();
+    scheduleFlush();
   };
 
   Object.values(options.toggles).forEach((toggle) => {
     toggle.addEventListener('change', handleToggleChange);
   });
 
-  const setAnalysis = (analysis: GraphAnalysis | null) => {
-    currentAnalysis = analysis;
-    const hasData = Boolean(analysis);
-    options.toggles.scc.disabled = !hasData;
-    options.toggles.cycles.disabled = !hasData;
-    if (!hasData) {
-      options.toggles.scc.checked = false;
-      options.toggles.cycles.checked = false;
+  const setAnalysis = (analysis: GraphAnalysis | null | PromiseLike<GraphAnalysis | null>) => {
+    const token = ++pendingAnalysisToken;
+
+    if (isPromiseLike<GraphAnalysis | null>(analysis)) {
+      applyAnalysisValue(null, { pending: true });
+      Promise.resolve(analysis)
+        .then((value) => {
+          if (token !== pendingAnalysisToken) {
+            return;
+          }
+          applyAnalysisValue(value ?? null);
+        })
+        .catch(() => {
+          if (token !== pendingAnalysisToken) {
+            return;
+          }
+          applyAnalysisValue(null);
+        });
+      return;
     }
 
-    const shortestToggle = options.toggles.shortest;
-    if (!hasData || !currentShortest.available) {
-      shortestToggle.checked = false;
-    }
-    shortestToggle.disabled = !hasData || !currentShortest.available;
-
-    updatePanel();
-    apply();
+    applyAnalysisValue(analysis);
   };
 
   const setShortestPath = (state: ShortestPathOverlayState) => {
@@ -205,13 +304,14 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
     }
     options.toggles.shortest.disabled = !currentAnalysis || !currentShortest.available;
 
-    apply();
+    scheduleFlush();
   };
 
   const destroy = () => {
     Object.values(options.toggles).forEach((toggle) => {
       toggle.removeEventListener('change', handleToggleChange);
     });
+    cancelFlush();
     currentAnalysis = null;
     currentShortest = { available: false, nodes: [], edges: [] };
   };
