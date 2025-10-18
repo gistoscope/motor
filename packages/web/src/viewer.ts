@@ -21,6 +21,8 @@ import {
 } from './analysis';
 import { createOverlayController, type AnalysisPanelElements } from './overlays';
 import { initHelp, type HelpOverlayHandle } from './ui/help';
+import { attachMathEngine } from './math/bridge';
+import type { MathBridgeHandle, MathBridgeOptions, MathEngine } from './math/types';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -1135,3 +1137,11 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 }
 
 export default createViewer;
+
+export function initMathBridge(
+  container: HTMLElement,
+  engine: MathEngine,
+  options: MathBridgeOptions = {},
+): MathBridgeHandle {
+  return attachMathEngine(null, engine, container, options);
+}
