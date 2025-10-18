@@ -127,19 +127,35 @@ Common flags:
   --name NAME     Graph name for DOT (default: G)
 
 Examples:
+  # inspect from file
   motor inspect --in graph.json
-  cat graph.json | motor dot --name T
-  motor json --in graph.json > normalized.json
+  # dot with graph name
+  cat graph.json | motor dot --name G
+  # json normalize to file
+  motor json --in graph.json --out normalized.json
+  # validate from stdin
   cat graph.json | motor validate
-  motor validate --in graph.json
+  # generate chain and print stats (text + json)
   motor gen --kind chain --n 3 --format inspect
-  motor stats --in "C:\\path with spaces\\graph.json" --format json --out "C:\\path with spaces\\stats.json"
+  motor gen --kind chain --n 3 --format json | motor stats --format json
+  # handle paths with spaces
+  motor dot --in "C:\\tmp\\my graph.json" --out "C:\\tmp\\my graph.dot"
 `
   );
 }
 // <<HELP:END>>
 
 function withNL(s) { return s.endsWith('\n') ? s : (s + '\n'); }
+
+function printError(msg) {
+  const text = String(msg);
+  process.stderr.write(text.endsWith('\n') ? text : text + '\n');
+}
+
+function die(msg, code = 1) {
+  printError(msg);
+  process.exit(code);
+}
 
 async function writeOutput(text, outPath) {
   const data = withNL(text);
@@ -198,13 +214,11 @@ function readGraphJSON(flags) {
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write('Failed to read input: ' + msg + '\n');
-    process.exit(1);
+    die('Failed to read input: ' + msg);
   }
 
   if (!inFile && text === '') {
-    process.stderr.write('no input; provide --in FILE or pipe JSON\n');
-    process.exit(1);
+    die('no input; provide --in FILE or pipe JSON');
   }
 
   let parsed;
@@ -212,14 +226,13 @@ function readGraphJSON(flags) {
     parsed = JSON.parse(text);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    process.stderr.write('invalid JSON: ' + msg + '\n');
-    process.exit(1);
+    die('invalid JSON: ' + msg);
   }
 
   const validation = validateGraphJSON(parsed);
   if (!validation.ok) {
-    process.stderr.write('Invalid GraphJSON:\n');
-    validation.errors.forEach(m => process.stderr.write('- ' + m + '\n'));
+    printError('Invalid GraphJSON:');
+    validation.errors.forEach(m => printError('- ' + m));
     process.exit(1);
   }
 
@@ -262,7 +275,7 @@ async function cmdValidate(flags) {
       process.stdin.resume();
     });
     if (!text) {
-      process.stderr.write('no input; provide --in FILE or pipe JSON\n');
+      printError('no input; provide --in FILE or pipe JSON');
       process.exitCode = 1;
       return;
     }
@@ -270,12 +283,12 @@ async function cmdValidate(flags) {
   let obj;
   try { obj = JSON.parse(text); }
   catch (e) {
-    process.stderr.write('invalid JSON: ' + (e && e.message ? e.message : String(e)) + '\n');
+    printError('invalid JSON: ' + (e && e.message ? e.message : String(e)));
     process.exitCode = 1; return;
   }
   const res = validateGraphJSON(obj);
   if (res.ok) { process.stdout.write('OK\n'); process.exitCode = 0; }
-  else { for (const m of res.errors) process.stderr.write('- ' + m + '\n'); process.exitCode = 1; }
+  else { for (const m of res.errors) printError('- ' + m); process.exitCode = 1; }
 }
 
 async function cmdStats(flags) {
@@ -306,8 +319,7 @@ async function cmdStats(flags) {
     ];
     await writeOutput(lines.join('\n'), flags.get('out'));
   } else {
-    process.stderr.write('invalid --format; expected text|json\n');
-    process.exit(1);
+    die('invalid --format; expected text|json');
   }
 }
 
@@ -319,28 +331,24 @@ async function cmdGen(flags) {
 
   const allowedKinds = ['chain','cycle','star','grid','tree','bipartite'];
   if (!kind || !allowedKinds.includes(kind)) {
-    process.stderr.write('invalid --kind; expected chain|cycle|star|grid|tree|bipartite\n');
-    process.exit(1);
+    die('invalid --kind; expected chain|cycle|star|grid|tree|bipartite');
   }
   if (!['json','dot','inspect'].includes(fmt)) {
-    process.stderr.write('invalid --format; expected json|dot|inspect\n');
-    process.exit(1);
+    die('invalid --format; expected json|dot|inspect');
   }
 
   let g;
   const ensurePositive = (val, flagName) => {
     const n = Number(val);
     if (!Number.isInteger(n) || n <= 0) {
-      process.stderr.write(`invalid --${flagName}; must be a positive integer\n`);
-      process.exit(1);
+      die(`invalid --${flagName}; must be a positive integer`);
     }
     return n;
   };
   const ensureNonNegative = (val, flagName) => {
     const n = Number(val);
     if (!Number.isInteger(n) || n < 0) {
-      process.stderr.write(`invalid --${flagName}; must be a non-negative integer\n`);
-      process.exit(1);
+      die(`invalid --${flagName}; must be a non-negative integer`);
     }
     return n;
   };
@@ -348,8 +356,7 @@ async function cmdGen(flags) {
   if (kind === 'chain' || kind === 'cycle' || kind === 'star') {
     const nRaw = flags.get('n');
     if (nRaw === undefined) {
-      process.stderr.write('chain|cycle|star kinds require --n\n');
-      process.exit(1);
+      die('chain|cycle|star kinds require --n');
     }
     const n = ensurePositive(nRaw, 'n');
     if (kind === 'chain') g = genChain(n);
@@ -359,8 +366,7 @@ async function cmdGen(flags) {
     const rowsRaw = flags.get('rows');
     const colsRaw = flags.get('cols');
     if (rowsRaw === undefined || colsRaw === undefined) {
-      process.stderr.write('grid kind requires --rows and --cols\n');
-      process.exit(1);
+      die('grid kind requires --rows and --cols');
     }
     const rows = ensurePositive(rowsRaw, 'rows');
     const cols = ensurePositive(colsRaw, 'cols');
@@ -369,8 +375,7 @@ async function cmdGen(flags) {
     const arityRaw = flags.get('arity');
     const depthRaw = flags.get('depth');
     if (arityRaw === undefined || depthRaw === undefined) {
-      process.stderr.write('tree kind requires --arity and --depth\n');
-      process.exit(1);
+      die('tree kind requires --arity and --depth');
     }
     const arity = ensurePositive(arityRaw, 'arity');
     const depth = ensureNonNegative(depthRaw, 'depth');
@@ -379,8 +384,7 @@ async function cmdGen(flags) {
     const leftRaw = flags.get('left');
     const rightRaw = flags.get('right');
     if (leftRaw === undefined || rightRaw === undefined) {
-      process.stderr.write('bipartite kind requires --left and --right\n');
-      process.exit(1);
+      die('bipartite kind requires --left and --right');
     }
     const left = ensureNonNegative(leftRaw, 'left');
     const right = ensureNonNegative(rightRaw, 'right');
@@ -430,8 +434,7 @@ async function main(argv) {
   if (cmd === 'stats')    return cmdStats(flags);
   if (cmd === 'gen')      return cmdGen(flags);
 
-  process.stderr.write('Unknown command: ' + String(cmd) + '\n');
-  process.exit(1);
+  die('Unknown command: ' + String(cmd));
 }
 // <<MAIN:END>>
 
