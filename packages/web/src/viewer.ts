@@ -9,6 +9,7 @@ import {
   edges as listEdges,
   type GraspGraph,
 } from '@motor/grasp';
+import { renderSVG } from './svg';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -51,6 +52,7 @@ function resetGraphUI(
   listEl: HTMLElement,
   dotEl: HTMLElement,
   inspectEl: HTMLElement,
+  svgEl: HTMLElement,
 ) {
   nodesEl.textContent = DASH;
   edgesEl.textContent = DASH;
@@ -61,6 +63,7 @@ function resetGraphUI(
   listEl.appendChild(empty);
   dotEl.textContent = '';
   inspectEl.textContent = '';
+  svgEl.innerHTML = '';
 }
 
 function renderGraphUI(
@@ -70,6 +73,7 @@ function renderGraphUI(
   listEl: HTMLElement,
   dotEl: HTMLElement,
   inspectEl: HTMLElement,
+  svgEl: HTMLElement,
 ) {
   const stats = size(graph);
   nodesEl.textContent = String(stats.nodes);
@@ -96,6 +100,8 @@ function renderGraphUI(
 
   const inspectDump = inspect(graph);
   inspectEl.textContent = inspectDump;
+
+  renderSVG(svgEl, graph);
 }
 
 export function createViewer(root: HTMLElement, options: ViewerOptions = {}): ViewerHandle {
@@ -126,6 +132,10 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         <h3 class="viewer__subtitle">Edges</h3>
         <ul class="viewer__edges" data-role="edges-list"></ul>
       </section>
+      <section class="viewer__section viewer__section--preview">
+        <h2 class="viewer__title">Preview</h2>
+        <div class="viewer__preview" data-role="svg-root" aria-live="polite"></div>
+      </section>
       <section class="viewer__section viewer__section--exports">
         <div class="viewer__export">
           <header class="viewer__section-header">
@@ -155,9 +165,10 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const dotEl = root.querySelector<HTMLElement>('[data-role="dot-output"]');
   const inspectEl = root.querySelector<HTMLElement>('[data-role="inspect-output"]');
   const statusEl = root.querySelector<HTMLElement>('[data-role="copy-status"]');
+  const svgEl = root.querySelector<HTMLElement>('[data-role="svg-root"]');
   const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
 
-  if (!textarea || !parseButton || !errorsEl || !nodesEl || !edgesEl || !listEl || !dotEl || !inspectEl || !statusEl) {
+  if (!textarea || !parseButton || !errorsEl || !nodesEl || !edgesEl || !listEl || !dotEl || !inspectEl || !statusEl || !svgEl) {
     throw new Error('viewer: missing expected DOM nodes');
   }
 
@@ -170,6 +181,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const dotNode = dotEl;
   const inspectNode = inspectEl;
   const statusNode = statusEl;
+  const svgNode = svgEl;
 
   const setStatus = createStatusSetter(statusNode);
 
@@ -188,7 +200,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     const raw = textareaEl.value.trim();
     if (!raw) {
       showErrors(['Input is empty']);
-      resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode);
+      resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode);
       return;
     }
 
@@ -198,20 +210,20 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown JSON parse error';
       showErrors([`Invalid JSON: ${msg}`]);
-      resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode);
+      resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode);
       return;
     }
 
     const validation = validateGraphJSON(data);
     if (!validation.ok) {
       showErrors(validation.errors);
-      resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode);
+      resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode);
       return;
     }
 
     const graph = fromJSON(data);
     showErrors([]);
-    renderGraphUI(graph, nodesNode, edgesNode, listNode, dotNode, inspectNode);
+    renderGraphUI(graph, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode);
   }
 
   function handleCopy(ev: Event) {
@@ -246,7 +258,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   copyButtons.forEach((btn) => btn.addEventListener('click', handleCopy));
 
   textareaEl.value = options.initialJSON ?? '';
-  resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode);
+  resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode);
   if (textareaEl.value.trim()) {
     parseAndRender();
   }
