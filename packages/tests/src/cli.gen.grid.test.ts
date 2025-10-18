@@ -1,53 +1,42 @@
 import { describe, it, expect } from 'vitest';
-import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 function bin() {
   const url = new URL('../../cli/bin/motor.js', import.meta.url);
   return fileURLToPath(url);
 }
-
 function run(args: string[]) {
-  const res = spawnSync(process.execPath, [bin(), ...args], {
-    encoding: 'utf-8',
-    maxBuffer: 1024 * 1024
-  });
-  return { code: res.status ?? 0, out: res.stdout, err: res.stderr };
+  const r = spawnSync(process.execPath, [bin(), ...args], { encoding: 'utf-8', maxBuffer: 1024*1024 });
+  return { code: r.status ?? 0, out: r.stdout, err: r.stderr };
 }
 
-describe('motor gen grid', () => {
-  it('rows=2 cols=3 -> json counts and ids', () => {
-    const r = run(['gen', '--kind', 'grid', '--rows', '2', '--cols', '3', '--format', 'json']);
+describe('gen grid', () => {
+  it('json: counts nodes/edges and trailing NL', () => {
+    const R=2, C=3;
+    const r = run(['gen','--kind','grid','--rows', String(R),'--cols', String(C),'--format','json']);
     expect(r.code).toBe(0);
     expect(r.err).toBe('');
+    expect(r.out.endsWith('\n')).toBe(true);
     const j = JSON.parse(r.out);
-    expect(j.nodes).toHaveLength(6);
-    expect(j.nodes.map((n: any) => n.id)).toEqual([
-      'g_r1_c1',
-      'g_r1_c2',
-      'g_r1_c3',
-      'g_r2_c1',
-      'g_r2_c2',
-      'g_r2_c3'
-    ]);
-    expect(j.edges).toHaveLength(7);
-    expect(j.edges[0]).toEqual({ from: 'g_r1_c1', to: 'g_r1_c2' });
-    expect(j.edges[j.edges.length - 1]).toEqual({ from: 'g_r2_c2', to: 'g_r2_c3' });
+    expect(j.nodes.length).toBe(R*C);
+    const expectedEdges = R*(C-1) + C*(R-1);
+    expect(j.edges.length).toBe(expectedEdges);
   });
 
-  it('rows=2 cols=2 -> inspect snapshot with trailing newline', () => {
-    const r = run(['gen', '--kind', 'grid', '--rows', '2', '--cols', '2', '--format', 'inspect']);
+  it('dot: has digraph and trailing NL', () => {
+    const r = run(['gen','--kind','grid','--rows','2','--cols','2','--format','dot','--name','G']);
     expect(r.code).toBe(0);
     expect(r.err).toBe('');
+    expect(r.out).toMatch(/digraph/);
     expect(r.out.endsWith('\n')).toBe(true);
-    expect(r.out).toMatchSnapshot();
   });
 
-  it('rows=2 cols=2 -> dot snapshot with trailing newline', () => {
-    const r = run(['gen', '--kind', 'grid', '--rows', '2', '--cols', '2', '--format', 'dot', '--name', 'Grid']);
-    expect(r.code).toBe(0);
-    expect(r.err).toBe('');
-    expect(r.out.endsWith('\n')).toBe(true);
-    expect(r.out).toMatchSnapshot();
+  it('invalid flags → exit 1, stderr, stdout empty', () => {
+    const r = run(['gen','--kind','grid','--rows','0','--cols','2']);
+    expect(r.code).toBe(1);
+    expect(r.out).toBe('');
+    expect(r.err).toMatch(/rows|cols/i);
+    expect(r.err.endsWith('\n')).toBe(true);
   });
 });

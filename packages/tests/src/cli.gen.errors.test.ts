@@ -33,7 +33,7 @@ describe('gen: flag validation errors', () => {
     const r = run(['gen', '--kind', 'tree', '--format', 'json']);
     expect(r.code).toBe(1);
     expect(r.out).toBe('');
-    expect(r.err).toMatch(/tree kind requires --arity and --depth/);
+    expect(r.err).toMatch(/tree kind requires --branching and --levels/);
   });
 
   it('invalid --n (non-integer)', () => {
