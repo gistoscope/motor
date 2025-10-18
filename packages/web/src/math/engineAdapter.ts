@@ -23,6 +23,7 @@ export interface RealMathEngineLike {
   events?: RealEngineEventsAPI;
   getLegalActions?: () => unknown;
   listActions?: () => unknown;
+  suggest?: () => unknown;
   actions?: unknown;
   state?: Record<string, unknown>;
   apply?: (actionId: string) => unknown;
@@ -32,7 +33,8 @@ export interface RealMathEngineLike {
   exportState?: () => { ast: unknown; html?: string; tex?: string };
 }
 
-const DEFAULT_ACTION_KIND = 'action';
+const DEFAULT_ACTION_KIND = 'unknown';
+const ACTION_KEYS = ['legalActions', 'actions', 'nextActions', 'availableActions'];
 
 function isCleanup(fn: unknown): fn is () => void {
   return typeof fn === 'function';
@@ -75,65 +77,110 @@ function normalizeAction(source: unknown, index: number): MathEngineAction {
   return { id: fallbackId, label: fallbackId, kind: DEFAULT_ACTION_KIND };
 }
 
-function extractActionsFromSource(
-  real: RealMathEngineLike,
-  fallback: MathEngineAction[],
-): MathEngineAction[] {
-  let source: unknown;
-  if (typeof real.getLegalActions === 'function') {
-    source = real.getLegalActions();
-  } else if (typeof real.listActions === 'function') {
-    source = real.listActions();
-  } else if (Array.isArray((real as { actions?: unknown }).actions)) {
-    source = (real as { actions: unknown[] }).actions;
-  } else if (real.state && typeof real.state === 'object') {
-    const state = real.state as Record<string, unknown>;
-    if (Array.isArray(state.legalActions)) {
-      source = state.legalActions;
-    } else if (Array.isArray(state.actions)) {
-      source = state.actions;
-    } else if (Array.isArray(state.availableActions)) {
-      source = state.availableActions;
+function extractActionListFromRecord(record: Record<string, unknown>): unknown[] | null {
+  for (const key of ACTION_KEYS) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value;
     }
   }
-
-  if (!Array.isArray(source)) {
-    return fallback;
-  }
-
-  return source.map((item, index) => normalizeAction(item, index));
+  return null;
 }
 
-function extractActionsFromPayload(
-  payload: unknown,
-  fallback: MathEngineAction[],
-): MathEngineAction[] {
-  if (payload && typeof payload === 'object') {
-    const record = payload as Record<string, unknown>;
-    let candidate: unknown;
-    if (Array.isArray(record.legalActions)) {
-      candidate = record.legalActions;
-    } else if (Array.isArray(record.actions)) {
-      candidate = record.actions;
-    } else if (Array.isArray(record.availableActions)) {
-      candidate = record.availableActions;
-    } else if (record.state && typeof record.state === 'object') {
-      const nested = record.state as Record<string, unknown>;
-      if (Array.isArray(nested.legalActions)) {
-        candidate = nested.legalActions;
-      } else if (Array.isArray(nested.actions)) {
-        candidate = nested.actions;
-      } else if (Array.isArray(nested.availableActions)) {
-        candidate = nested.availableActions;
+function normalizeActions(input: unknown): MathEngineAction[] {
+  if (Array.isArray(input)) {
+    return input.map((item, index) => normalizeAction(item, index));
+  }
+  if (input && typeof input === 'object') {
+    const record = input as Record<string, unknown>;
+    const direct = extractActionListFromRecord(record);
+    if (direct) {
+      return direct.map((item, index) => normalizeAction(item, index));
+    }
+    if (record.state && typeof record.state === 'object') {
+      const nested = extractActionListFromRecord(record.state as Record<string, unknown>);
+      if (nested) {
+        return nested.map((item, index) => normalizeAction(item, index));
       }
     }
+  }
+  return [];
+}
 
-    if (Array.isArray(candidate)) {
-      return candidate.map((item, index) => normalizeAction(item, index));
+function tryNormalizeActions(candidate: unknown): { actions: MathEngineAction[]; found: boolean } {
+  const normalized = normalizeActions(candidate);
+  if (Array.isArray(candidate)) {
+    return { actions: normalized, found: true };
+  }
+  if (candidate && typeof candidate === 'object') {
+    const record = candidate as Record<string, unknown>;
+    if (extractActionListFromRecord(record)) {
+      return { actions: normalized, found: true };
+    }
+    if (record.state && typeof record.state === 'object') {
+      if (extractActionListFromRecord(record.state as Record<string, unknown>)) {
+        return { actions: normalized, found: true };
+      }
+    }
+  }
+  return { actions: normalized, found: normalized.length > 0 };
+}
+
+function readActionsFromReal(real: RealMathEngineLike, current: MathEngineAction[]): MathEngineAction[] {
+  const callSafely = (invocation: () => unknown): MathEngineAction[] | null => {
+    try {
+      const candidate = invocation();
+      const { actions, found } = tryNormalizeActions(candidate);
+      if (found) {
+        return actions;
+      }
+    } catch {
+      // ignore extraction errors
+    }
+    return null;
+  };
+
+  const accessSafely = (candidate: unknown): MathEngineAction[] | null => {
+    const { actions, found } = tryNormalizeActions(candidate);
+    return found ? actions : null;
+  };
+
+  if (typeof real.getLegalActions === 'function') {
+    const actions = callSafely(() => real.getLegalActions!());
+    if (actions) {
+      return actions;
     }
   }
 
-  return fallback;
+  if (typeof (real as { suggest?: () => unknown }).suggest === 'function') {
+    const actions = callSafely(() => (real as { suggest: () => unknown }).suggest());
+    if (actions) {
+      return actions;
+    }
+  }
+
+  if (typeof real.listActions === 'function') {
+    const actions = callSafely(() => real.listActions!());
+    if (actions) {
+      return actions;
+    }
+  }
+
+  if ('actions' in real) {
+    const actions = accessSafely((real as { actions?: unknown }).actions);
+    if (actions) {
+      return actions;
+    }
+  }
+
+  if (real.state && typeof real.state === 'object') {
+    const actions = accessSafely(real.state);
+    if (actions) {
+      return actions;
+    }
+  }
+
+  return current;
 }
 
 function selectSubscriber(
@@ -257,22 +304,34 @@ function exportState(real: RealMathEngineLike): { ast: unknown; html?: string; t
 
 export function fromRealEngine(real: RealMathEngineLike): MathEngine {
   let cachedActions: MathEngineAction[] = [];
+  let stateEventEpoch = 0;
 
-  const refreshActions = () => {
-    cachedActions = extractActionsFromSource(real, cachedActions);
-    return cachedActions;
+  const cloneActions = () => cachedActions.map((action) => ({ ...action }));
+
+  const setActions = (actions: MathEngineAction[]) => {
+    cachedActions = actions.map((action) => ({ ...action }));
+  };
+
+  const syncActionsFromReal = () => {
+    const next = readActionsFromReal(real, cachedActions);
+    setActions(next);
   };
 
   return {
     mount(host, initial) {
       mountRealEngine(real, host, initial);
-      refreshActions();
+      syncActionsFromReal();
     },
     on(event, cb) {
       if (event === 'state') {
         const wrapped: MathEngineEventCallback = (payload) => {
-          cachedActions = extractActionsFromPayload(payload, cachedActions);
-          cachedActions = extractActionsFromSource(real, cachedActions);
+          stateEventEpoch += 1;
+          const { actions, found } = tryNormalizeActions(payload);
+          if (found) {
+            setActions(actions);
+          } else {
+            syncActionsFromReal();
+          }
           cb(payload);
         };
         return subscribeToReal(real, event, wrapped);
@@ -280,11 +339,16 @@ export function fromRealEngine(real: RealMathEngineLike): MathEngine {
       return subscribeToReal(real, event, cb);
     },
     getLegalActions() {
-      return refreshActions();
+      return cloneActions();
     },
     apply(actionId) {
       callApply(real, actionId);
-      refreshActions();
+      const epochSnapshot = stateEventEpoch;
+      queueMicrotask(() => {
+        if (epochSnapshot === stateEventEpoch) {
+          syncActionsFromReal();
+        }
+      });
     },
     export() {
       return exportState(real);
