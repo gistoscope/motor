@@ -67,6 +67,13 @@ describe('web viewer', () => {
     expect(dotOutput).not.toBe('');
     expect(inspectOutput).toContain('nodes:');
     expect(inspectOutput).toContain('edges:');
+
+    const svgRoot = root.querySelector('[data-role="svg-root"]');
+    expect(svgRoot).toBeTruthy();
+    const circles = svgRoot ? svgRoot.querySelectorAll('circle.motor-node-circle') : null;
+    const edgesSvg = svgRoot ? svgRoot.querySelectorAll('path.motor-edge') : null;
+    expect(circles?.length).toBe(3);
+    expect(edgesSvg?.length).toBe(2);
   });
 
   it('reports validation issues and clears previous output', () => {
@@ -89,6 +96,9 @@ describe('web viewer', () => {
     const inspectOutput = root.querySelector('[data-role="inspect-output"]')?.textContent;
     expect(dotOutput).toBe('');
     expect(inspectOutput).toBe('');
+
+    const svgRoot = root.querySelector('[data-role="svg-root"]');
+    expect(svgRoot?.children.length).toBe(0);
   });
 
   it('copies DOT and Inspect outputs via clipboard', async () => {
