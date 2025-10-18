@@ -22,11 +22,23 @@
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
 }
 
+.viewer__section--input {
+  position: relative;
+}
+
 .viewer__section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.viewer__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .viewer__title {
@@ -69,6 +81,44 @@
   display: block;
 }
 
+.viewer__paste {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  backdrop-filter: blur(2px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  border-radius: 12px;
+  z-index: 10;
+}
+
+.viewer__paste[data-state='visible'] {
+  display: flex;
+}
+
+.viewer__paste-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+  width: min(32rem, 100%);
+  box-shadow: 0 18px 36px rgba(15, 23, 42, 0.2);
+}
+
+.viewer__textarea--paste {
+  min-height: 12rem;
+  resize: vertical;
+}
+
+.viewer__paste-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .viewer__button {
   border: 0;
   border-radius: 6px;
@@ -89,6 +139,15 @@
 .viewer__button:active {
   transform: translateY(0);
   box-shadow: none;
+}
+
+.viewer__button--secondary {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.viewer__button--secondary:hover {
+  box-shadow: 0 6px 12px rgba(148, 163, 184, 0.35);
 }
 
 .viewer__stats {
