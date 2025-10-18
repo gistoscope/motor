@@ -58,6 +58,13 @@ interface MathMountPoint {
   providerKind: MathEngineProvider['kind'] | null;
 }
 
+interface MathGraphDetail {
+  graph: GraphJSON;
+  nodeTokens?: Record<string, string[]>;
+  tokenNodes?: Record<string, string[]>;
+  roots?: string[];
+}
+
 const mathMountPoints = new Set<MathMountPoint>();
 let mathEngineProvider: MathEngineProvider | null = null;
 
@@ -197,6 +204,46 @@ function createStatusSetter(el: HTMLElement): (text: string, kind?: 'info' | 'er
     el.textContent = text;
     el.dataset.kind = kind;
   };
+}
+
+function isIterable(value: unknown): value is Iterable<unknown> {
+  return typeof value === 'object' && value !== null && Symbol.iterator in value;
+}
+
+function normalizeIdList(value: unknown): string[] {
+  if (value == null) {
+    return [];
+  }
+  const collected: string[] = [];
+  const push = (candidate: unknown) => {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (trimmed) {
+        collected.push(trimmed);
+      }
+      return;
+    }
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      collected.push(String(candidate));
+    }
+  };
+  if (Array.isArray(value)) {
+    value.forEach(push);
+  } else if (isIterable(value)) {
+    for (const item of value as Iterable<unknown>) {
+      push(item);
+    }
+  } else {
+    push(value);
+  }
+  return Array.from(new Set(collected));
+}
+
+function escapeGraphId(id: string): string {
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(id);
+  }
+  return id.replace(/"/g, '\\"');
 }
 
 interface NodeInfo {
@@ -450,6 +497,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
           <h3 class="viewer__subtitle">Math engine</h3>
           <div class="viewer__math-host" data-role="math-host"></div>
           <div class="viewer__math-actions viewer__actions" data-role="math-actions"></div>
+          <div class="viewer__math-graph" data-role="math-graph-panel" data-state="empty" hidden>
+            <h4 class="viewer__subtitle viewer__math-graph-title">AST Graph</h4>
+            <div class="viewer__math-graph-body">
+              <div class="viewer__preview viewer__preview--mini" data-role="math-graph-preview" aria-live="polite"></div>
+              <pre class="viewer__code viewer__code--mini" data-role="math-graph-json"></pre>
+            </div>
+            <p class="viewer__math-graph-empty" data-role="math-graph-empty">AST graph unavailable.</p>
+          </div>
         </section>
       </section>
       <section class="viewer__section viewer__section--exports">
@@ -505,6 +560,10 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const mathPanelEl = root.querySelector<HTMLElement>('[data-role="math-panel"]');
   const mathHostEl = root.querySelector<HTMLElement>('[data-role="math-host"]');
   const mathActionsEl = root.querySelector<HTMLElement>('[data-role="math-actions"]');
+  const mathGraphPanelEl = root.querySelector<HTMLElement>('[data-role="math-graph-panel"]');
+  const mathGraphPreviewEl = root.querySelector<HTMLElement>('[data-role="math-graph-preview"]');
+  const mathGraphJsonEl = root.querySelector<HTMLElement>('[data-role="math-graph-json"]');
+  const mathGraphEmptyEl = root.querySelector<HTMLElement>('[data-role="math-graph-empty"]');
   const overlayToggleInputs = Array.from(
     root.querySelectorAll<HTMLInputElement>('input[data-role="overlay-toggle"]'),
   );
@@ -634,6 +693,18 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const helpOverlay: HelpOverlayHandle = initHelp({ root: viewerRootEl, trigger: helpButtonEl });
   const mathMount = registerMathMount(mathPanelEl, mathHostEl, mathActionsEl);
 
+  clearMathGraphPanel();
+  if (mathHostEl) {
+    mathHostEl.addEventListener('motor:math-graph-change', handleMathGraphChange as EventListener);
+    mathHostEl.addEventListener('motor:math-token-hover', handleMathTokenHover as EventListener);
+    mathHostEl.addEventListener('motor:math-token-select', handleMathTokenSelect as EventListener);
+  }
+  if (mathGraphPreviewEl) {
+    mathGraphPreviewEl.addEventListener('motor:node-hover', handleMiniGraphHover as EventListener);
+    mathGraphPreviewEl.addEventListener('motor:node-leave', handleMiniGraphLeave as EventListener);
+    mathGraphPreviewEl.addEventListener('motor:node-select', handleMiniGraphSelect as EventListener);
+  }
+
   const handleContrastChange = () => {
     viewerRootEl.classList.toggle('motor-contrast--high', contrastToggleEl.checked);
   };
@@ -646,6 +717,191 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   let selectedNodeId: string | null = null;
   let currentGraph: GraspGraph | null = null;
   let currentJSONText = '';
+  let mathGraphNodeToTokens: Record<string, string[]> = {};
+  let mathGraphTokenToNodes: Record<string, string[]> = {};
+  let mathGraphHoverNodes = new Set<string>();
+  let mathGraphSelectNodes = new Set<string>();
+
+  const setMathGraphPanelState = (state: 'empty' | 'ready') => {
+    if (!mathGraphPanelEl) {
+      return;
+    }
+    mathGraphPanelEl.dataset.state = state;
+    mathGraphPanelEl.hidden = state === 'empty';
+    if (mathGraphEmptyEl) {
+      mathGraphEmptyEl.hidden = state === 'ready';
+    }
+  };
+
+  const clearMathGraphPanel = () => {
+    if (mathGraphPreviewEl) {
+      mathGraphPreviewEl.innerHTML = '';
+    }
+    if (mathGraphJsonEl) {
+      mathGraphJsonEl.textContent = '';
+    }
+    setMathGraphPanelState('empty');
+    mathGraphNodeToTokens = {};
+    mathGraphTokenToNodes = {};
+    mathGraphHoverNodes = new Set();
+    mathGraphSelectNodes = new Set();
+  };
+
+  const forEachMathGraphNode = (nodeId: string, callback: (element: Element) => void) => {
+    if (!mathGraphPreviewEl) {
+      return;
+    }
+    const escaped = escapeGraphId(nodeId);
+    const nodes = mathGraphPreviewEl.querySelectorAll(`[data-node-id="${escaped}"]`);
+    nodes.forEach((element) => callback(element));
+  };
+
+  const applyMathGraphHighlight = (mode: 'hover' | 'select', nodeIds: Iterable<string>) => {
+    if (!mathGraphPreviewEl) {
+      return;
+    }
+    const className = mode === 'hover' ? 'motor-node--math-hover' : 'motor-node--math-select';
+    const tracker = mode === 'hover' ? mathGraphHoverNodes : mathGraphSelectNodes;
+    const next = new Set(nodeIds);
+    for (const nodeId of tracker) {
+      if (!next.has(nodeId)) {
+        forEachMathGraphNode(nodeId, (element) => element.classList.remove(className));
+      }
+    }
+    for (const nodeId of next) {
+      forEachMathGraphNode(nodeId, (element) => element.classList.add(className));
+    }
+    if (mode === 'hover') {
+      mathGraphHoverNodes = next;
+    } else {
+      mathGraphSelectNodes = next;
+    }
+  };
+
+  const computeMathGraphNodesFromTokens = (tokens: Iterable<string>): string[] => {
+    const result = new Set<string>();
+    for (const tokenId of tokens) {
+      const mapped = mathGraphTokenToNodes[tokenId];
+      if (Array.isArray(mapped)) {
+        for (const nodeId of mapped) {
+          if (typeof nodeId === 'string' && nodeId.length > 0) {
+            result.add(nodeId);
+          }
+        }
+      }
+      if (mathGraphNodeToTokens[tokenId]) {
+        result.add(tokenId);
+      }
+    }
+    return Array.from(result).sort((a, b) => a.localeCompare(b));
+  };
+
+  const computeMathGraphTokensFromNodes = (nodes: Iterable<string>): string[] => {
+    const result = new Set<string>();
+    for (const nodeId of nodes) {
+      const mapped = mathGraphNodeToTokens[nodeId];
+      if (Array.isArray(mapped)) {
+        for (const tokenId of mapped) {
+          if (typeof tokenId === 'string' && tokenId.length > 0) {
+            result.add(tokenId);
+          }
+        }
+      }
+      if (mathGraphTokenToNodes[nodeId]) {
+        result.add(nodeId);
+      }
+    }
+    return Array.from(result).sort((a, b) => a.localeCompare(b));
+  };
+
+  const emitMathGraphInteraction = (mode: 'hover' | 'select', nodeId: string | null) => {
+    if (!mathHostEl) {
+      return;
+    }
+    const nodeIds = nodeId ? [nodeId] : [];
+    const tokenIds = computeMathGraphTokensFromNodes(nodeIds);
+    const detail = { nodeIds, tokenIds };
+    const eventName = mode === 'hover' ? 'motor:math-graph-hover' : 'motor:math-graph-select';
+    const event = new CustomEvent<typeof detail>(eventName, { bubbles: true, detail });
+    mathHostEl.dispatchEvent(event);
+  };
+
+  const handleMathGraphChange = (event: Event) => {
+    const detail = (event as CustomEvent<MathGraphDetail | undefined>).detail;
+    if (!detail || !detail.graph || !Array.isArray(detail.graph.nodes) || detail.graph.nodes.length === 0) {
+      clearMathGraphPanel();
+      applyMathGraphHighlight('hover', []);
+      applyMathGraphHighlight('select', []);
+      return;
+    }
+
+    const validation = validateGraphJSON(detail.graph);
+    if (!validation.ok) {
+      clearMathGraphPanel();
+      applyMathGraphHighlight('hover', []);
+      applyMathGraphHighlight('select', []);
+      return;
+    }
+
+    if (!mathGraphPreviewEl || !mathGraphJsonEl) {
+      return;
+    }
+
+    const graph = fromJSON(detail.graph);
+    renderSVG(mathGraphPreviewEl, graph);
+    mathGraphJsonEl.textContent = JSON.stringify(detail.graph, null, 2);
+    mathGraphNodeToTokens = detail.nodeTokens ?? {};
+    mathGraphTokenToNodes = detail.tokenNodes ?? {};
+    mathGraphHoverNodes = new Set();
+    mathGraphSelectNodes = new Set();
+    setMathGraphPanelState('ready');
+    applyMathGraphHighlight('hover', []);
+    applyMathGraphHighlight('select', []);
+  };
+
+  const handleMathTokenHover = (event: Event) => {
+    const detail = (event as CustomEvent<{ nodeIds?: unknown; tokenIds?: unknown }>).detail ?? {};
+    const nodes = normalizeIdList(detail.nodeIds);
+    const nodeIds = nodes.length > 0 ? nodes : computeMathGraphNodesFromTokens(normalizeIdList(detail.tokenIds));
+    applyMathGraphHighlight('hover', nodeIds);
+  };
+
+  const handleMathTokenSelect = (event: Event) => {
+    const detail = (event as CustomEvent<{ nodeIds?: unknown; tokenIds?: unknown }>).detail ?? {};
+    const nodes = normalizeIdList(detail.nodeIds);
+    const nodeIds = nodes.length > 0 ? nodes : computeMathGraphNodesFromTokens(normalizeIdList(detail.tokenIds));
+    applyMathGraphHighlight('select', nodeIds);
+  };
+
+  const handleMiniGraphHover = (event: Event) => {
+    event.stopPropagation();
+    const nodeId = (event as CustomEvent<{ nodeId: string | null }>).detail?.nodeId ?? null;
+    if (nodeId) {
+      applyMathGraphHighlight('hover', [nodeId]);
+      emitMathGraphInteraction('hover', nodeId);
+    } else {
+      applyMathGraphHighlight('hover', []);
+      emitMathGraphInteraction('hover', null);
+    }
+  };
+
+  const handleMiniGraphLeave = (event: Event) => {
+    event.stopPropagation();
+    applyMathGraphHighlight('hover', []);
+    emitMathGraphInteraction('hover', null);
+  };
+
+  const handleMiniGraphSelect = (event: Event) => {
+    event.stopPropagation();
+    const nodeId = (event as CustomEvent<{ nodeId: string | null }>).detail?.nodeId ?? null;
+    if (nodeId) {
+      applyMathGraphHighlight('select', [nodeId]);
+      emitMathGraphInteraction('select', nodeId);
+    } else {
+      applyMathGraphHighlight('select', []);
+      emitMathGraphInteraction('select', null);
+    }
+  };
   let currentDOTText = '';
   let currentInspectText = '';
   let shortestAvailable = false;
@@ -1238,6 +1494,17 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       svgNode.removeEventListener('motor:node-hover', handleNodeHoverEvent);
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);
+      if (mathHostEl) {
+        mathHostEl.removeEventListener('motor:math-graph-change', handleMathGraphChange as EventListener);
+        mathHostEl.removeEventListener('motor:math-token-hover', handleMathTokenHover as EventListener);
+        mathHostEl.removeEventListener('motor:math-token-select', handleMathTokenSelect as EventListener);
+      }
+      if (mathGraphPreviewEl) {
+        mathGraphPreviewEl.removeEventListener('motor:node-hover', handleMiniGraphHover as EventListener);
+        mathGraphPreviewEl.removeEventListener('motor:node-leave', handleMiniGraphLeave as EventListener);
+        mathGraphPreviewEl.removeEventListener('motor:node-select', handleMiniGraphSelect as EventListener);
+      }
+      clearMathGraphPanel();
       unregisterMathMount(mathMount);
       overlayController.destroy();
       helpOverlay.destroy();
