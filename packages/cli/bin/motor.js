@@ -12,10 +12,7 @@ import {
   graphStats,
   genChain,
   genCycle,
-  genStar,
-  genGrid,
-  genTree,
-  genBipartite
+  genStar
 } from '@motor/grasp';
 
 function getPkg() {
@@ -81,10 +78,10 @@ Flags:
   --n N         Positive integer (chain|cycle|star)
   --rows R      Positive integer (grid)
   --cols C      Positive integer (grid)
-  --arity K     Positive integer (tree)
-  --depth D     Non-negative integer (tree)
-  --left L      Non-negative integer (bipartite)
-  --right R     Non-negative integer (bipartite)
+  --branching B Positive integer (tree)
+  --levels L    Positive integer (tree)
+  --left L      Positive integer (bipartite)
+  --right R     Positive integer (bipartite)
   --format F    One of: json (default), dot, inspect
   --name NAME   Graph name for DOT (default: G)
   --out FILE    Write output to file (adds trailing \\n)`
@@ -192,8 +189,8 @@ function parseArgs(argv) {
     if (a === '--pretty' || a === '-p') { flags.set('pretty', args[++i]); continue; }
     if (a === '--rows') { flags.set('rows', args[++i]); continue; }
     if (a === '--cols') { flags.set('cols', args[++i]); continue; }
-    if (a === '--arity') { flags.set('arity', args[++i]); continue; }
-    if (a === '--depth') { flags.set('depth', args[++i]); continue; }
+    if (a === '--branching') { flags.set('branching', args[++i]); continue; }
+    if (a === '--levels') { flags.set('levels', args[++i]); continue; }
     if (a === '--left') { flags.set('left', args[++i]); continue; }
     if (a === '--right') { flags.set('right', args[++i]); continue; }
     rest.push(a);
@@ -348,7 +345,8 @@ async function cmdGen(flags) {
     die('invalid --format; expected json|dot|inspect');
   }
 
-  let g;
+  let graph;
+  let graphJSON = null;
   const ensurePositive = (val, flagName) => {
     const n = Number(val);
     if (!Number.isInteger(n) || n <= 0) {
@@ -356,13 +354,7 @@ async function cmdGen(flags) {
     }
     return n;
   };
-  const ensureNonNegative = (val, flagName) => {
-    const n = Number(val);
-    if (!Number.isInteger(n) || n < 0) {
-      die(`invalid --${flagName}; must be a non-negative integer`);
-    }
-    return n;
-  };
+  const makeNode = (id) => ({ id, label: id });
 
   if (kind === 'chain' || kind === 'cycle' || kind === 'star') {
     const nRaw = flags.get('n');
@@ -370,9 +362,9 @@ async function cmdGen(flags) {
       die('chain|cycle|star kinds require --n');
     }
     const n = ensurePositive(nRaw, 'n');
-    if (kind === 'chain') g = genChain(n);
-    else if (kind === 'cycle') g = genCycle(n);
-    else g = genStar(n);
+    if (kind === 'chain') graph = genChain(n);
+    else if (kind === 'cycle') graph = genCycle(n);
+    else graph = genStar(n);
   } else if (kind === 'grid') {
     const rowsRaw = flags.get('rows');
     const colsRaw = flags.get('cols');
@@ -381,31 +373,94 @@ async function cmdGen(flags) {
     }
     const rows = ensurePositive(rowsRaw, 'rows');
     const cols = ensurePositive(colsRaw, 'cols');
-    g = genGrid(rows, cols);
-  } else if (kind === 'tree') {
-    const arityRaw = flags.get('arity');
-    const depthRaw = flags.get('depth');
-    if (arityRaw === undefined || depthRaw === undefined) {
-      die('tree kind requires --arity and --depth');
+    const nodes = [];
+    const edges = [];
+    const idFor = (r, c) => `g_r${r}_c${c}`;
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        nodes.push(makeNode(idFor(r, c)));
+      }
     }
-    const arity = ensurePositive(arityRaw, 'arity');
-    const depth = ensureNonNegative(depthRaw, 'depth');
-    g = genTree(arity, depth);
+    for (let r = 1; r <= rows; r++) {
+      for (let c = 1; c < cols; c++) {
+        edges.push({ from: idFor(r, c), to: idFor(r, c + 1) });
+      }
+    }
+    for (let r = 1; r < rows; r++) {
+      for (let c = 1; c <= cols; c++) {
+        edges.push({ from: idFor(r, c), to: idFor(r + 1, c) });
+      }
+    }
+    graphJSON = { nodes, edges };
+  } else if (kind === 'tree') {
+    const branchingRaw = flags.get('branching');
+    const levelsRaw = flags.get('levels');
+    if (branchingRaw === undefined || levelsRaw === undefined) {
+      die('tree kind requires --branching and --levels');
+    }
+    const branching = ensurePositive(branchingRaw, 'branching');
+    const levels = ensurePositive(levelsRaw, 'levels');
+    const levelCounts = [1];
+    for (let level = 1; level < levels; level++) {
+      levelCounts.push(levelCounts[level - 1] * branching);
+    }
+    const totalNodes = levelCounts.reduce((acc, count) => acc + count, 0);
+    const nodes = Array.from({ length: totalNodes }, (_, i) => makeNode(`t${i + 1}`));
+    const edges = [];
+    if (levels > 1) {
+      let parentStart = 0;
+      let childStart = levelCounts[0];
+      for (let level = 0; level < levels - 1; level++) {
+        const parentsInLevel = levelCounts[level];
+        const childrenInLevel = levelCounts[level + 1];
+        for (let i = 0; i < parentsInLevel; i++) {
+          const parentIndex = parentStart + i;
+          for (let j = 0; j < branching; j++) {
+            const childIndex = childStart + i * branching + j;
+            if (childIndex >= childStart + childrenInLevel) break;
+            edges.push({ from: nodes[parentIndex].id, to: nodes[childIndex].id });
+          }
+        }
+        parentStart += parentsInLevel;
+        childStart += childrenInLevel;
+      }
+    }
+    graphJSON = { nodes, edges };
   } else {
     const leftRaw = flags.get('left');
     const rightRaw = flags.get('right');
     if (leftRaw === undefined || rightRaw === undefined) {
       die('bipartite kind requires --left and --right');
     }
-    const left = ensureNonNegative(leftRaw, 'left');
-    const right = ensureNonNegative(rightRaw, 'right');
-    g = genBipartite(left, right);
+    const left = ensurePositive(leftRaw, 'left');
+    const right = ensurePositive(rightRaw, 'right');
+    const nodes = [];
+    const edges = [];
+    for (let i = 1; i <= left; i++) {
+      const id = `L${i}`;
+      nodes.push(makeNode(id));
+    }
+    for (let j = 1; j <= right; j++) {
+      const id = `R${j}`;
+      nodes.push(makeNode(id));
+    }
+    for (let i = 1; i <= left; i++) {
+      for (let j = 1; j <= right; j++) {
+        edges.push({ from: `L${i}`, to: `R${j}` });
+      }
+    }
+    graphJSON = { nodes, edges };
+  }
+
+  const outputGraph = graphJSON ? fromJSON(graphJSON) : graph;
+  if (!outputGraph) {
+    die('failed to generate graph');
   }
 
   let text = '';
-  if (fmt === 'json')      text = JSON.stringify(toJSON(g), null, 2);
-  else if (fmt === 'dot')  text = toDOT(g, { graphName: name });
-  else                     text = inspectGraph(g);
+  if (fmt === 'json')      text = JSON.stringify(toJSON(outputGraph), null, 2);
+  else if (fmt === 'dot')  text = toDOT(outputGraph, { graphName: name });
+  else                     text = inspectGraph(outputGraph);
 
   await writeOutput(text, outPath);
   process.exitCode = 0;
