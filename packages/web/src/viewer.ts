@@ -2,15 +2,17 @@ import './styles.css';
 import './styles/viewer.css';
 
 import {
+  edges as listEdges,
   fromJSON,
   inspect,
+  nodes as listNodes,
+  parseGraphJSON,
   size,
   toDOT,
   validateGraphJSON,
-  edges as listEdges,
-  nodes as listNodes,
   type GraspGraph,
-} from '@motor/grasp';
+  type GraphJSON,
+} from './api';
 import { renderSVG } from './svg';
 import {
   analyzeGraph,
@@ -23,7 +25,6 @@ import { createOverlayController, type AnalysisPanelElements } from './overlays'
 import { initHelp, type HelpOverlayHandle } from './ui/help';
 import { attachMathEngine } from './math/bridge';
 import type { MathBridgeHandle, MathEngine } from './math/types';
-import type { GraphJSON } from './types';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -967,9 +968,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       return false;
     }
 
-    let parsed: unknown;
+    let parsed: GraphJSON;
     try {
-      parsed = JSON.parse(trimmed);
+      parsed = parseGraphJSON(trimmed);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown JSON parse error';
       showErrors([`Invalid JSON: ${msg}`]);
@@ -990,7 +991,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       return false;
     }
 
-    const data = parsed as GraphJSON;
+    const data = parsed;
     const graph = fromJSON(data);
     const weightMap = parseWeightMap(data);
     let weightsAttached = false;

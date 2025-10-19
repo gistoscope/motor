@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { shortestPath } from '../../web/src/analysis-core';
+import { shortestPath } from '../../web/src/api';
 
 describe('web analysis shortestPath', () => {
   it('computes non-negative weighted shortest path locally', () => {

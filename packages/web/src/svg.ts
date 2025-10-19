@@ -1,4 +1,4 @@
-import type { GraphJSON } from './types';
+import type { GraphJSON } from './api';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const NODE_RADIUS = 24;

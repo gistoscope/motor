@@ -2,10 +2,12 @@ import {
   edges as listEdges,
   hasCycleDirected,
   scc,
+  shortestPath,
   size,
   nodes as listNodes,
   type GraspGraph,
-} from '@motor/grasp';
+  type GraphJSON,
+} from './api';
 
 export const EDGE_KEY_SEPARATOR = '\u2192';
 
@@ -34,118 +36,6 @@ export interface ShortestPathResult {
   readonly edges: readonly ShortestPathEdge[];
 }
 
-export interface ShortestPathGraphNode {
-  readonly id: string;
-}
-
-export interface ShortestPathGraphEdge {
-  readonly from: string;
-  readonly to: string;
-  readonly weight?: number | null;
-}
-
-export interface ShortestPathGraph {
-  readonly nodes?: readonly ShortestPathGraphNode[] | null;
-  readonly edges?: readonly ShortestPathGraphEdge[] | null;
-}
-
-export interface ShortestPathComputation {
-  readonly distance: number;
-  readonly path: readonly string[];
-}
-
-export function shortestPath(
-  graph: ShortestPathGraph | null | undefined,
-  src: string,
-  dst: string,
-): ShortestPathComputation {
-  const nodes = graph?.nodes ?? [];
-  const edges = graph?.edges ?? [];
-  const state = new Map(
-    nodes.map((node) => [
-      node.id,
-      {
-        d: node.id === src ? 0 : Number.POSITIVE_INFINITY,
-        p: null as string | null,
-        done: false,
-        w: Number.POSITIVE_INFINITY,
-      },
-    ]),
-  );
-
-  if (!state.has(src) || !state.has(dst)) {
-    return { distance: Number.POSITIVE_INFINITY, path: [] };
-  }
-
-  const adjacency = new Map<string, Array<{ to: string; w: number }>>();
-  for (const edge of edges) {
-    const weight = Math.max(0, Number(edge.weight ?? 1));
-    if (!Number.isFinite(weight)) {
-      continue;
-    }
-    const bucket = adjacency.get(edge.from);
-    const next = { to: edge.to, w: weight };
-    if (bucket) {
-      bucket.push(next);
-    } else {
-      adjacency.set(edge.from, [next]);
-    }
-  }
-
-  while (true) {
-    let candidate: string | null = null;
-    let best = Number.POSITIVE_INFINITY;
-    for (const [id, info] of state) {
-      if (!info.done && info.d < best) {
-        best = info.d;
-        candidate = id;
-      }
-    }
-
-    if (candidate === null || candidate === dst) {
-      break;
-    }
-
-    const sourceState = state.get(candidate)!;
-    sourceState.done = true;
-    for (const { to, w } of adjacency.get(candidate) ?? []) {
-      const targetState = state.get(to);
-      if (!targetState) {
-        continue;
-      }
-      const distance = sourceState.d + w;
-      const previousWeight = targetState.w;
-      const shouldUpdate =
-        distance < targetState.d ||
-        (distance === targetState.d &&
-          (w < previousWeight ||
-            (w === previousWeight &&
-              (targetState.p === null || candidate.localeCompare(targetState.p) < 0))));
-
-      if (shouldUpdate) {
-        targetState.d = distance;
-        targetState.p = candidate;
-        targetState.w = w;
-      }
-    }
-  }
-
-  const distance = state.get(dst)!.d;
-  if (!Number.isFinite(distance)) {
-    return { distance, path: [] };
-  }
-
-  const path: string[] = [];
-  let current: string | null = dst;
-  while (current) {
-    path.push(current);
-    current = state.get(current)!.p;
-  }
-  path.reverse();
-
-  return { distance, path };
-}
-
 export function edgeKey(from: string, to: string): EdgeKey {
   return `${from}${EDGE_KEY_SEPARATOR}${to}`;
 }
@@ -171,10 +61,16 @@ function sortComponents(components: string[][]): string[][] {
 
 export function analyzeGraphSync(graph: GraspGraph): GraphAnalysis {
   const { nodes: nodeCount, edges: edgeCount } = size(graph);
+  const nodeIds = listNodes(graph).map((id) => String(id));
   const edges = listEdges(graph).map((edge) => ({
     from: String(edge.from),
     to: String(edge.to),
   }));
+
+  const cycleGraph: GraphJSON = {
+    nodes: nodeIds.map((id) => ({ id })),
+    edges: edges.map(({ from, to }) => ({ from, to })),
+  };
 
   const componentsRaw = scc(graph);
   const normalized = componentsRaw.map(normalizeComponent);
@@ -224,7 +120,7 @@ export function analyzeGraphSync(graph: GraspGraph): GraphAnalysis {
   return {
     nodeCount,
     edgeCount,
-    hasCycle: hasCycleDirected(graph),
+    hasCycle: hasCycleDirected(cycleGraph),
     sccCount: sorted.length,
     components: sorted,
     componentIndex,
@@ -294,9 +190,9 @@ export function computeShortestPathSync(
       return a.from.localeCompare(b.from);
     });
 
-  const graphView: ShortestPathGraph = {
+  const graphView: GraphJSON = {
     nodes: allNodes.map((id) => ({ id })),
-    edges: weightedEdges,
+    edges: weightedEdges.map(({ from, to, weight }) => ({ from, to, weight })),
   };
 
   const result = shortestPath(graphView, sourceId, targetId);
