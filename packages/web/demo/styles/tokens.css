@@ -1,10 +1,11 @@
 :root {
   --content-max: 1800px;
+  --pane-min-right: 520px;
+  --mini-h: 420px;
   --bg: #ffffff;
   --fg: #0b0f19;
   --code-bg: #f6f8fa;
   --code-fg: #0b0f19;
-  --pane-min-right: 520px;
   --motor-bg: #0b0b0c;
   --motor-fg: #e5e7eb;
   --motor-accent: #60a5fa;
@@ -73,9 +74,22 @@ textarea {
   overflow: auto;
 }
 
+[data-role="mini-graph-wide"] {
+  margin-top: 16px;
+}
+
+[data-role="mini-graph-wide"] [data-role="math-mini-graph"] {
+  width: 100%;
+  min-height: var(--mini-h);
+  background: var(--code-bg);
+  border-radius: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+
 [data-role="math-mini-graph"],
 .pane-mini-graph {
-  min-height: 180px;
+  min-height: var(--mini-h);
   background: var(--code-bg);
   padding: 8px;
   border-radius: 8px;
