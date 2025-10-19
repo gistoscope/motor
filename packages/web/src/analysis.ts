@@ -10,6 +10,7 @@ import {
   type ShortestPathResult,
 } from './analysis-core';
 import { FLAGS } from './config';
+import { getErrorMessage, type WebErrorCode } from './errors';
 import type {
   AnalysisWorkerRequest,
   AnalysisWorkerResponse,
@@ -98,7 +99,8 @@ async function createWorker(): Promise<WorkerHandle | null> {
     handle = { worker, pending };
     return handle;
   } catch (err) {
-    console.error('Failed to initialize analysis worker', err);
+    const code: WebErrorCode = 'WEB.E0.WORKER_INIT';
+    console.error(`[${code}] ${getErrorMessage(code)}`, err);
     return null;
   }
 }

@@ -124,6 +124,14 @@ describe('svg interactions', () => {
     expect(nodeInfoId?.textContent?.trim()).toBe('—');
     expect(nodeInfo?.getAttribute('data-state')).toBe('empty');
 
+    nodeInfo?.dispatchEvent(
+      new domWindow.CustomEvent('motor:node-info-select', { detail: { nodeId: 'B' }, bubbles: true }) as unknown as Event,
+    );
+    const groupB = svgRoot?.querySelector('g[data-node-id="B"]');
+    expect(groupB?.classList.contains('motor-node--selected')).toBe(true);
+    expect(nodeInfoId?.textContent?.trim()).toBe('B');
+    expect(nodeInfo?.getAttribute('data-state')).toBe('active');
+
     handle.destroy();
   });
 });
