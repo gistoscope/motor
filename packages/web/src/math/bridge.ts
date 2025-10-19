@@ -1,6 +1,7 @@
 import { createActionsPanel } from '../ui/actions';
 import { createGhostOverlay } from '../ui/ghost';
 import { createHistoryPanel, type HistoryEntry } from '../ui/history';
+import { applyMathDiff, type MathDiffPayload } from '../ui/diff';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import { createToastManager } from '../ui/toast';
@@ -15,6 +16,8 @@ import type {
 const DEFAULT_HOVER_CLASS = 'math-token--hovered';
 const DEFAULT_SELECTED_CLASS = 'math-token--selected';
 const LONG_PRESS_DELAY = 450;
+
+const EMPTY_DIFF: MathDiffPayload = { added: [], removed: [], changed: [] };
 
 function isIterable(value: unknown): value is Iterable<unknown> {
   return typeof value === 'object' && value !== null && Symbol.iterator in value;
@@ -114,6 +117,207 @@ function dedupe(ids: Iterable<string>): string[] {
     }
   }
   return result;
+}
+
+type TokenSnapshot = Map<string, string[]>;
+
+function readTokenValue(element: HTMLElement): string {
+  return (element.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function captureTokenSnapshot(host: HTMLElement): TokenSnapshot {
+  const snapshot: TokenSnapshot = new Map();
+  const elements = host.querySelectorAll<HTMLElement>('[data-token-id]');
+  elements.forEach((element) => {
+    const tokenId = element.dataset.tokenId;
+    if (typeof tokenId !== 'string') {
+      return;
+    }
+    const normalizedId = tokenId.trim();
+    if (!normalizedId) {
+      return;
+    }
+    const value = readTokenValue(element);
+    const existing = snapshot.get(normalizedId);
+    if (existing) {
+      existing.push(value);
+    } else {
+      snapshot.set(normalizedId, [value]);
+    }
+  });
+  return snapshot;
+}
+
+function areTokenValuesEqual(previous: string[], next: string[]): boolean {
+  if (previous.length !== next.length) {
+    return false;
+  }
+  for (let index = 0; index < previous.length; index += 1) {
+    if (previous[index] !== next[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function computeTokenDiff(previous: TokenSnapshot, next: TokenSnapshot): MathDiffPayload {
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+
+  for (const [id, previousValues] of previous) {
+    if (!next.has(id)) {
+      removed.push(id);
+      continue;
+    }
+    const nextValues = next.get(id)!;
+    if (!areTokenValuesEqual(previousValues, nextValues)) {
+      changed.push(id);
+    }
+  }
+
+  for (const id of next.keys()) {
+    if (!previous.has(id)) {
+      added.push(id);
+    }
+  }
+
+  return {
+    added: dedupe(added),
+    removed: dedupe(removed),
+    changed: dedupe(changed),
+  };
+}
+
+function toTokenList(value: unknown): string[] {
+  if (value == null) {
+    return [];
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return [String(value)];
+  }
+
+  const collected: string[] = [];
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const str = coerceToString(item);
+      if (str && str.trim()) {
+        collected.push(str.trim());
+      }
+    }
+    return dedupe(collected);
+  }
+
+  if (isIterable(value)) {
+    for (const item of value as Iterable<unknown>) {
+      const str = coerceToString(item);
+      if (str && str.trim()) {
+        collected.push(str.trim());
+      }
+    }
+    return dedupe(collected);
+  }
+
+  if (typeof value === 'object') {
+    return [];
+  }
+
+  return [];
+}
+
+function pickFirst(source: Record<string, unknown>, keys: readonly string[]): unknown {
+  for (const key of keys) {
+    if (key in source) {
+      return source[key];
+    }
+  }
+  return undefined;
+}
+
+function normalizeDiffRecord(source: unknown): MathDiffPayload | null {
+  if (source == null) {
+    return null;
+  }
+
+  if (typeof source === 'string' || typeof source === 'number' || Array.isArray(source) || isIterable(source)) {
+    const list = toTokenList(source);
+    return list.length > 0 ? { added: [], removed: [], changed: list } : null;
+  }
+
+  if (typeof source !== 'object') {
+    return null;
+  }
+
+  const record = source as Record<string, unknown>;
+  const addedSource = pickFirst(record, ['added', 'add', 'additions', 'tokensAdded', 'addedTokens']);
+  const removedSource = pickFirst(record, ['removed', 'remove', 'deletions', 'tokensRemoved', 'removedTokens']);
+  const changedSource = pickFirst(record, [
+    'changed',
+    'change',
+    'changes',
+    'modified',
+    'updates',
+    'tokensChanged',
+    'changedTokens',
+  ]);
+
+  const hasExplicitKeys =
+    addedSource !== undefined || removedSource !== undefined || changedSource !== undefined;
+
+  if (!hasExplicitKeys) {
+    const nestedCandidates = ['tokens', 'tokenIds', 'tokenDiff'] as const;
+    for (const key of nestedCandidates) {
+      if (key in record) {
+        const nested = normalizeDiffRecord(record[key]);
+        if (nested) {
+          return nested;
+        }
+      }
+    }
+    return null;
+  }
+
+  const added = toTokenList(addedSource);
+  const removed = toTokenList(removedSource);
+  const changed = toTokenList(changedSource);
+
+  if (added.length === 0 && removed.length === 0 && changed.length === 0) {
+    return null;
+  }
+
+  return { added, removed, changed };
+}
+
+function extractDiffFromStatePayload(payload: unknown): MathDiffPayload | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const record = payload as Record<string, unknown>;
+  const candidateKeys = [
+    'diff',
+    'tokenDiff',
+    'mathDiff',
+    'stepDiff',
+    'stateDiff',
+    'tokenChanges',
+  ] as const;
+
+  for (const key of candidateKeys) {
+    if (key in record) {
+      const normalized = normalizeDiffRecord(record[key]);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  return normalizeDiffRecord(record);
 }
 
 function normalizeTokenIds(
@@ -585,6 +789,8 @@ export function attachMathEngine(
       return false;
     }
     clearPreview();
+    applyMathDiff(hostEl, EMPTY_DIFF);
+    lastTokenSnapshot = captureTokenSnapshot(hostEl);
     const label = getActionLabel(targetId).trim();
     pendingAction = { id: targetId, label: label || targetId, startedAt: Date.now() };
     try {
@@ -632,6 +838,7 @@ export function attachMathEngine(
   let supportsUndo = false;
   let supportsRedo = false;
   let currentExpression = '';
+  let lastTokenSnapshot: TokenSnapshot | null = null;
 
   const updateHistoryPanel = () => {
     if (!historyPanel) {
@@ -894,6 +1101,16 @@ export function attachMathEngine(
       }
 
       const nextExpression = captureExpression(hostEl);
+      const nextSnapshot = captureTokenSnapshot(hostEl);
+      const payloadDiff = extractDiffFromStatePayload(payload);
+      if (payloadDiff) {
+        applyMathDiff(hostEl, payloadDiff);
+      } else if (lastTokenSnapshot) {
+        applyMathDiff(hostEl, computeTokenDiff(lastTokenSnapshot, nextSnapshot));
+      } else {
+        applyMathDiff(hostEl, EMPTY_DIFF);
+      }
+      lastTokenSnapshot = nextSnapshot;
 
       if (ruleId === 'undo') {
         if (appliedHistoryCount > 0) {
@@ -1011,6 +1228,8 @@ export function attachMathEngine(
   ghostOverlay.clear();
   refreshActions();
   currentExpression = captureExpression(hostEl);
+  applyMathDiff(hostEl, EMPTY_DIFF);
+  lastTokenSnapshot = captureTokenSnapshot(hostEl);
   updateHistoryPanel();
   if (warningsPanel) {
     warningsPanel.render([]);
@@ -1047,6 +1266,8 @@ export function attachMathEngine(
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
       selectedIds = new Set();
+      applyMathDiff(hostEl, EMPTY_DIFF);
+      lastTokenSnapshot = null;
       hostEl.innerHTML = '';
       toaster.destroy();
     },
@@ -1057,6 +1278,7 @@ export function attachMathEngine(
       removeClassFromIds(hostEl, selectedIds, selectedClass);
       hoveredIds = new Set();
       selectedIds = new Set();
+      applyMathDiff(hostEl, EMPTY_DIFF);
       clearLongPress();
       deactivateSelectionMode();
       longPressActive = false;
@@ -1071,6 +1293,8 @@ export function attachMathEngine(
       ghostOverlay.clear();
       refreshActions();
       currentExpression = captureExpression(hostEl);
+      applyMathDiff(hostEl, EMPTY_DIFF);
+      lastTokenSnapshot = captureTokenSnapshot(hostEl);
       updateHistoryPanel();
       if (warningsPanel) {
         warningsPanel.render([]);
