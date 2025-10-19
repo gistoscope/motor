@@ -22,6 +22,7 @@ const {
   initMath,
   fromRealEngine,
   mountPlayground,
+  mountEnginePane,
 } = await importWithTsFallback('../src/index.js');
 const {
   decodeViewerStateFromSearch,
@@ -76,6 +77,55 @@ const DEFAULT_SAMPLE_ID = SAMPLE_EXPRESSIONS[0]?.id ?? 'sample-default';
 
 function formatGraphJSON(example) {
   return JSON.stringify(example.data, null, 2);
+}
+
+function setupDemoTabs() {
+  const tabButtons = Array.from(
+    document.querySelectorAll('[data-role="demo-tab"][data-target]'),
+  );
+  const panelMap = new Map(
+    Array.from(document.querySelectorAll('[data-role="demo-panel"][data-panel]')).map((panel) => [
+      panel.dataset.panel ?? '',
+      panel,
+    ]),
+  );
+
+  if (tabButtons.length === 0 || panelMap.size === 0) {
+    return () => {};
+  }
+
+  const activate = (target) => {
+    tabButtons.forEach((button) => {
+      const isActive = button.dataset.target === target;
+      button.classList.toggle('is-active', isActive);
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      button.setAttribute('tabindex', isActive ? '0' : '-1');
+    });
+
+    panelMap.forEach((panel, key) => {
+      const isActive = key === target;
+      panel.hidden = !isActive;
+      panel.dataset.state = isActive ? 'active' : 'inactive';
+    });
+  };
+
+  tabButtons.forEach((button) => {
+    const target = button.dataset.target;
+    if (!target) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      activate(target);
+    });
+  });
+
+  const initialButton = tabButtons.find((button) => button.dataset.state === 'active');
+  const initialTarget = initialButton?.dataset.target ?? tabButtons[0]?.dataset.target ?? null;
+  if (initialTarget) {
+    activate(initialTarget);
+  }
+
+  return activate;
 }
 
 function getViewerTextarea(root) {
@@ -678,6 +728,79 @@ function renderMathBootstrapError(message) {
   }
 }
 
+function renderEnginePaneUnavailable(message) {
+  const pane = document.getElementById('engine-pane');
+  if (!pane) {
+    return;
+  }
+  const info = pane.querySelector('[data-role="engine-info"]');
+  const status = pane.querySelector('[data-role="engine-status"]');
+  if (info) {
+    info.textContent = 'Engine: unavailable';
+  }
+  if (status) {
+    status.textContent = message;
+    status.dataset.tone = 'error';
+    status.dataset.persist = 'true';
+  }
+  const applyButtons = pane.querySelectorAll('[data-role="engine-apply"]');
+  applyButtons.forEach((button) => {
+    if (button instanceof HTMLButtonElement) {
+      button.disabled = true;
+    }
+  });
+  const input = pane.querySelector('[data-role="engine-input"]');
+  if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
+    input.disabled = true;
+  }
+}
+
+function createEnginePane(engine, meta) {
+  const root = document.getElementById('engine-pane');
+  const samplesContainer = document.getElementById('engine-samples');
+  const focusButton = document.getElementById('engine-input-focus');
+
+  if (!root) {
+    throw new Error('Engine pane markup is incomplete');
+  }
+
+  if (!engine || typeof engine.mount !== 'function') {
+    throw new Error('Engine instance is not available');
+  }
+
+  const defaultSample =
+    SAMPLE_EXPRESSIONS.find((sample) => sample.id === DEFAULT_SAMPLE_ID) ?? SAMPLE_EXPRESSIONS[0];
+  const initialExpression = defaultSample?.expression ?? '';
+
+  let samplesHandle = null;
+  const paneHandle = mountEnginePane(root, engine, {
+    initialExpression,
+    onExpressionChange: (expression) => {
+      samplesHandle?.setActiveExpression(expression);
+    },
+    onInputChange: (value) => {
+      samplesHandle?.setActiveExpression(value);
+    },
+  });
+
+  paneHandle.setEngineMeta(meta ?? null);
+
+  if (samplesContainer) {
+    samplesHandle = createSampleControls(samplesContainer, (sample) => {
+      paneHandle.setExpression(sample.expression);
+    });
+    if (initialExpression) {
+      samplesHandle.setActiveExpression(initialExpression);
+    }
+  }
+
+  if (focusButton instanceof HTMLButtonElement) {
+    focusButton.addEventListener('click', () => {
+      paneHandle.focusInput();
+    });
+  }
+}
+
 function createMathPlayground(engine, meta) {
   const root = document.getElementById('math-playground');
   const samplesContainer = document.getElementById('math-samples');
@@ -724,12 +847,14 @@ function createMathPlayground(engine, meta) {
 }
 
 async function bootstrap() {
+  setupDemoTabs();
   createViewerSection();
 
   try {
     const adapter = await resolveMathEngineAdapter();
     if (!adapter || !adapter.firstEngine) {
       renderMathBootstrapError('Math engine is unavailable.');
+      renderEnginePaneUnavailable('Engine is unavailable.');
       return;
     }
 
@@ -739,10 +864,35 @@ async function bootstrap() {
       initMath(adapter.firstEngine);
     }
 
-    createMathPlayground(adapter.firstEngine, adapter.meta);
+    let enginePaneEngine = null;
+    let playgroundEngine = adapter.firstEngine;
+
+    if (typeof adapter.createEngine === 'function') {
+      enginePaneEngine = adapter.firstEngine;
+      try {
+        playgroundEngine = adapter.createEngine();
+      } catch (error) {
+        console.warn('[demo] Failed to create playground engine instance', error);
+        playgroundEngine = adapter.firstEngine;
+      }
+    }
+
+    if (enginePaneEngine) {
+      try {
+        createEnginePane(enginePaneEngine, adapter.meta);
+      } catch (error) {
+        console.error('[demo] Failed to initialize engine pane', error);
+        renderEnginePaneUnavailable('Failed to initialize engine pane.');
+      }
+    } else {
+      renderEnginePaneUnavailable('Engine pane requires reusable engine instances.');
+    }
+
+    createMathPlayground(playgroundEngine, adapter.meta);
   } catch (error) {
     console.error('[demo] Failed to initialize math playground', error);
     renderMathBootstrapError('Failed to initialize math engine.');
+    renderEnginePaneUnavailable('Failed to initialize engine.');
   }
 }
 

@@ -6,3 +6,5 @@ export { fromRealEngine } from './math/engineAdapter';
 export type { MathBridgeHandle, MathBridgeOptions, MathEngine } from './math/types';
 export { mountPlayground } from './ui/playground';
 export type { PlaygroundHandle, PlaygroundEngineMeta } from './ui/playground';
+export { mountEnginePane } from './ui/enginePane';
+export type { EnginePaneHandle, EnginePaneMeta, EnginePaneOptions } from './ui/enginePane';
