@@ -18,6 +18,21 @@
   filter: drop-shadow(0 0 0.35rem rgba(14, 165, 233, 0.65));
 }
 
+.motor-diff-add {
+  outline: 1px solid var(--motor-accent-secondary);
+  background: color-mix(in srgb, var(--motor-accent-secondary) 22%, transparent);
+}
+
+.motor-diff-del {
+  outline: 1px solid var(--motor-accent-cycle);
+  background: color-mix(in srgb, var(--motor-accent-cycle) 20%, transparent);
+}
+
+.motor-diff-chg {
+  outline: 1px dashed var(--motor-accent-highlight);
+  background: color-mix(in srgb, var(--motor-accent-highlight) 18%, transparent);
+}
+
 .viewer__button--icon {
   padding: 0;
   width: 2rem;

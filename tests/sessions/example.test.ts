@@ -198,17 +198,19 @@ const captureHostHtml = (target: HTMLElement): string => {
 };
 
 const sanitizeHtml = (html: string): string => {
-  return html.replace(/class=(['"])(.*?)\1/g, (_match, quote: string, classValue: string) => {
-    const tokens = classValue
-      .split(/\s+/)
-      .map((token) => token.trim())
-      .filter(Boolean)
-      .filter((token) => !token.startsWith('motor-diff-'));
-    if (tokens.length === 0) {
-      return '';
-    }
-    return `class=${quote}${tokens.join(' ')}${quote}`;
-  });
+  return html
+    .replace(/class=(['"])(.*?)\1/g, (_match, quote: string, classValue: string) => {
+      const tokens = classValue
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(Boolean)
+        .filter((token) => !token.startsWith('motor-diff-'));
+      if (tokens.length === 0) {
+        return '';
+      }
+      return `class=${quote}${tokens.join(' ')}${quote}`;
+    })
+    .replace(/\s+>/g, '>');
 };
 
 const readRenderedActions = (container: HTMLElement): string[] => {
