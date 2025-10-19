@@ -367,7 +367,7 @@
             <button
               type="button"
               class="demo-tabs__button"
-              data-role="demo-tab"
+              data-role="tab-engine"
               data-target="engine"
               data-state="inactive"
               role="tab"
@@ -382,7 +382,7 @@
             <button
               type="button"
               class="demo-tabs__button is-active active"
-              data-role="demo-tab"
+              data-role="tab-graphs"
               data-target="graphs"
               data-state="active"
               role="tab"
@@ -485,7 +485,7 @@
                     Load example
                   </button>
                 </div>
-                <div id="graph-viewer" data-demo="viewer"></div>
+                <div id="graph-viewer" data-demo="viewer" data-role="graph-viewer"></div>
               </section>
 
               <section class="card" id="math-card">
@@ -507,7 +507,7 @@
                     <p class="math-playground__samples-title">Quick samples</p>
                     <div class="math-playground__samples-buttons" id="math-samples"></div>
                   </div>
-                  <div class="math-playground__shell" data-role="math-playground-shell">
+                  <div class="math-playground__shell lower-split" data-role="math-playground-shell">
                     <div class="math-playground__panes">
                       <section class="math-playground__pane math-playground__pane--input">
                         <header class="math-playground__pane-header">
@@ -555,7 +555,7 @@
                         <p class="math-playground__status" data-role="math-status"></p>
                       </section>
                     </div>
-                    <div class="math-playground__panels">
+                    <div class="math-playground__panels lower-right">
                       <section class="math-playground__panel">
                         <header><h3>Actions</h3></header>
                         <div data-role="math-actions"></div>

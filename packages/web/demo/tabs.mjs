@@ -1,69 +1,96 @@
-function findTab(name) {
-  const candidate =
-    document.querySelector(`[data-role="tab-${name}"]`) ||
-    document.querySelector(`[data-tab-role="${name}"]`) ||
-    document.querySelector(`[data-role="demo-tab"][data-target="${name}"]`);
-  return candidate?.closest?.('button') ?? candidate;
-}
+const $ = (selector, root = document) => root.querySelector(selector);
 
-function findSection(name) {
-  const primary =
-    document.querySelector(`[data-section-role="${name}"]`) ||
-    document.querySelector(`[data-role="section-${name}"]`);
-  if (primary) {
-    return primary;
-  }
+const tabGraphs =
+  $('[data-role="tab-graphs"]') ||
+  $('[data-tab-role="graphs"]') ||
+  $('[data-role="demo-tab"][data-target="graphs"]');
+const tabEngine =
+  $('[data-role="tab-engine"]') ||
+  $('[data-tab-role="engine"]') ||
+  $('[data-role="demo-tab"][data-target="engine"]');
 
-  if (name === 'engine') {
-    return document.querySelector('[data-role="math-playground"]');
-  }
+const sectionGraphs =
+  $('[data-role="section-graphs"]') ||
+  $('[data-section-role="graphs"]') ||
+  $('[data-role="graph-viewer"]');
+const sectionEngine =
+  $('[data-role="section-engine"]') ||
+  $('[data-section-role="engine"]') ||
+  $('[data-role="math-playground"]');
 
-  if (name === 'graphs') {
-    const graph = document.querySelector('[data-role="graph-viewer"]');
-    return graph?.closest?.('[data-role="demo-panel"]') ?? graph;
-  }
+const panelGraphs = sectionGraphs?.closest?.('[data-role="demo-panel"]');
+const panelEngine = sectionEngine?.closest?.('[data-role="demo-panel"]');
 
-  return null;
-}
-
-const tabEngine = findTab('engine');
-const tabGraphs = findTab('graphs');
-const sectionEngine = findSection('engine');
-const sectionGraphs = findSection('graphs');
-
-function toggleSection(element, isActive) {
+const setHidden = (element, hidden) => {
   if (!element) {
     return;
   }
-  element.classList.toggle('hidden', !isActive);
+  element.classList.toggle('hidden', hidden);
   if ('hidden' in element) {
-    element.hidden = !isActive;
+    element.hidden = hidden;
   }
-}
+  if (element.dataset) {
+    element.dataset.state = hidden ? 'inactive' : 'active';
+  }
+};
 
-function toggleTab(element, isActive) {
-  if (!element) {
+const setTabState = (tab, isActive) => {
+  if (!tab) {
     return;
   }
-  element.classList.toggle('active', isActive);
-  element.classList.toggle('is-active', isActive);
-  element.setAttribute('aria-selected', isActive ? 'true' : 'false');
-  element.setAttribute('tabindex', isActive ? '0' : '-1');
-  if (element.dataset) {
-    element.dataset.state = isActive ? 'active' : 'inactive';
+  tab.classList.toggle('active', isActive);
+  tab.classList.toggle('is-active', isActive);
+  tab.setAttribute('aria-selected', String(isActive));
+  tab.setAttribute('tabindex', isActive ? '0' : '-1');
+  if (tab.dataset) {
+    tab.dataset.state = isActive ? 'active' : 'inactive';
   }
-}
+};
+
+const persistActiveTab = (which) => {
+  try {
+    localStorage.setItem('motor.activeTab', which);
+  } catch (error) {
+    // Ignore storage failures (private mode, etc.)
+  }
+};
+
+const readStoredTab = () => {
+  try {
+    return localStorage.getItem('motor.activeTab');
+  } catch (error) {
+    return null;
+  }
+};
 
 function show(which) {
-  const isEngine = which === 'engine';
   const isGraphs = which === 'graphs';
-  toggleSection(sectionEngine, isEngine);
-  toggleSection(sectionGraphs, isGraphs);
-  toggleTab(tabEngine, isEngine);
-  toggleTab(tabGraphs, isGraphs);
+
+  setHidden(sectionGraphs, !isGraphs);
+  setHidden(panelGraphs, !isGraphs);
+  setHidden(sectionEngine, isGraphs);
+  setHidden(panelEngine, isGraphs);
+
+  setTabState(tabGraphs, isGraphs);
+  setTabState(tabEngine, !isGraphs);
+
+  persistActiveTab(which);
+
+  const desiredHash = `#${which}`;
+  if (location.hash !== desiredHash) {
+    history.replaceState(null, '', desiredHash);
+  }
 }
 
-show('graphs');
+function init() {
+  const hash = (location.hash || '').replace('#', '');
+  const saved = readStoredTab();
+  const initial = hash === 'engine' || hash === 'graphs' ? hash : saved || 'graphs';
 
-tabEngine?.addEventListener('click', () => show('engine'));
-tabGraphs?.addEventListener('click', () => show('graphs'));
+  show(initial);
+
+  tabGraphs?.addEventListener('click', () => show('graphs'));
+  tabEngine?.addEventListener('click', () => show('engine'));
+}
+
+init();
