@@ -123,169 +123,6 @@
         background: rgba(7, 10, 14, 0.65);
       }
 
-      .math-playground {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-
-      .math-playground__samples {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-      }
-
-      .math-playground__samples-title {
-        margin: 0;
-        font-size: 0.85rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: rgba(233, 237, 245, 0.5);
-      }
-
-      .math-playground__samples-buttons {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.6rem;
-      }
-
-      .math-playground__samples-buttons button {
-        font: inherit;
-        border-radius: 999px;
-        padding: 0.45rem 0.95rem;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.06);
-        color: inherit;
-        cursor: pointer;
-        transition: border-color 0.2s ease, background 0.2s ease;
-      }
-
-      .math-playground__samples-buttons button:hover,
-      .math-playground__samples-buttons button:focus {
-        border-color: rgba(117, 180, 255, 0.65);
-        outline: none;
-      }
-
-      .math-playground__samples-buttons button[data-active='true'] {
-        border-color: rgba(255, 179, 71, 0.9);
-        background: rgba(255, 179, 71, 0.22);
-      }
-
-      .math-playground__body {
-        display: grid;
-        gap: 1.5rem;
-        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-        align-items: flex-start;
-      }
-
-      .math-playground__engine {
-        border-radius: 16px;
-        background: rgba(7, 10, 14, 0.65);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        min-height: 200px;
-        padding: 1.25rem;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-
-      .math-playground__engine h3 {
-        margin: 0;
-        font-size: 1.1rem;
-        letter-spacing: 0.02em;
-      }
-
-      .math-playground__engine-info {
-        margin: 0;
-        font-size: 0.85rem;
-        color: rgba(233, 237, 245, 0.65);
-      }
-
-      .math-playground__engine-output {
-        flex: 1;
-        border-radius: 12px;
-        background: rgba(0, 0, 0, 0.2);
-        padding: 1rem;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.35rem;
-        min-height: 120px;
-        line-height: 1.35;
-      }
-
-      .math-playground__engine-output span[data-token-id] {
-        padding: 0.2rem 0.45rem;
-        border-radius: 999px;
-        background: rgba(117, 180, 255, 0.12);
-        border: 1px solid transparent;
-        transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-        cursor: pointer;
-      }
-
-      .math-playground__engine-output span[data-token-id].is-hovered {
-        border-color: rgba(117, 180, 255, 0.65);
-        background: rgba(117, 180, 255, 0.22);
-        transform: translateY(-2px);
-      }
-
-      .math-playground__engine-output span[data-token-id].is-selected {
-        border-color: rgba(255, 179, 71, 0.8);
-        background: rgba(255, 179, 71, 0.24);
-        transform: translateY(-1px);
-      }
-
-      .math-playground__panel {
-        border-radius: 16px;
-        background: rgba(7, 10, 14, 0.65);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        padding: 1.25rem;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-
-      .math-playground__panel h3 {
-        margin: 0;
-        font-size: 1.1rem;
-        letter-spacing: 0.02em;
-      }
-
-      .math-playground__panel pre {
-        margin: 0;
-        font-size: 0.85rem;
-        line-height: 1.5;
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: rgba(233, 237, 245, 0.85);
-      }
-
-      .math-playground__actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.6rem;
-      }
-
-      .math-playground__actions button {
-        font: inherit;
-        border-radius: 999px;
-        padding: 0.45rem 0.95rem;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.06);
-        color: inherit;
-        cursor: pointer;
-      }
-
-      .math-playground__actions button:hover,
-      .math-playground__actions button:focus {
-        border-color: rgba(117, 180, 255, 0.65);
-        outline: none;
-      }
-
-      .math-playground__actions button[data-active='true'] {
-        border-color: rgba(255, 179, 71, 0.9);
-        background: rgba(255, 179, 71, 0.22);
-      }
-
       footer.page-footer {
         margin-top: 1rem;
         text-align: center;
@@ -346,25 +183,73 @@
             adapter powers the viewer panel via <code>initMath()</code>.
           </p>
         </div>
-        <div class="math-playground">
+        <div class="math-playground" id="math-playground" data-demo="playground">
           <div class="math-playground__samples" aria-label="Sample expressions">
             <p class="math-playground__samples-title">Quick samples</p>
             <div class="math-playground__samples-buttons" id="math-samples"></div>
           </div>
-          <div class="math-playground__body">
-            <div class="math-playground__engine">
-              <h3>Interactive expression</h3>
-              <p class="math-playground__engine-info" id="math-engine-info"></p>
-              <div class="math-playground__engine-output" id="math-engine-host"></div>
-              <div class="math-playground__status" id="math-engine-status"></div>
+          <div class="math-playground__shell" data-role="math-playground-shell">
+            <div class="math-playground__panes">
+              <section class="math-playground__pane math-playground__pane--input">
+                <header class="math-playground__pane-header">
+                  <h3>Input</h3>
+                  <p>Provide LaTeX or plain-text expression.</p>
+                </header>
+                <form class="math-playground__input" data-role="math-input-form">
+                  <label class="math-playground__input-label" for="math-input">
+                    Expression input
+                  </label>
+                  <textarea
+                    id="math-input"
+                    class="math-playground__input-textarea"
+                    data-role="math-input"
+                    spellcheck="false"
+                    rows="6"
+                  ></textarea>
+                  <div class="math-playground__input-actions">
+                    <button type="submit" class="math-playground__button" data-role="math-input-apply">
+                      Parse expression
+                    </button>
+                    <button type="button" class="math-playground__button" id="math-input-focus">
+                      Focus input
+                    </button>
+                  </div>
+                </form>
+              </section>
+              <section class="math-playground__pane math-playground__pane--display">
+                <header class="math-playground__pane-header">
+                  <h3>Display</h3>
+                  <p>CATX output if available, otherwise the engine&apos;s HTML/tokens.</p>
+                </header>
+                <p class="math-playground__engine-info" data-role="math-engine-info"></p>
+                <div class="math-playground__display" data-role="math-display">
+                  <div class="math-playground__display-catx" data-role="math-display-catx"></div>
+                  <div class="math-playground__display-fallback" data-role="math-display-fallback">
+                    <div class="math-playground__display-host" data-role="math-display-host"></div>
+                    <div class="math-playground__display-html" data-role="math-display-fallback-html"></div>
+                  </div>
+                </div>
+                <p class="math-playground__status" data-role="math-status"></p>
+              </section>
             </div>
-            <div class="math-playground__panel">
-              <h3>Engine state</h3>
-              <pre id="math-state"></pre>
-              <h3>Latest events</h3>
-              <pre id="math-events"></pre>
-              <h3>Actions</h3>
-              <div class="math-playground__actions" id="math-actions"></div>
+            <div class="math-playground__panels">
+              <section class="math-playground__panel">
+                <header><h3>Actions</h3></header>
+                <div data-role="math-actions"></div>
+              </section>
+              <section class="math-playground__panel">
+                <header><h3>History</h3></header>
+                <div data-role="math-history"></div>
+              </section>
+              <section class="math-playground__panel">
+                <header><h3>Player</h3></header>
+                <div data-role="math-player"></div>
+              </section>
+              <section class="math-playground__panel math-playground__panel--mini-graph">
+                <header><h3>Mini-graph</h3></header>
+                <div class="math-playground__mini-graph-viewer" data-role="math-mini-graph-viewer"></div>
+                <pre class="math-playground__mini-graph-json" data-role="math-mini-graph-json"></pre>
+              </section>
             </div>
           </div>
         </div>

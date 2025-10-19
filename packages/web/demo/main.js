@@ -1,4 +1,4 @@
-import { createViewer, initMath, fromRealEngine } from '../src/index.js';
+import { createViewer, initMath, fromRealEngine, mountPlayground } from '../src/index.js';
 import {
   decodeViewerStateFromSearch,
   encodeViewerStateToUrl,
@@ -450,72 +450,6 @@ function createSampleControls(container, onSelect) {
   };
 }
 
-function createMathActions(engine, container, options = {}) {
-  let activeId = null;
-
-  const render = () => {
-    container.innerHTML = '';
-    const actions = engine.getLegalActions();
-    actions.forEach((action) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.dataset.actionId = action.id;
-      button.textContent = action.label;
-      if (action.id === activeId) {
-        button.dataset.active = 'true';
-      }
-      button.addEventListener('click', () => {
-        try {
-          engine.apply(action.id);
-        } catch (error) {
-          console.error('[demo] Failed to apply action', action.id, error);
-          if (typeof options.onActionError === 'function') {
-            options.onActionError(error, action);
-          }
-        }
-      });
-      container.appendChild(button);
-    });
-  };
-
-  render();
-
-  return {
-    render,
-    setActiveId(id) {
-      activeId = id ?? null;
-      render();
-    },
-  };
-}
-
-function stringifyEventPayload(payload) {
-  if (payload == null) {
-    return 'null';
-  }
-  if (typeof payload === 'string' || typeof payload === 'number' || typeof payload === 'boolean') {
-    return JSON.stringify(payload);
-  }
-  try {
-    return JSON.stringify(payload, null, 2);
-  } catch (error) {
-    return String(payload);
-  }
-}
-
-function formatEngineInfo(meta) {
-  if (!meta) {
-    return 'Engine: unavailable';
-  }
-  const name = meta.name ?? 'Math engine';
-  const origin =
-    meta.source === 'real'
-      ? meta.origin ?? 'window.RealMathEngine'
-      : meta.origin ?? 'demo stub';
-  const version = typeof meta.version === 'string' && meta.version.trim().length > 0 ? meta.version.trim() : '';
-  return version ? `Engine: ${name} (v${version}) — ${origin}` : `Engine: ${name} — ${origin}`;
-}
-
 function resolveEngineName(candidate) {
   if (!candidate) {
     return null;
@@ -700,27 +634,20 @@ async function resolveMathEngineAdapter() {
 }
 
 function renderMathBootstrapError(message) {
-  const info = document.getElementById('math-engine-info');
-  const status = document.getElementById('math-engine-status');
-  const stateOutput = document.getElementById('math-state');
-  const eventsOutput = document.getElementById('math-events');
-  const actionsContainer = document.getElementById('math-actions');
+  const playground = document.getElementById('math-playground');
   const samplesContainer = document.getElementById('math-samples');
-
+  if (!playground) {
+    return;
+  }
+  const info = playground.querySelector('[data-role="math-engine-info"]');
+  const status = playground.querySelector('[data-role="math-status"]');
   if (info) {
     info.textContent = 'Engine: unavailable';
   }
   if (status) {
     status.textContent = message;
-  }
-  if (stateOutput) {
-    stateOutput.textContent = message;
-  }
-  if (eventsOutput) {
-    eventsOutput.textContent = 'No events — engine unavailable.';
-  }
-  if (actionsContainer) {
-    actionsContainer.innerHTML = '';
+    status.dataset.tone = 'error';
+    status.dataset.persist = 'true';
   }
   if (samplesContainer) {
     samplesContainer.innerHTML = '';
@@ -728,15 +655,11 @@ function renderMathBootstrapError(message) {
 }
 
 function createMathPlayground(engine, meta) {
-  const host = document.getElementById('math-engine-host');
-  const status = document.getElementById('math-engine-status');
-  const info = document.getElementById('math-engine-info');
-  const stateOutput = document.getElementById('math-state');
-  const eventsOutput = document.getElementById('math-events');
-  const actionsContainer = document.getElementById('math-actions');
+  const root = document.getElementById('math-playground');
   const samplesContainer = document.getElementById('math-samples');
+  const focusButton = document.getElementById('math-input-focus');
 
-  if (!host || !status || !stateOutput || !eventsOutput || !actionsContainer || !samplesContainer) {
+  if (!root || !samplesContainer) {
     throw new Error('Math playground markup is incomplete');
   }
 
@@ -744,84 +667,35 @@ function createMathPlayground(engine, meta) {
     throw new Error('Math engine instance is not available');
   }
 
-  if (info) {
-    info.textContent = formatEngineInfo(meta);
-  }
-
-  stateOutput.textContent = 'Waiting for engine state…';
-  eventsOutput.textContent = 'No events yet.';
-  status.textContent = meta?.source === 'stub' ? 'Using stub math engine for demo.' : 'Initializing math engine…';
-
-  const actions = createMathActions(engine, actionsContainer, {
-    onActionError: (_error, action) => {
-      const label = action?.label ?? action?.id ?? 'action';
-      status.textContent = `Failed to apply ${label}.`;
-    },
-  });
-
-  const samples = createSampleControls(samplesContainer, (sample) => {
-    status.textContent = `Loading ${sample.label}…`;
-    try {
-      engine.mount(host, sample.expression);
-    } catch (error) {
-      console.error('[demo] Failed to mount sample expression', sample.expression, error);
-      status.textContent = 'Failed to load sample expression.';
-    }
-  });
-
-  let lastExpressionKey = '';
-
-  const updateEvents = (eventName, payload) => {
-    eventsOutput.textContent = `${eventName}: ${stringifyEventPayload(payload)}`;
-  };
-
-  engine.on('hover', (payload) => {
-    updateEvents('hover', payload);
-    if (!payload) {
-      status.textContent = 'Hover cleared';
-      return;
-    }
-    status.textContent = `Hovered token: ${payload}`;
-  });
-
-  engine.on('select', (payload) => {
-    updateEvents('select', payload);
-    if (!payload) {
-      status.textContent = 'Selection cleared';
-      return;
-    }
-    status.textContent = `Selected token: ${payload}`;
-  });
-
-  engine.on('state', (payload) => {
-    actions.setActiveId(payload?.activeActionId ?? null);
-    stateOutput.textContent = stringifyEventPayload(payload);
-
-    const expression = typeof payload?.expression === 'string' ? payload.expression : null;
-    if (expression) {
-      const normalized = normalizeExpressionValue(expression);
-      if (normalized && normalized !== lastExpressionKey) {
-        lastExpressionKey = normalized;
-        samples.setActiveExpression(expression);
-        status.textContent = `Expression loaded: ${expression}`;
-      }
-    }
-  });
-
   const defaultSample =
     SAMPLE_EXPRESSIONS.find((sample) => sample.id === DEFAULT_SAMPLE_ID) ?? SAMPLE_EXPRESSIONS[0];
   const initialExpression = defaultSample?.expression ?? '';
+
+  let samplesHandle = null;
+  const playgroundHandle = mountPlayground(root, engine, {
+    initialExpression,
+    onExpressionChange: (expression) => {
+      samplesHandle?.setActiveExpression(expression);
+    },
+    onInputChange: (value) => {
+      samplesHandle?.setActiveExpression(value);
+    },
+  });
+
+  playgroundHandle.setEngineMeta(meta ?? null);
+
+  samplesHandle = createSampleControls(samplesContainer, (sample) => {
+    playgroundHandle.loadExpression(sample.expression);
+  });
+
   if (initialExpression) {
-    samples.setActiveExpression(initialExpression);
+    samplesHandle.setActiveExpression(initialExpression);
   }
 
-  try {
-    engine.mount(host, initialExpression);
-    status.textContent = `Expression loaded: ${initialExpression}`;
-    actions.render();
-  } catch (error) {
-    console.error('[demo] Failed to mount math engine', error);
-    status.textContent = 'Failed to mount math engine.';
+  if (focusButton instanceof HTMLButtonElement) {
+    focusButton.addEventListener('click', () => {
+      playgroundHandle.focusInput();
+    });
   }
 }
 
