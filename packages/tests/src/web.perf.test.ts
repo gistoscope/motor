@@ -1,7 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { fromJSON } from '@motor/grasp';
-import type { GraspGraph } from '@motor/grasp';
-
 import {
   analyzeGraph,
   analyzeGraphSyncFallback,
@@ -9,6 +6,7 @@ import {
   computeShortestPathAsync,
   edgeKey,
 } from '../../web/src/analysis';
+import { parseGraphJSON, type GraspGraph } from '../../web/src/api';
 
 type StressGraph = {
   graph: GraspGraph;
@@ -34,10 +32,15 @@ function createStressGraph(nodeCount: number): StressGraph {
     edges.push({ from, to, weight: 2 });
   }
 
-  const graph = fromJSON({
+  const parsed = parseGraphJSON({
     nodes,
     edges: edges.map(({ from, to }) => ({ from, to })),
   });
+  if (!parsed.ok) {
+    throw new Error(parsed.errors.join('\n'));
+  }
+
+  const { graph } = parsed;
 
   const weightEntries = edges.map(({ from, to, weight }) => [edgeKey(from, to), weight] as const);
   (graph as { weights?: ReadonlyMap<string, number> }).weights = new Map(weightEntries);

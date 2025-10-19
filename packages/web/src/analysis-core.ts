@@ -1,6 +1,5 @@
 import {
   edges as listEdges,
-  hasCycleDirected,
   scc,
   size,
   nodes as listNodes,
@@ -52,6 +51,135 @@ export interface ShortestPathGraph {
 export interface ShortestPathComputation {
   readonly distance: number;
   readonly path: readonly string[];
+}
+
+interface GraphLikeNode {
+  readonly id?: unknown;
+}
+
+interface GraphLikeEdge {
+  readonly from?: unknown;
+  readonly to?: unknown;
+}
+
+interface GraphLike {
+  readonly nodes?: readonly GraphLikeNode[] | null;
+  readonly edges?: readonly GraphLikeEdge[] | null;
+}
+
+function normalizeGraphEdges(
+  graph: GraspGraph | GraphLike | null | undefined,
+): Array<{ from: string; to: string }> {
+  const result: Array<{ from: string; to: string }> = [];
+
+  if (!graph) {
+    return result;
+  }
+
+  const maybeGraph = graph as GraphLike;
+  if (Array.isArray(maybeGraph.edges)) {
+    for (const edge of maybeGraph.edges) {
+      if (!edge) {
+        continue;
+      }
+      const { from, to } = edge;
+      if (from == null || to == null) {
+        continue;
+      }
+      result.push({ from: String(from), to: String(to) });
+    }
+    return result;
+  }
+
+  const typed = graph as GraspGraph;
+  for (const edge of listEdges(typed)) {
+    result.push({ from: String(edge.from), to: String(edge.to) });
+  }
+  return result;
+}
+
+function normalizeGraphNodes(graph: GraspGraph | GraphLike | null | undefined): string[] {
+  const set = new Set<string>();
+
+  if (!graph) {
+    return [];
+  }
+
+  const maybeGraph = graph as GraphLike;
+  if (Array.isArray(maybeGraph.nodes)) {
+    for (const node of maybeGraph.nodes) {
+      if (!node) {
+        continue;
+      }
+      const { id } = node;
+      if (id != null) {
+        set.add(String(id));
+      }
+    }
+  } else {
+    for (const id of listNodes(graph as GraspGraph)) {
+      set.add(String(id));
+    }
+  }
+
+  return Array.from(set);
+}
+
+export function hasCycleDirected(graph: GraspGraph | GraphLike | null | undefined): boolean {
+  const edges = normalizeGraphEdges(graph);
+  const nodeSet = new Set<string>(normalizeGraphNodes(graph));
+  for (const { from, to } of edges) {
+    nodeSet.add(from);
+    nodeSet.add(to);
+  }
+
+  const nodes = Array.from(nodeSet);
+  if (nodes.length === 0) {
+    return false;
+  }
+
+  const indegree = new Map<string, number>();
+  const outgoing = new Map<string, string[]>();
+
+  for (const node of nodes) {
+    indegree.set(node, 0);
+  }
+
+  for (const { from, to } of edges) {
+    if (!indegree.has(from)) {
+      indegree.set(from, 0);
+    }
+    indegree.set(to, (indegree.get(to) ?? 0) + 1);
+    const bucket = outgoing.get(from);
+    if (bucket) {
+      bucket.push(to);
+    } else {
+      outgoing.set(from, [to]);
+    }
+  }
+
+  const queue: string[] = [];
+  for (const node of indegree.keys()) {
+    if ((indegree.get(node) ?? 0) === 0) {
+      queue.push(node);
+    }
+  }
+
+  let visited = 0;
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    visited += 1;
+    const neighbors = outgoing.get(current) ?? [];
+    for (const neighbor of neighbors) {
+      const next = (indegree.get(neighbor) ?? 0) - 1;
+      indegree.set(neighbor, next);
+      if (next === 0) {
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  return visited !== indegree.size;
 }
 
 export function shortestPath(

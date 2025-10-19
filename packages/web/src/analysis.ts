@@ -1,4 +1,4 @@
-import type { GraspGraph } from '@motor/grasp';
+import type { GraspGraph } from './api';
 
 import {
   analyzeGraphSync,
