@@ -22,6 +22,14 @@ if (existsSync(genAliases)) {
   console.warn('[verify-no-web] scripts/generate-aliases.mjs not found — continuing');
 }
 
+// 0.5) Ensure browser-facing modules do not import @motor/grasp directly
+const verifyWebImports = join(ROOT, 'scripts', 'verify-web-imports.mjs');
+if (existsSync(verifyWebImports)) {
+  step('verify-web-imports', 'node', [verifyWebImports]);
+} else {
+  console.warn('[verify-no-web] scripts/verify-web-imports.mjs not found — continuing');
+}
+
 // 1) Build a temporary root tsconfig that excludes web (and spark)
 const tmpDir = join(ROOT, '.tmp');
 try { mkdirSync(tmpDir, { recursive: true }); } catch {}

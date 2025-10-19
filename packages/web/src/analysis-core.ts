@@ -59,7 +59,8 @@ function toGraphJSON(graph: GraphJSON | GraphLike | null | undefined): GraphJSON
     seenNodes.add(id);
     const labelRaw = (node as GraphLikeNode).label;
     const label = typeof labelRaw === 'string' ? labelRaw : undefined;
-    normalizedNodes.push({ id, label });
+    const entry: GraphJSON['nodes'][number] = label === undefined ? { id } : { id, label };
+    normalizedNodes.push(entry);
   }
 
   const sourceEdges = graph?.edges ?? [];
@@ -72,14 +73,16 @@ function toGraphJSON(graph: GraphJSON | GraphLike | null | undefined): GraphJSON
     const to = String(toRaw);
     const labelRaw = (edge as GraphLikeEdge).label;
     const weightRaw = (edge as GraphLikeEdge).weight;
-    const entry = {
+    const label = typeof labelRaw === 'string' ? labelRaw : undefined;
+    const weight =
+      typeof weightRaw === 'number' && Number.isFinite(weightRaw) && weightRaw >= 0
+        ? weightRaw
+        : undefined;
+    const entry: GraphJSON['edges'][number] = {
       from,
       to,
-      label: typeof labelRaw === 'string' ? labelRaw : undefined,
-      weight:
-        typeof weightRaw === 'number' && Number.isFinite(weightRaw) && weightRaw >= 0
-          ? weightRaw
-          : undefined,
+      ...(label === undefined ? {} : { label }),
+      ...(weight === undefined ? {} : { weight }),
     };
     normalizedEdges.push(entry);
     if (!seenNodes.has(from)) {

@@ -590,10 +590,11 @@ export function attachMathEngine(
 
   const ownerDocument = hostEl.ownerDocument ?? document;
   const ownerWindow = ownerDocument.defaultView ?? window;
-  const toaster = createToastManager(ownerDocument, {
+  const toastOptions = {
     container: options.toastContainer ?? null,
-    durationMs: options.toastDurationMs,
-  });
+    ...(options.toastDurationMs !== undefined ? { durationMs: options.toastDurationMs } : {}),
+  } satisfies Parameters<typeof createToastManager>[1];
+  const toaster = createToastManager(ownerDocument, toastOptions);
   const instrumentationOnAction = options.instrumentation?.onAction ?? null;
 
   const hoverClass = options.classNames?.hovered ?? DEFAULT_HOVER_CLASS;

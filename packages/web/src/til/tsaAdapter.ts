@@ -1,5 +1,6 @@
 import type { NodeId } from './opTokens';
-import * as tsaModule from '@motor/tsa';
+import type { TsaModule } from '../types';
+import * as tsaRuntime from '@motor/tsa';
 
 // Prefer real TSA types if available; fall back to any to keep strict mode.
 type StageAst = any;
@@ -16,21 +17,21 @@ export function hasTsa(): boolean {
 }
 
 // Lazy import to avoid type coupling:
-let tsa: any = null;
+let tsa: TsaModule | null = null;
 function useTsa() {
   if (!tsa) {
     try {
       const maybeRequire = (globalThis as { require?: (id: string) => any }).require;
       if (typeof maybeRequire === 'function') {
-        tsa = maybeRequire('@motor/tsa');
+        tsa = maybeRequire('@motor/tsa') as TsaModule;
       } else {
-        tsa = tsaModule;
+        tsa = tsaRuntime as TsaModule;
       }
     } catch {
-      tsa = tsaModule;
+      tsa = tsaRuntime as TsaModule;
     }
   }
-  return tsa;
+  return tsa as TsaModule;
 }
 
 // Heuristic mapping for basic operators → canonical rule ids (override-able by TIL executor map)
@@ -69,7 +70,7 @@ export const applyOne: ApplyOne = (ast, rule, focus) => {
   if (typeof api.applyOne === 'function') {
     try {
       const res = api.applyOne(ast, rule, focus);
-      if (res && res.ast) return { ok: true, ast: res.ast };
+      if (res && 'ast' in res && res.ast) return { ok: true, ast: res.ast };
       return { ok: false, reason: 'applyOne returned no ast' };
     } catch (e: any) {
       return { ok: false, reason: String(e?.message || e) };
@@ -79,7 +80,7 @@ export const applyOne: ApplyOne = (ast, rule, focus) => {
   if (typeof api.applyNextRule === 'function') {
     try {
       const res = api.applyNextRule(ast, rule); // if rule not used, TSA may pick the next applicable
-      if (res && res.ast) return { ok: true, ast: res.ast };
+      if (res && 'ast' in res && res.ast) return { ok: true, ast: res.ast };
       return { ok: false, reason: 'applyNextRule returned no ast' };
     } catch (e: any) {
       return { ok: false, reason: String(e?.message || e) };

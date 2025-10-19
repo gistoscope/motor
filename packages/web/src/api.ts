@@ -1,22 +1,27 @@
+import type { GraphJSON, GraspModule } from './types';
+
 // Unified facade for external imports used by the web demo.
-export { validateGraphJSON, fromJSON, toDOT, inspect } from '@motor/grasp';
+import * as graspRuntime from '@motor/grasp';
 
-export type GraphJSON = {
-  nodes: Array<{ id: string; label?: string }>;
-  edges: Array<{ from: string; to: string; label?: string; weight?: number }>;
-  name?: string;
-};
+const grasp = graspRuntime as GraspModule;
 
-export function parseGraphJSON(text: string): GraphJSON {
-  const j = JSON.parse(text);
-  return j as GraphJSON;
+export const { validateGraphJSON, fromJSON, toDOT, inspect } = grasp;
+export type { GraphEdge, GraphJSON, GraphNode, GraphValidationResult } from './types';
+
+export interface ShortestPathResult {
+  distance: number;
+  path: string[];
 }
 
-export function shortestPath(graph: GraphJSON, src: string, dst: string) {
+export function parseGraphJSON(text: string): GraphJSON {
+  return JSON.parse(text) as GraphJSON;
+}
+
+export function shortestPath(graph: GraphJSON, src: string, dst: string): ShortestPathResult {
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
-  const S = new Map(
-    nodes.map((n) => [n.id, { d: Infinity, p: null as string | null, done: false, w: Infinity }]),
+  const S = new Map<string, { d: number; p: string | null; done: boolean; w: number }>(
+    nodes.map((n) => [n.id, { d: Infinity, p: null, done: false, w: Infinity }]),
   );
   for (const e of edges) {
     if (!S.has(e.from)) {
@@ -38,9 +43,15 @@ export function shortestPath(graph: GraphJSON, src: string, dst: string) {
   while (true) {
     let u: string | null = null;
     let best = Infinity;
-    for (const [id, st] of S) if (!st.done && st.d < best) { best = st.d; u = id; }
-    if (u === null) break;
-    if (u === dst) break;
+    for (const [id, st] of S) {
+      if (!st.done && st.d < best) {
+        best = st.d;
+        u = id;
+      }
+    }
+    if (u === null || u === dst) {
+      break;
+    }
     const Su = S.get(u)!;
     Su.done = true;
     for (const { to, w } of adj.get(u) ?? []) {
@@ -50,13 +61,13 @@ export function shortestPath(graph: GraphJSON, src: string, dst: string) {
       const shouldUpdate =
         nd < Sv.d ||
         (nd === Sv.d &&
-          (w < Sv.w || (w === Sv.w && (Sv.p === null || (u ?? '').localeCompare(Sv.p) < 0))));
+          (w < Sv.w || (w === Sv.w && (Sv.p === null || u.localeCompare(Sv.p) < 0))));
       if (shouldUpdate) {
         Sv.d = nd;
         Sv.p = u;
         Sv.w = w;
       }
-  }
+    }
   }
   const path: string[] = [];
   if (S.get(dst)!.d !== Infinity) {
@@ -79,16 +90,18 @@ export function hasCycleDirected(graph: GraphJSON): boolean {
   const nodes = Array.from(nodeSet);
   const indeg = new Map(nodes.map((id) => [id, 0]));
   for (const e of graph?.edges ?? []) {
-    indeg.set(e.to, (indeg.get(e.to) || 0) + 1);
+    indeg.set(e.to, (indeg.get(e.to) ?? 0) + 1);
   }
-  const q = nodes.filter((id) => (indeg.get(id) || 0) === 0);
+  const q = nodes.filter((id) => (indeg.get(id) ?? 0) === 0);
   let seen = 0;
   while (q.length) {
     const u = q.shift()!;
     seen++;
     for (const e of graph?.edges ?? []) if (e.from === u) {
-      indeg.set(e.to, (indeg.get(e.to) || 0) - 1);
-      if ((indeg.get(e.to) || 0) === 0) q.push(e.to);
+      const prev = indeg.get(e.to) ?? 0;
+      const next = prev - 1;
+      indeg.set(e.to, next);
+      if (next === 0) q.push(e.to);
     }
   }
   return seen !== nodes.length;
