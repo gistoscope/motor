@@ -142,16 +142,25 @@ function astToGraph(ast: unknown): GraphJSON {
   return { nodes, edges };
 }
 
+type CatxRendererCandidate = {
+  render?: (...args: unknown[]) => unknown;
+  default?: { render?: (...args: unknown[]) => unknown };
+} | null | undefined;
+
 function findCatxRenderer(ownerWindow: Window | null): CatxRenderer | null {
-  const candidate = ownerWindow?.CATX ?? (globalThis as { CATX?: CatxRenderer }).CATX;
+  const candidate = (
+    (ownerWindow as Window & { CATX?: unknown })?.CATX ??
+    (globalThis as { CATX?: unknown }).CATX
+  ) as CatxRendererCandidate;
   if (!candidate) {
     return null;
   }
   if (typeof candidate.render === 'function') {
-    return candidate;
+    return candidate as CatxRenderer;
   }
-  if (candidate && typeof (candidate as { default?: CatxRenderer }).default?.render === 'function') {
-    return (candidate as { default: CatxRenderer }).default;
+  const fallback = candidate.default;
+  if (fallback && typeof fallback.render === 'function') {
+    return fallback as CatxRenderer;
   }
   return null;
 }
@@ -295,7 +304,7 @@ export function mountPlayground(
     if (statusTimeout) {
       ownerWindow.clearTimeout(statusTimeout);
     }
-    statusTimeout = ownerWindow.setTimeout(() => {
+    const timeoutHandle = ownerWindow.setTimeout(() => {
       if (statusContainer.dataset.persist === 'true') {
         return;
       }
@@ -303,6 +312,7 @@ export function mountPlayground(
       delete statusContainer.dataset.tone;
       statusTimeout = null;
     }, timeoutMs);
+    statusTimeout = timeoutHandle as unknown as ReturnType<typeof ownerWindow.setTimeout>;
   };
 
   const setEngineMeta = (meta: PlaygroundEngineMeta | null) => {

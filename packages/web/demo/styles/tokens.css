@@ -1,0 +1,11 @@
+:root {
+  --motor-bg: #0b0b0c;
+  --motor-fg: #e5e7eb;
+  --motor-accent: #60a5fa;
+  --motor-muted: #9ca3af;
+  --motor-surface: #111214;
+  --motor-good: #10b981;
+  --motor-warn: #f59e0b;
+  --motor-bad: #ef4444;
+  --motor-gap: 8px;
+}
