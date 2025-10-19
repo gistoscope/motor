@@ -129,6 +129,48 @@
         gap: 1rem;
       }
 
+      .math-playground__samples {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      .math-playground__samples-title {
+        margin: 0;
+        font-size: 0.85rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(233, 237, 245, 0.5);
+      }
+
+      .math-playground__samples-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.6rem;
+      }
+
+      .math-playground__samples-buttons button {
+        font: inherit;
+        border-radius: 999px;
+        padding: 0.45rem 0.95rem;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.06);
+        color: inherit;
+        cursor: pointer;
+        transition: border-color 0.2s ease, background 0.2s ease;
+      }
+
+      .math-playground__samples-buttons button:hover,
+      .math-playground__samples-buttons button:focus {
+        border-color: rgba(117, 180, 255, 0.65);
+        outline: none;
+      }
+
+      .math-playground__samples-buttons button[data-active='true'] {
+        border-color: rgba(255, 179, 71, 0.9);
+        background: rgba(255, 179, 71, 0.22);
+      }
+
       .math-playground__body {
         display: grid;
         gap: 1.5rem;
@@ -151,6 +193,12 @@
         margin: 0;
         font-size: 1.1rem;
         letter-spacing: 0.02em;
+      }
+
+      .math-playground__engine-info {
+        margin: 0;
+        font-size: 0.85rem;
+        color: rgba(233, 237, 245, 0.65);
       }
 
       .math-playground__engine-output {
@@ -293,16 +341,20 @@
         <div>
           <h2>Math Playground</h2>
           <p class="description">
-            A lightweight mock engine implements the <code>MathEngine</code> contract. The same
-            instance drives the playground and integrates with the viewer panel via
-            <code>initMath()</code>.
+            The playground looks for <code>window.RealMathEngine</code>, adapts it with
+            <code>fromRealEngine()</code>, and falls back to a local stub if nothing is found. The same
+            adapter powers the viewer panel via <code>initMath()</code>.
           </p>
         </div>
         <div class="math-playground">
-          <div class="math-playground__actions" id="math-actions"></div>
+          <div class="math-playground__samples" aria-label="Sample expressions">
+            <p class="math-playground__samples-title">Quick samples</p>
+            <div class="math-playground__samples-buttons" id="math-samples"></div>
+          </div>
           <div class="math-playground__body">
             <div class="math-playground__engine">
               <h3>Interactive expression</h3>
+              <p class="math-playground__engine-info" id="math-engine-info"></p>
               <div class="math-playground__engine-output" id="math-engine-host"></div>
               <div class="math-playground__status" id="math-engine-status"></div>
             </div>
@@ -311,6 +363,8 @@
               <pre id="math-state"></pre>
               <h3>Latest events</h3>
               <pre id="math-events"></pre>
+              <h3>Actions</h3>
+              <div class="math-playground__actions" id="math-actions"></div>
             </div>
           </div>
         </div>

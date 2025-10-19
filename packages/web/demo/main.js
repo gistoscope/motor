@@ -1,4 +1,4 @@
-import createViewer, { initMath } from '../src/viewer.js';
+import { createViewer, initMath, fromRealEngine } from '../src/index.js';
 import {
   decodeViewerStateFromSearch,
   encodeViewerStateToUrl,
@@ -42,11 +42,13 @@ const GRAPH_EXAMPLES = [
   },
 ];
 
-const EXPRESSIONS = [
-  { id: 'expr-0', label: '2 + 3', expression: '2+3' },
-  { id: 'expr-1', label: '3x + 2x', expression: '3x+2x' },
-  { id: 'expr-2', label: '(a + b) / c', expression: '(a+b)/c' },
+const SAMPLE_EXPRESSIONS = [
+  { id: 'sample-add', label: 'Load 2 + 3', expression: '2 + 3' },
+  { id: 'sample-combine', label: 'Load 3x + 2x', expression: '3x + 2x' },
+  { id: 'sample-divide', label: 'Load (a + b) / c', expression: '(a + b) / c' },
 ];
+
+const DEFAULT_SAMPLE_ID = SAMPLE_EXPRESSIONS[0]?.id ?? 'sample-default';
 
 function formatGraphJSON(example) {
   return JSON.stringify(example.data, null, 2);
@@ -401,223 +403,54 @@ function createViewerSection() {
   window.addEventListener('popstate', applyViewerStateFromUrl);
 }
 
-class DemoMathEngine {
-  constructor(options) {
-    this.#expressions = options.expressions.map((entry, index) => ({
-      id: entry.id ?? `expr-${index}`,
-      label: entry.label ?? entry.expression,
-      expression: entry.expression,
-    }));
-    this.#listeners = new Map([
-      ['hover', new Set()],
-      ['select', new Set()],
-      ['state', new Set()],
-    ]);
-    this.#current = null;
-    this.#host = null;
-    this.#outputNode = null;
-    this.#statusNode = null;
-    this.#hovered = null;
-    this.#selected = null;
-    this.#currentActionId = null;
-  }
-
-  #expressions;
-  #listeners;
-  #current;
-  #host;
-  #outputNode;
-  #statusNode;
-  #hovered;
-  #selected;
-  #currentActionId;
-
-  mount(host, initialExpression = '') {
-    this.#host = host;
-    this.#host.innerHTML = '';
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'demo-math-engine';
-
-    const output = document.createElement('div');
-    output.className = 'demo-math-engine__output';
-    this.#outputNode = output;
-
-    const status = document.createElement('div');
-    status.className = 'demo-math-engine__status';
-    this.#statusNode = status;
-
-    wrapper.append(output, status);
-    host.appendChild(wrapper);
-
-    const fallback = this.#expressions[0]?.expression ?? '';
-    const initial = initialExpression?.trim() ? initialExpression : fallback;
-    this.#setExpression(initial);
-  }
-
-  on(event, cb) {
-    const bucket = this.#listeners.get(event);
-    if (!bucket) {
-      throw new Error(`Unsupported event: ${event}`);
-    }
-    bucket.add(cb);
-    return () => {
-      bucket.delete(cb);
-    };
-  }
-
-  getLegalActions() {
-    return this.#expressions.map((entry) => ({
-      id: entry.id,
-      label: entry.label,
-      kind: 'expression',
-    }));
-  }
-
-  apply(actionId) {
-    const entry = this.#expressions.find((item) => item.id === actionId);
-    if (!entry) {
-      return;
-    }
-    this.#setExpression(entry.expression);
-  }
-
-  export() {
-    return {
-      ast: { expression: this.#current },
-      html: this.#outputNode?.innerHTML ?? '',
-      tex: this.#current,
-    };
-  }
-
-  #emit(event, payload) {
-    const bucket = this.#listeners.get(event);
-    if (!bucket) {
-      return;
-    }
-    bucket.forEach((listener) => {
-      try {
-        listener(payload);
-      } catch (err) {
-        console.error('[demo] math listener error', err);
-      }
-    });
-  }
-
-  #tokenize(expression) {
-    return expression.match(/[A-Za-z]+|\d+|[^\s]/g) ?? [];
-  }
-
-  #evaluateExpression(expression) {
-    const clean = expression.replace(/\s+/g, '');
-    if (/^[\d+\-*/().]+$/.test(clean)) {
-      try {
-        // eslint-disable-next-line no-new-func
-        const result = Function(`"use strict"; return (${expression});`)();
-        if (typeof result === 'number' && Number.isFinite(result)) {
-          return { kind: 'number', value: result };
-        }
-      } catch (err) {
-        return { kind: 'error', message: err instanceof Error ? err.message : String(err) };
-      }
-    }
-    return { kind: 'symbolic', value: expression };
-  }
-
-  #clearHighlights() {
-    if (!this.#outputNode) return;
-    this.#outputNode.querySelectorAll('[data-token-id]').forEach((el) => {
-      el.classList.remove('is-hovered', 'is-selected');
-    });
-  }
-
-  #attachTokenListeners(span, tokenId) {
-    span.addEventListener('mouseenter', () => {
-      this.#hovered = tokenId;
-      this.#emit('hover', tokenId);
-      span.classList.add('is-hovered');
-    });
-    span.addEventListener('mouseleave', () => {
-      this.#hovered = null;
-      this.#emit('hover', null);
-      span.classList.remove('is-hovered');
-    });
-    span.addEventListener('click', () => {
-      if (this.#selected === tokenId) {
-        this.#selected = null;
-        span.classList.remove('is-selected');
-        this.#emit('select', null);
-      } else {
-        this.#selected = tokenId;
-        this.#emit('select', tokenId);
-        this.#syncSelections();
-      }
-    });
-  }
-
-  #syncSelections() {
-    if (!this.#outputNode) return;
-    this.#outputNode.querySelectorAll('[data-token-id]').forEach((el) => {
-      const isSelected = el.dataset.tokenId === this.#selected;
-      if (isSelected) {
-        el.classList.add('is-selected');
-      } else {
-        el.classList.remove('is-selected');
-      }
-    });
-  }
-
-  #render(expression) {
-    if (!this.#outputNode || !this.#statusNode) {
-      return;
-    }
-
-    this.#outputNode.innerHTML = '';
-    const tokens = this.#tokenize(expression);
-
-    if (tokens.length === 0) {
-      const empty = document.createElement('div');
-      empty.textContent = 'Expression is empty';
-      this.#outputNode.appendChild(empty);
-    } else {
-      tokens.forEach((token, index) => {
-        const span = document.createElement('span');
-        const tokenId = `token-${index}`;
-        span.dataset.tokenId = tokenId;
-        span.textContent = token;
-        this.#attachTokenListeners(span, tokenId);
-        this.#outputNode.appendChild(span);
-      });
-    }
-
-    const evaluation = this.#evaluateExpression(expression);
-    if (evaluation.kind === 'number') {
-      this.#statusNode.textContent = `Result: ${evaluation.value}`;
-    } else if (evaluation.kind === 'error') {
-      this.#statusNode.textContent = `Error: ${evaluation.message}`;
-    } else {
-      this.#statusNode.textContent = 'Symbolic expression';
-    }
-
-    this.#emit('state', {
-      expression,
-      evaluation,
-      tokenCount: tokens.length,
-      activeActionId: this.#currentActionId,
-    });
-  }
-
-  #setExpression(expression) {
-    this.#current = expression;
-    this.#hovered = null;
-    this.#selected = null;
-    const match = this.#expressions.find((item) => item.expression === expression);
-    this.#currentActionId = match?.id ?? null;
-    this.#render(expression);
-  }
+function normalizeExpressionValue(expression) {
+  return typeof expression === 'string' ? expression.replace(/\s+/g, '').trim() : '';
 }
 
-function createMathActions(engine, container) {
+function findSampleByExpression(expression) {
+  const normalized = normalizeExpressionValue(expression);
+  if (!normalized) {
+    return null;
+  }
+  return (
+    SAMPLE_EXPRESSIONS.find(
+      (sample) => normalizeExpressionValue(sample.expression) === normalized,
+    ) ?? null
+  );
+}
+
+function createSampleControls(container, onSelect) {
+  container.innerHTML = '';
+  const buttons = new Map();
+
+  SAMPLE_EXPRESSIONS.forEach((sample) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.sampleId = sample.id;
+    button.textContent = sample.label;
+    button.title = sample.expression;
+    button.addEventListener('click', () => {
+      onSelect(sample);
+    });
+    container.appendChild(button);
+    buttons.set(sample.id, button);
+  });
+
+  return {
+    setActiveExpression(expression) {
+      const match = findSampleByExpression(expression);
+      buttons.forEach((button, id) => {
+        if (match && id === match.id) {
+          button.dataset.active = 'true';
+        } else {
+          button.removeAttribute('data-active');
+        }
+      });
+    },
+  };
+}
+
+function createMathActions(engine, container, options = {}) {
   let activeId = null;
 
   const render = () => {
@@ -626,22 +459,31 @@ function createMathActions(engine, container) {
     actions.forEach((action) => {
       const button = document.createElement('button');
       button.type = 'button';
+      button.dataset.actionId = action.id;
       button.textContent = action.label;
       if (action.id === activeId) {
         button.dataset.active = 'true';
       }
       button.addEventListener('click', () => {
-        engine.apply(action.id);
+        try {
+          engine.apply(action.id);
+        } catch (error) {
+          console.error('[demo] Failed to apply action', action.id, error);
+          if (typeof options.onActionError === 'function') {
+            options.onActionError(error, action);
+          }
+        }
       });
       container.appendChild(button);
     });
   };
 
   render();
+
   return {
     render,
     setActiveId(id) {
-      activeId = id;
+      activeId = id ?? null;
       render();
     },
   };
@@ -656,26 +498,278 @@ function stringifyEventPayload(payload) {
   }
   try {
     return JSON.stringify(payload, null, 2);
-  } catch (err) {
+  } catch (error) {
     return String(payload);
   }
 }
 
-function createMathPlayground(engineFactory) {
-  const host = document.getElementById('math-engine-host');
+function formatEngineInfo(meta) {
+  if (!meta) {
+    return 'Engine: unavailable';
+  }
+  const name = meta.name ?? 'Math engine';
+  const origin =
+    meta.source === 'real'
+      ? meta.origin ?? 'window.RealMathEngine'
+      : meta.origin ?? 'demo stub';
+  const version = typeof meta.version === 'string' && meta.version.trim().length > 0 ? meta.version.trim() : '';
+  return version ? `Engine: ${name} (v${version}) — ${origin}` : `Engine: ${name} — ${origin}`;
+}
+
+function resolveEngineName(candidate) {
+  if (!candidate) {
+    return null;
+  }
+  if (typeof candidate === 'function') {
+    const displayName = candidate.displayName ?? candidate.name;
+    if (typeof displayName === 'string' && displayName.trim()) {
+      return displayName.trim();
+    }
+  }
+  if (typeof candidate === 'object') {
+    const record = candidate;
+    if (typeof record.displayName === 'string' && record.displayName.trim()) {
+      return record.displayName.trim();
+    }
+    if (typeof record.name === 'string' && record.name.trim()) {
+      return record.name.trim();
+    }
+    const ctorName = record.constructor && typeof record.constructor.name === 'string' ? record.constructor.name : '';
+    if (ctorName && ctorName !== 'Object') {
+      return ctorName;
+    }
+  }
+  return null;
+}
+
+function tryInstantiateCandidate(candidate) {
+  if (!candidate) {
+    return null;
+  }
+  if (typeof candidate === 'function') {
+    try {
+      const direct = candidate();
+      if (direct) {
+        return direct;
+      }
+    } catch (error) {
+      // ignore direct invocation errors
+    }
+    try {
+      const constructed = new candidate();
+      if (constructed) {
+        return constructed;
+      }
+    } catch (error) {
+      // ignore construction errors
+    }
+    return null;
+  }
+  if (typeof candidate === 'object') {
+    if (typeof candidate.create === 'function') {
+      try {
+        const created = candidate.create();
+        if (created) {
+          return created;
+        }
+      } catch (error) {
+        // ignore create errors and fall back to object itself
+      }
+    }
+    return candidate;
+  }
+  return null;
+}
+
+function createInstantiateResolver(candidate) {
+  const functionCandidates = [];
+  const objectCandidates = [];
+
+  const enqueue = (value) => {
+    if (!value) {
+      return;
+    }
+    if (typeof value === 'function') {
+      if (!functionCandidates.includes(value)) {
+        functionCandidates.push(value);
+      }
+      return;
+    }
+    if (typeof value === 'object' && !objectCandidates.includes(value)) {
+      objectCandidates.push(value);
+    }
+  };
+
+  enqueue(candidate);
+  if (candidate && typeof candidate === 'object') {
+    enqueue(candidate.default);
+    enqueue(candidate.RealMathEngine);
+    enqueue(candidate.MathEngine);
+    enqueue(candidate.Engine);
+    enqueue(candidate.engine);
+  }
+
+  return () => {
+    for (const fn of functionCandidates) {
+      const instance = tryInstantiateCandidate(fn);
+      if (instance) {
+        return instance;
+      }
+    }
+    for (const obj of objectCandidates) {
+      const instance = tryInstantiateCandidate(obj);
+      if (instance) {
+        return instance;
+      }
+    }
+    throw new Error('Unable to instantiate math engine');
+  };
+}
+
+async function resolveMathEngineAdapter() {
+  const globalCandidate = typeof window !== 'undefined' ? window.RealMathEngine : undefined;
+
+  if (globalCandidate) {
+    try {
+      const instantiate = createInstantiateResolver(globalCandidate);
+      const realInstance = instantiate();
+      if (!realInstance) {
+        throw new Error('RealMathEngine returned an empty instance');
+      }
+
+      const meta = {
+        source: 'real',
+        name: resolveEngineName(realInstance) ?? resolveEngineName(globalCandidate) ?? 'RealMathEngine',
+        origin: 'window.RealMathEngine',
+      };
+
+      const versionCandidate =
+        (realInstance && typeof realInstance.version === 'string' && realInstance.version.trim())
+          ? realInstance.version.trim()
+          : typeof globalCandidate === 'object' && typeof globalCandidate.version === 'string'
+          ? globalCandidate.version.trim()
+          : '';
+      if (versionCandidate) {
+        meta.version = versionCandidate;
+      }
+
+      const canCreateMultiple =
+        typeof globalCandidate === 'function' ||
+        (globalCandidate && typeof globalCandidate.create === 'function');
+
+      const firstEngine = fromRealEngine(realInstance);
+
+      return {
+        firstEngine,
+        createEngine: canCreateMultiple ? () => fromRealEngine(instantiate()) : null,
+        meta,
+      };
+    } catch (error) {
+      console.warn('[demo] Failed to instantiate window.RealMathEngine', error);
+    }
+  }
+
+  try {
+    const stubModule = await import('./engine.stub.js');
+    const stubExpressions = SAMPLE_EXPRESSIONS.map((sample) => ({
+      id: sample.id,
+      label: sample.label.replace(/^Load\s+/iu, '').trim() || sample.label,
+      expression: sample.expression,
+    }));
+
+    const stubFactory =
+      typeof stubModule.createStubRealMathEngineFactory === 'function'
+        ? stubModule.createStubRealMathEngineFactory({ expressions: stubExpressions })
+        : () => stubModule.createStubRealMathEngine({ expressions: stubExpressions });
+
+    const stubInstance = stubFactory();
+    const meta = {
+      source: 'stub',
+      name: resolveEngineName(stubModule.StubRealMathEngine) ?? 'StubRealMathEngine',
+      origin: 'demo fallback',
+    };
+
+    return {
+      firstEngine: fromRealEngine(stubInstance),
+      createEngine: () => fromRealEngine(stubFactory()),
+      meta,
+    };
+  } catch (error) {
+    throw new Error('Unable to load fallback math engine', { cause: error });
+  }
+}
+
+function renderMathBootstrapError(message) {
+  const info = document.getElementById('math-engine-info');
   const status = document.getElementById('math-engine-status');
   const stateOutput = document.getElementById('math-state');
   const eventsOutput = document.getElementById('math-events');
   const actionsContainer = document.getElementById('math-actions');
+  const samplesContainer = document.getElementById('math-samples');
 
-  if (!host || !status || !stateOutput || !eventsOutput || !actionsContainer) {
+  if (info) {
+    info.textContent = 'Engine: unavailable';
+  }
+  if (status) {
+    status.textContent = message;
+  }
+  if (stateOutput) {
+    stateOutput.textContent = message;
+  }
+  if (eventsOutput) {
+    eventsOutput.textContent = 'No events — engine unavailable.';
+  }
+  if (actionsContainer) {
+    actionsContainer.innerHTML = '';
+  }
+  if (samplesContainer) {
+    samplesContainer.innerHTML = '';
+  }
+}
+
+function createMathPlayground(engine, meta) {
+  const host = document.getElementById('math-engine-host');
+  const status = document.getElementById('math-engine-status');
+  const info = document.getElementById('math-engine-info');
+  const stateOutput = document.getElementById('math-state');
+  const eventsOutput = document.getElementById('math-events');
+  const actionsContainer = document.getElementById('math-actions');
+  const samplesContainer = document.getElementById('math-samples');
+
+  if (!host || !status || !stateOutput || !eventsOutput || !actionsContainer || !samplesContainer) {
     throw new Error('Math playground markup is incomplete');
   }
 
-  const engine = engineFactory();
-  engine.mount(host, EXPRESSIONS[0].expression);
+  if (!engine || typeof engine.mount !== 'function') {
+    throw new Error('Math engine instance is not available');
+  }
 
-  const actions = createMathActions(engine, actionsContainer);
+  if (info) {
+    info.textContent = formatEngineInfo(meta);
+  }
+
+  stateOutput.textContent = 'Waiting for engine state…';
+  eventsOutput.textContent = 'No events yet.';
+  status.textContent = meta?.source === 'stub' ? 'Using stub math engine for demo.' : 'Initializing math engine…';
+
+  const actions = createMathActions(engine, actionsContainer, {
+    onActionError: (_error, action) => {
+      const label = action?.label ?? action?.id ?? 'action';
+      status.textContent = `Failed to apply ${label}.`;
+    },
+  });
+
+  const samples = createSampleControls(samplesContainer, (sample) => {
+    status.textContent = `Loading ${sample.label}…`;
+    try {
+      engine.mount(host, sample.expression);
+    } catch (error) {
+      console.error('[demo] Failed to mount sample expression', sample.expression, error);
+      status.textContent = 'Failed to load sample expression.';
+    }
+  });
+
+  let lastExpressionKey = '';
 
   const updateEvents = (eventName, payload) => {
     eventsOutput.textContent = `${eventName}: ${stringifyEventPayload(payload)}`;
@@ -702,26 +796,58 @@ function createMathPlayground(engineFactory) {
   engine.on('state', (payload) => {
     actions.setActiveId(payload?.activeActionId ?? null);
     stateOutput.textContent = stringifyEventPayload(payload);
+
+    const expression = typeof payload?.expression === 'string' ? payload.expression : null;
+    if (expression) {
+      const normalized = normalizeExpressionValue(expression);
+      if (normalized && normalized !== lastExpressionKey) {
+        lastExpressionKey = normalized;
+        samples.setActiveExpression(expression);
+        status.textContent = `Expression loaded: ${expression}`;
+      }
+    }
   });
+
+  const defaultSample =
+    SAMPLE_EXPRESSIONS.find((sample) => sample.id === DEFAULT_SAMPLE_ID) ?? SAMPLE_EXPRESSIONS[0];
+  const initialExpression = defaultSample?.expression ?? '';
+  if (initialExpression) {
+    samples.setActiveExpression(initialExpression);
+  }
+
+  try {
+    engine.mount(host, initialExpression);
+    status.textContent = `Expression loaded: ${initialExpression}`;
+    actions.render();
+  } catch (error) {
+    console.error('[demo] Failed to mount math engine', error);
+    status.textContent = 'Failed to mount math engine.';
+  }
 }
 
-function resolveMathEngineFactory() {
-  const engineGlobal = typeof window !== 'undefined' ? window.Engine : undefined;
-  if (typeof engineGlobal === 'function') {
-    return () => engineGlobal();
-  }
-  if (engineGlobal && typeof engineGlobal === 'object') {
-    return () => engineGlobal;
-  }
-  return () => new DemoMathEngine({ expressions: EXPRESSIONS });
-}
-
-function bootstrap() {
+async function bootstrap() {
   createViewerSection();
 
-  const engineFactory = resolveMathEngineFactory();
-  initMath(engineFactory);
-  createMathPlayground(engineFactory);
+  try {
+    const adapter = await resolveMathEngineAdapter();
+    if (!adapter || !adapter.firstEngine) {
+      renderMathBootstrapError('Math engine is unavailable.');
+      return;
+    }
+
+    if (typeof adapter.createEngine === 'function') {
+      initMath(() => adapter.createEngine());
+    } else {
+      initMath(adapter.firstEngine);
+    }
+
+    createMathPlayground(adapter.firstEngine, adapter.meta);
+  } catch (error) {
+    console.error('[demo] Failed to initialize math playground', error);
+    renderMathBootstrapError('Failed to initialize math engine.');
+  }
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  console.error('[demo] Unexpected bootstrap error', error);
+});
