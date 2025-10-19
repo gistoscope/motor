@@ -1,29 +1,17 @@
 import './styles.css';
 import './styles/viewer.css';
 
-import {
-  fromJSON,
-  inspect,
-  size,
-  toDOT,
-  validateGraphJSON,
-  edges as listEdges,
-  nodes as listNodes,
-  type GraspGraph,
-} from '@motor/grasp';
+import { fromJSON, inspect, toDOT, validateGraphJSON, type GraphJSON } from './api';
 import { renderSVG } from './svg';
 import {
   analyzeGraph,
   computeShortestPath,
-  edgeKey,
-  type EdgeKey,
   type ShortestPathResult,
 } from './analysis';
 import { createOverlayController, type AnalysisPanelElements } from './overlays';
 import { initHelp, type HelpOverlayHandle } from './ui/help';
 import { attachMathEngine } from './math/bridge';
 import type { MathBridgeHandle, MathEngine } from './math/types';
-import type { GraphJSON } from './types';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -43,8 +31,6 @@ const DASH = '—';
 
 const SOURCE_BUTTON_LABEL = 'Set as Source';
 const TARGET_BUTTON_LABEL = 'Set as Target';
-
-type WeightMap = Map<EdgeKey, number>;
 
 type MathEngineProvider =
   | { kind: 'instance'; engine: MathEngine }
@@ -146,35 +132,36 @@ function unregisterMathMount(mount: MathMountPoint | null): void {
   mathMountPoints.delete(mount);
 }
 
-function parseWeightMap(data: unknown): WeightMap | null {
+function hasValidWeights(data: unknown): boolean {
   if (typeof data !== 'object' || data === null) {
-    return null;
+    return false;
   }
 
   const edges = (data as { edges?: unknown }).edges;
   if (!Array.isArray(edges) || edges.length === 0) {
-    return null;
+    return false;
   }
 
-  const map: WeightMap = new Map();
   for (const entry of edges) {
     if (typeof entry !== 'object' || entry === null) {
-      return null;
+      return false;
     }
     const raw = entry as { from?: unknown; to?: unknown; weight?: unknown };
     if (typeof raw.from !== 'string' || typeof raw.to !== 'string') {
-      return null;
+      return false;
+    }
+    if (raw.weight === undefined) {
+      return false;
     }
     if (typeof raw.weight !== 'number' || Number.isNaN(raw.weight) || !Number.isFinite(raw.weight)) {
-      return null;
+      return false;
     }
     if (raw.weight < 0) {
-      return null;
+      return false;
     }
-    map.set(edgeKey(raw.from, raw.to), raw.weight);
   }
 
-  return map;
+  return true;
 }
 
 function ensureTrailingNewline(text: string): string {
@@ -256,7 +243,6 @@ function resetGraphUI(
 }
 
 function renderGraphUI(
-  graph: GraspGraph,
   graphJSON: GraphJSON,
   nodesEl: HTMLElement,
   edgesEl: HTMLElement,
@@ -267,12 +253,12 @@ function renderGraphUI(
   dotText: string,
   inspectText: string,
 ) {
-  const stats = size(graph);
-  nodesEl.textContent = String(stats.nodes);
-  edgesEl.textContent = String(stats.edges);
+  const nodes = graphJSON?.nodes ?? [];
+  const edges = graphJSON?.edges ?? [];
+  nodesEl.textContent = String(nodes.length);
+  edgesEl.textContent = String(edges.length);
 
   listEl.innerHTML = '';
-  const edges = listEdges(graph);
   if (edges.length === 0) {
     const empty = document.createElement('li');
     empty.dataset.role = 'edges-empty';
@@ -646,7 +632,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   let nodeStats = new Map<string, NodeInfo>();
   let hoveredNodeId: string | null = null;
   let selectedNodeId: string | null = null;
-  let currentGraph: GraspGraph | null = null;
+  let currentGraph: GraphJSON | null = null;
   let currentJSONText = '';
   let currentDOTText = '';
   let currentInspectText = '';
@@ -819,13 +805,13 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     syncNodeActions();
   }
 
-    function computeNodeStats(graph: GraspGraph): Map<string, NodeInfo> {
+    function computeNodeStats(graph: GraphJSON): Map<string, NodeInfo> {
       const stats = new Map<string, NodeInfo>();
-      const ids = listNodes(graph);
-      ids.forEach((nodeId) => {
-        const id = String(nodeId);
-        const labelRaw = graph.nodes?.get(nodeId)?.label ?? '';
-        const label = typeof labelRaw === 'string' ? labelRaw.trim() : '';
+      const nodes = graph?.nodes ?? [];
+      nodes.forEach((node) => {
+        if (!node) return;
+        const id = String(node.id);
+        const label = typeof node.label === 'string' ? node.label.trim() : '';
         stats.set(id, {
           id,
           label,
@@ -834,7 +820,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         });
       });
 
-      for (const edge of listEdges(graph)) {
+      for (const edge of graph?.edges ?? []) {
+        if (!edge) continue;
         const fromId = String(edge.from);
         const toId = String(edge.to);
         const from = stats.get(fromId);
@@ -992,22 +979,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
     const data = parsed as GraphJSON;
     const graph = fromJSON(data);
-    const weightMap = parseWeightMap(data);
-    let weightsAttached = false;
-
-    if (weightMap) {
-      const edgesWithWeights = listEdges(graph);
-      weightsAttached = edgesWithWeights.every((edge) =>
-        weightMap.has(edgeKey(String(edge.from), String(edge.to))),
-      );
-      if (weightsAttached) {
-        (graph as { weights?: WeightMap }).weights = weightMap;
-      } else {
-        delete (graph as { weights?: WeightMap }).weights;
-      }
-    } else {
-      delete (graph as { weights?: WeightMap }).weights;
-    }
+    const weightsAttached = hasValidWeights(data);
 
     const jsonText = ensureTrailingNewline(JSON.stringify(data, null, 2));
     const dotText = ensureTrailingNewline(toDOT(graph));
@@ -1018,9 +990,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
 
     showErrors([]);
-    renderGraphUI(graph, data, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, dotText, inspectText);
-    overlayController.setAnalysis(analyzeGraph(graph));
-    nodeStats = computeNodeStats(graph);
+    renderGraphUI(data, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, dotText, inspectText);
+    overlayController.setAnalysis(analyzeGraph(data));
+    nodeStats = computeNodeStats(data);
     hoveredNodeId = null;
     selectedNodeId = null;
     resetNodeInfoPanel(nodeInfoElements);
@@ -1028,7 +1000,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     syncEdgeClasses();
     resetShortestState(weightsAttached);
 
-    currentGraph = graph;
+    currentGraph = data;
     currentJSONText = jsonText;
     currentDOTText = dotText;
     currentInspectText = inspectText;

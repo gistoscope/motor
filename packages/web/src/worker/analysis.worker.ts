@@ -1,4 +1,4 @@
-import type { GraspGraph } from '../api';
+import type { GraphJSON } from '../api';
 
 import {
   analyzeGraphSync,
@@ -10,13 +10,13 @@ import {
 interface AnalyzeRequest {
   readonly type: 'analyze';
   readonly id: number;
-  readonly graph: GraspGraph;
+  readonly graph: GraphJSON;
 }
 
 interface ShortestRequest {
   readonly type: 'shortest';
   readonly id: number;
-  readonly graph: GraspGraph;
+  readonly graph: GraphJSON;
   readonly sourceId: string;
   readonly targetId: string;
 }

@@ -1,10 +1,4 @@
-import {
-  edges as listEdges,
-  scc,
-  size,
-  nodes as listNodes,
-  type GraspGraph,
-} from '@motor/grasp';
+import { hasCycleDirected, shortestPath, type GraphJSON } from './api';
 
 export const EDGE_KEY_SEPARATOR = '\u2192';
 
@@ -33,33 +27,16 @@ export interface ShortestPathResult {
   readonly edges: readonly ShortestPathEdge[];
 }
 
-export interface ShortestPathGraphNode {
-  readonly id: string;
-}
-
-export interface ShortestPathGraphEdge {
-  readonly from: string;
-  readonly to: string;
-  readonly weight?: number | null;
-}
-
-export interface ShortestPathGraph {
-  readonly nodes?: readonly ShortestPathGraphNode[] | null;
-  readonly edges?: readonly ShortestPathGraphEdge[] | null;
-}
-
-export interface ShortestPathComputation {
-  readonly distance: number;
-  readonly path: readonly string[];
-}
-
 interface GraphLikeNode {
   readonly id?: unknown;
+  readonly label?: unknown;
 }
 
 interface GraphLikeEdge {
   readonly from?: unknown;
   readonly to?: unknown;
+  readonly label?: unknown;
+  readonly weight?: unknown;
 }
 
 interface GraphLike {
@@ -67,263 +44,179 @@ interface GraphLike {
   readonly edges?: readonly GraphLikeEdge[] | null;
 }
 
-function normalizeGraphEdges(
-  graph: GraspGraph | GraphLike | null | undefined,
-): Array<{ from: string; to: string }> {
-  const result: Array<{ from: string; to: string }> = [];
+function toGraphJSON(graph: GraphJSON | GraphLike | null | undefined): GraphJSON {
+  const normalizedNodes: GraphJSON['nodes'] = [];
+  const normalizedEdges: GraphJSON['edges'] = [];
 
-  if (!graph) {
-    return result;
+  const seenNodes = new Set<string>();
+  const sourceNodes = graph?.nodes ?? [];
+  for (const node of sourceNodes ?? []) {
+    if (!node) continue;
+    const idRaw = (node as GraphLikeNode).id;
+    if (idRaw == null) continue;
+    const id = String(idRaw);
+    if (seenNodes.has(id)) continue;
+    seenNodes.add(id);
+    const labelRaw = (node as GraphLikeNode).label;
+    const label = typeof labelRaw === 'string' ? labelRaw : undefined;
+    normalizedNodes.push({ id, label });
   }
 
-  const maybeGraph = graph as GraphLike;
-  if (Array.isArray(maybeGraph.edges)) {
-    for (const edge of maybeGraph.edges) {
-      if (!edge) {
-        continue;
-      }
-      const { from, to } = edge;
-      if (from == null || to == null) {
-        continue;
-      }
-      result.push({ from: String(from), to: String(to) });
+  const sourceEdges = graph?.edges ?? [];
+  for (const edge of sourceEdges ?? []) {
+    if (!edge) continue;
+    const fromRaw = (edge as GraphLikeEdge).from;
+    const toRaw = (edge as GraphLikeEdge).to;
+    if (fromRaw == null || toRaw == null) continue;
+    const from = String(fromRaw);
+    const to = String(toRaw);
+    const labelRaw = (edge as GraphLikeEdge).label;
+    const weightRaw = (edge as GraphLikeEdge).weight;
+    const entry = {
+      from,
+      to,
+      label: typeof labelRaw === 'string' ? labelRaw : undefined,
+      weight:
+        typeof weightRaw === 'number' && Number.isFinite(weightRaw) && weightRaw >= 0
+          ? weightRaw
+          : undefined,
+    };
+    normalizedEdges.push(entry);
+    if (!seenNodes.has(from)) {
+      seenNodes.add(from);
+      normalizedNodes.push({ id: from });
     }
-    return result;
+    if (!seenNodes.has(to)) {
+      seenNodes.add(to);
+      normalizedNodes.push({ id: to });
+    }
   }
 
-  const typed = graph as GraspGraph;
-  for (const edge of listEdges(typed)) {
-    result.push({ from: String(edge.from), to: String(edge.to) });
-  }
-  return result;
+  return { nodes: normalizedNodes, edges: normalizedEdges };
 }
 
-function normalizeGraphNodes(graph: GraspGraph | GraphLike | null | undefined): string[] {
-  const set = new Set<string>();
+function collectNodeIds(graph: GraphJSON): string[] {
+  const ids = new Set<string>();
+  for (const node of graph.nodes ?? []) {
+    if (!node) continue;
+    ids.add(String(node.id));
+  }
+  for (const edge of graph.edges ?? []) {
+    if (!edge) continue;
+    ids.add(String(edge.from));
+    ids.add(String(edge.to));
+  }
+  return Array.from(ids);
+}
 
-  if (!graph) {
+function buildAdjacency(graph: GraphJSON): {
+  readonly forward: Map<string, string[]>;
+  readonly reverse: Map<string, string[]>;
+} {
+  const forward = new Map<string, string[]>();
+  const reverse = new Map<string, string[]>();
+  const nodes = collectNodeIds(graph);
+  nodes.forEach((id) => {
+    forward.set(id, []);
+    reverse.set(id, []);
+  });
+  for (const edge of graph.edges ?? []) {
+    if (!edge) continue;
+    const from = String(edge.from);
+    const to = String(edge.to);
+    if (!forward.has(from)) {
+      forward.set(from, []);
+    }
+    if (!forward.has(to)) {
+      forward.set(to, []);
+    }
+    if (!reverse.has(from)) {
+      reverse.set(from, []);
+    }
+    if (!reverse.has(to)) {
+      reverse.set(to, []);
+    }
+    forward.get(from)!.push(to);
+    reverse.get(to)!.push(from);
+  }
+  return { forward, reverse };
+}
+
+function computeScc(graph: GraphJSON): string[][] {
+  const nodes = collectNodeIds(graph);
+  if (nodes.length === 0) {
     return [];
   }
-
-  const maybeGraph = graph as GraphLike;
-  if (Array.isArray(maybeGraph.nodes)) {
-    for (const node of maybeGraph.nodes) {
-      if (!node) {
-        continue;
-      }
-      const { id } = node;
-      if (id != null) {
-        set.add(String(id));
+  const { forward, reverse } = buildAdjacency(graph);
+  const visited = new Set<string>();
+  const order: string[] = [];
+  const visitForward = (node: string) => {
+    visited.add(node);
+    for (const next of forward.get(node) ?? []) {
+      if (!visited.has(next)) {
+        visitForward(next);
       }
     }
-  } else {
-    for (const id of listNodes(graph as GraspGraph)) {
-      set.add(String(id));
+    order.push(node);
+  };
+  nodes.forEach((node) => {
+    if (!visited.has(node)) {
+      visitForward(node);
     }
-  }
-
-  return Array.from(set);
-}
-
-export function hasCycleDirected(graph: GraspGraph | GraphLike | null | undefined): boolean {
-  const edges = normalizeGraphEdges(graph);
-  const nodeSet = new Set<string>(normalizeGraphNodes(graph));
-  for (const { from, to } of edges) {
-    nodeSet.add(from);
-    nodeSet.add(to);
-  }
-
-  const nodes = Array.from(nodeSet);
-  if (nodes.length === 0) {
-    return false;
-  }
-
-  const indegree = new Map<string, number>();
-  const outgoing = new Map<string, string[]>();
-
-  for (const node of nodes) {
-    indegree.set(node, 0);
-  }
-
-  for (const { from, to } of edges) {
-    if (!indegree.has(from)) {
-      indegree.set(from, 0);
-    }
-    indegree.set(to, (indegree.get(to) ?? 0) + 1);
-    const bucket = outgoing.get(from);
-    if (bucket) {
-      bucket.push(to);
-    } else {
-      outgoing.set(from, [to]);
-    }
-  }
-
-  const queue: string[] = [];
-  for (const node of indegree.keys()) {
-    if ((indegree.get(node) ?? 0) === 0) {
-      queue.push(node);
-    }
-  }
-
-  let visited = 0;
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    visited += 1;
-    const neighbors = outgoing.get(current) ?? [];
-    for (const neighbor of neighbors) {
-      const next = (indegree.get(neighbor) ?? 0) - 1;
-      indegree.set(neighbor, next);
-      if (next === 0) {
-        queue.push(neighbor);
+  });
+  const assigned = new Set<string>();
+  const components: string[][] = [];
+  const visitReverse = (node: string, bucket: string[]) => {
+    assigned.add(node);
+    bucket.push(node);
+    for (const prev of reverse.get(node) ?? []) {
+      if (!assigned.has(prev)) {
+        visitReverse(prev, bucket);
       }
     }
-  }
-
-  return visited !== indegree.size;
-}
-
-export function shortestPath(
-  graph: ShortestPathGraph | null | undefined,
-  src: string,
-  dst: string,
-): ShortestPathComputation {
-  const nodes = graph?.nodes ?? [];
-  const edges = graph?.edges ?? [];
-  const state = new Map(
-    nodes.map((node) => [
-      node.id,
-      {
-        d: node.id === src ? 0 : Number.POSITIVE_INFINITY,
-        p: null as string | null,
-        done: false,
-        w: Number.POSITIVE_INFINITY,
-      },
-    ]),
-  );
-
-  if (!state.has(src) || !state.has(dst)) {
-    return { distance: Number.POSITIVE_INFINITY, path: [] };
-  }
-
-  const adjacency = new Map<string, Array<{ to: string; w: number }>>();
-  for (const edge of edges) {
-    const weight = Math.max(0, Number(edge.weight ?? 1));
-    if (!Number.isFinite(weight)) {
+  };
+  for (let index = order.length - 1; index >= 0; index -= 1) {
+    const node = order[index];
+    if (assigned.has(node)) {
       continue;
     }
-    const bucket = adjacency.get(edge.from);
-    const next = { to: edge.to, w: weight };
-    if (bucket) {
-      bucket.push(next);
-    } else {
-      adjacency.set(edge.from, [next]);
-    }
+    const bucket: string[] = [];
+    visitReverse(node, bucket);
+    components.push(bucket.map((id) => String(id)).sort());
   }
-
-  while (true) {
-    let candidate: string | null = null;
-    let best = Number.POSITIVE_INFINITY;
-    for (const [id, info] of state) {
-      if (!info.done && info.d < best) {
-        best = info.d;
-        candidate = id;
-      }
+  components.sort((a, b) => {
+    if (a.length !== b.length) {
+      return a.length - b.length;
     }
-
-    if (candidate === null || candidate === dst) {
-      break;
-    }
-
-    const sourceState = state.get(candidate)!;
-    sourceState.done = true;
-    for (const { to, w } of adjacency.get(candidate) ?? []) {
-      const targetState = state.get(to);
-      if (!targetState) {
-        continue;
-      }
-      const distance = sourceState.d + w;
-      const previousWeight = targetState.w;
-      const shouldUpdate =
-        distance < targetState.d ||
-        (distance === targetState.d &&
-          (w < previousWeight ||
-            (w === previousWeight &&
-              (targetState.p === null || candidate.localeCompare(targetState.p) < 0))));
-
-      if (shouldUpdate) {
-        targetState.d = distance;
-        targetState.p = candidate;
-        targetState.w = w;
-      }
-    }
-  }
-
-  const distance = state.get(dst)!.d;
-  if (!Number.isFinite(distance)) {
-    return { distance, path: [] };
-  }
-
-  const path: string[] = [];
-  let current: string | null = dst;
-  while (current) {
-    path.push(current);
-    current = state.get(current)!.p;
-  }
-  path.reverse();
-
-  return { distance, path };
-}
-
-export function edgeKey(from: string, to: string): EdgeKey {
-  return `${from}${EDGE_KEY_SEPARATOR}${to}`;
-}
-
-function normalizeComponent(component: readonly unknown[]): string[] {
-  return component.map((id) => String(id)).sort();
-}
-
-function sortComponents(components: string[][]): string[][] {
-  const entries = components.map((nodes) => ({
-    nodes,
-    key: `${String(nodes.length).padStart(6, '0')}|${nodes.join('\u0001')}`,
-  }));
-
-  entries.sort((a, b) => {
-    if (a.key < b.key) return -1;
-    if (a.key > b.key) return 1;
-    return 0;
+    const aKey = a.join('\u0001');
+    const bKey = b.join('\u0001');
+    return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
   });
-
-  return entries.map((entry) => entry.nodes);
+  return components;
 }
 
-export function analyzeGraphSync(graph: GraspGraph): GraphAnalysis {
-  const { nodes: nodeCount, edges: edgeCount } = size(graph);
-  const edges = listEdges(graph).map((edge) => ({
-    from: String(edge.from),
-    to: String(edge.to),
-  }));
-
-  const componentsRaw = scc(graph);
-  const normalized = componentsRaw.map(normalizeComponent);
-  const sorted = sortComponents(normalized);
-
+export function analyzeGraphSync(graph: GraphJSON | GraphLike | null | undefined): GraphAnalysis {
+  const normalized = toGraphJSON(graph);
+  const nodes = collectNodeIds(normalized);
+  const edges = normalized.edges ?? [];
+  const components = computeScc(normalized);
   const componentIndex = new Map<string, number>();
-  sorted.forEach((component, index) => {
-    component.forEach((nodeId) => {
-      componentIndex.set(nodeId, index);
+  components.forEach((component, index) => {
+    component.forEach((id) => {
+      componentIndex.set(id, index);
     });
   });
-
   const selfLoopNodes = new Set<string>();
-  edges.forEach(({ from, to }) => {
+  edges.forEach((edge) => {
+    if (!edge) return;
+    const from = String(edge.from);
+    const to = String(edge.to);
     if (from === to) {
       selfLoopNodes.add(from);
     }
   });
-
   const cyclicComponents = new Set<number>();
-  sorted.forEach((component, index) => {
+  components.forEach((component, index) => {
     if (component.length > 1) {
       cyclicComponents.add(index);
       return;
@@ -332,29 +225,28 @@ export function analyzeGraphSync(graph: GraspGraph): GraphAnalysis {
       cyclicComponents.add(index);
     }
   });
-
   const cycleEdgeKeys = new Set<EdgeKey>();
   let cycleEdgeCount = 0;
-  edges.forEach(({ from, to }) => {
+  edges.forEach((edge) => {
+    if (!edge) return;
+    const from = String(edge.from);
+    const to = String(edge.to);
     const fromIndex = componentIndex.get(from);
     const toIndex = componentIndex.get(to);
-    if (
-      fromIndex !== undefined &&
-      toIndex !== undefined &&
-      fromIndex === toIndex &&
-      cyclicComponents.has(fromIndex)
-    ) {
+    if (fromIndex === undefined || toIndex === undefined) {
+      return;
+    }
+    if (fromIndex === toIndex && cyclicComponents.has(fromIndex)) {
       cycleEdgeKeys.add(edgeKey(from, to));
       cycleEdgeCount += 1;
     }
   });
-
   return {
-    nodeCount,
-    edgeCount,
-    hasCycle: hasCycleDirected(graph),
-    sccCount: sorted.length,
-    components: sorted,
+    nodeCount: nodes.length,
+    edgeCount: edges.length,
+    hasCycle: hasCycleDirected(normalized),
+    sccCount: components.length,
+    components,
     componentIndex,
     cyclicComponents,
     cycleEdgeCount,
@@ -362,86 +254,31 @@ export function analyzeGraphSync(graph: GraspGraph): GraphAnalysis {
   };
 }
 
-function resolveWeightMap(graph: GraspGraph): ReadonlyMap<EdgeKey, number> | null {
-  const weights = (graph as { weights?: ReadonlyMap<EdgeKey, number> | undefined }).weights;
-  if (!weights || weights.size === 0) {
-    return null;
-  }
-
-  for (const { from, to } of listEdges(graph)) {
-    const key = edgeKey(String(from), String(to));
-    const weight = weights.get(key);
-    if (weight === undefined || Number.isNaN(weight) || !Number.isFinite(weight) || weight < 0) {
-      return null;
-    }
-  }
-
-  return weights;
+export function edgeKey(from: string, to: string): EdgeKey {
+  return `${from}${EDGE_KEY_SEPARATOR}${to}`;
 }
 
 export function computeShortestPathSync(
-  graph: GraspGraph,
+  graph: GraphJSON | GraphLike | null | undefined,
   sourceId: string,
   targetId: string,
 ): ShortestPathResult | null {
   if (!sourceId || !targetId) {
     return null;
   }
-
-  const weights = resolveWeightMap(graph);
-  if (!weights) {
+  const normalized = toGraphJSON(graph);
+  const nodeIds = new Set(normalized.nodes.map((node) => node.id));
+  if (!nodeIds.has(sourceId) || !nodeIds.has(targetId)) {
     return null;
   }
-
-  const allNodes = listNodes(graph).map((id) => String(id));
-  const nodeSet = new Set(allNodes);
-
-  if (!nodeSet.has(sourceId) || !nodeSet.has(targetId)) {
-    return null;
-  }
-
-  if (sourceId === targetId) {
-    return { totalWeight: 0, nodes: [sourceId], edges: [] };
-  }
-
-  const weightedEdges = listEdges(graph)
-    .map((edge) => {
-      const from = String(edge.from);
-      const to = String(edge.to);
-      const key = edgeKey(from, to);
-      const value = weights.get(key);
-      if (value === undefined) {
-        throw new Error(`computeShortestPath: missing weight for edge ${key}`);
-      }
-      return { from, to, weight: value };
-    })
-    .sort((a, b) => {
-      if (a.from === b.from) {
-        return a.to.localeCompare(b.to);
-      }
-      return a.from.localeCompare(b.from);
-    });
-
-  const graphView: ShortestPathGraph = {
-    nodes: allNodes.map((id) => ({ id })),
-    edges: weightedEdges,
-  };
-
-  const result = shortestPath(graphView, sourceId, targetId);
-
+  const result = shortestPath(normalized, sourceId, targetId);
   if (!Number.isFinite(result.distance) || result.path.length === 0) {
     return null;
   }
-
   const nodes = [...result.path];
   const edges: ShortestPathEdge[] = [];
   for (let index = 0; index < nodes.length - 1; index += 1) {
     edges.push({ from: nodes[index], to: nodes[index + 1] });
   }
-
-  return {
-    totalWeight: result.distance,
-    nodes,
-    edges,
-  };
+  return { totalWeight: result.distance, nodes, edges };
 }
