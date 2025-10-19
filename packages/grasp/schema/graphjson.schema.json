@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://motor.example.com/schema/graphjson",
+  "title": "GraphJSON",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["nodes", "edges"],
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/node" },
+      "uniqueItems": true,
+      "default": []
+    },
+    "edges": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/edge" },
+      "uniqueItems": true,
+      "default": []
+    },
+    "meta": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1
+    },
+    "node": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string" },
+        "type": { "type": "string" },
+        "data": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "edge": {
+      "type": "object",
+      "required": ["from", "to"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "from": { "$ref": "#/$defs/identifier" },
+        "to": { "$ref": "#/$defs/identifier" },
+        "label": { "type": "string" },
+        "weight": { "type": "number" },
+        "type": { "type": "string" },
+        "data": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}
