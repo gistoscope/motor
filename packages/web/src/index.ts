@@ -4,3 +4,5 @@ export type { ViewerHandle, ViewerOptions } from './viewer';
 export { initMathBridge } from './math/bridge';
 export { fromRealEngine } from './math/engineAdapter';
 export type { MathBridgeHandle, MathBridgeOptions, MathEngine } from './math/types';
+export { mountPlayground } from './ui/playground';
+export type { PlaygroundHandle, PlaygroundEngineMeta } from './ui/playground';
