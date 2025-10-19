@@ -1,8 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Window } from 'happy-dom';
 
-import { fromJSON } from '@motor/grasp';
-
 import { renderSVG } from '../../web/src/svg';
 
 let domWindow: Window;
@@ -21,7 +19,7 @@ afterEach(() => {
 
 describe('renderSVG', () => {
   it('renders nodes and edges with data attributes', () => {
-    const graph = fromJSON({
+    const graph = {
       nodes: [
         { id: 'A', label: 'Alpha' },
         { id: 'B', label: 'Beta' },
@@ -31,7 +29,7 @@ describe('renderSVG', () => {
         { from: 'A', to: 'B' },
         { from: 'A', to: 'C' },
       ],
-    });
+    };
 
     const container = document.createElement('div');
     renderSVG(container, graph);

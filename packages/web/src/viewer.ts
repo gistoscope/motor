@@ -257,6 +257,7 @@ function resetGraphUI(
 
 function renderGraphUI(
   graph: GraspGraph,
+  graphJSON: GraphJSON,
   nodesEl: HTMLElement,
   edgesEl: HTMLElement,
   listEl: HTMLElement,
@@ -290,7 +291,7 @@ function renderGraphUI(
 
   inspectEl.textContent = inspectText;
 
-  renderSVG(svgEl, graph);
+  renderSVG(svgEl, graphJSON);
 }
 
 export function createViewer(root: HTMLElement, options: ViewerOptions = {}): ViewerHandle {
@@ -1017,7 +1018,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
 
     showErrors([]);
-    renderGraphUI(graph, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, dotText, inspectText);
+    renderGraphUI(graph, data, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, dotText, inspectText);
     overlayController.setAnalysis(analyzeGraph(graph));
     nodeStats = computeNodeStats(graph);
     hoveredNodeId = null;
