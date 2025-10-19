@@ -1,16 +1,33 @@
 window.MOTOR_DISABLE_WORKERS = true;
 
+async function importWithTsFallback(specifier) {
+  try {
+    return await import(specifier);
+  } catch (error) {
+    if (
+      typeof specifier === 'string' &&
+      specifier.endsWith('.js') &&
+      error instanceof Error &&
+      /Cannot find module/iu.test(error.message ?? '')
+    ) {
+      const fallbackSpecifier = specifier.replace(/\.js$/u, '.ts');
+      return import(fallbackSpecifier);
+    }
+    throw error;
+  }
+}
+
 const {
   createViewer,
   initMath,
   fromRealEngine,
   mountPlayground,
-} = await import('../src/index.js');
+} = await importWithTsFallback('../src/index.js');
 const {
   decodeViewerStateFromSearch,
   encodeViewerStateToUrl,
   DEFAULT_VIEWER_URL_STATE,
-} = await import('../src/util/state-url.js');
+} = await importWithTsFallback('../src/util/state-url.js');
 
 const GRAPH_EXAMPLES = [
   {
