@@ -5,7 +5,7 @@ import {
   computeShortestPathSync,
   type GraphAnalysis,
   type ShortestPathResult,
-} from './analysis.shared';
+} from '../analysis-core';
 
 interface AnalyzeRequest {
   readonly type: 'analyze';

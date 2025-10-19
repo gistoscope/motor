@@ -8,13 +8,15 @@ import {
   type GraphAnalysis,
   type ShortestPathEdge,
   type ShortestPathResult,
-} from './worker/analysis.shared';
+} from './analysis-core';
+import { FLAGS } from './config';
 import type {
   AnalysisWorkerRequest,
   AnalysisWorkerResponse,
 } from './worker/analysis.worker';
 
 const WORKER_MODULE_URL = new URL('./worker/analysis.worker.ts', import.meta.url);
+const useWorker = FLAGS.workers && typeof Worker !== 'undefined';
 
 interface WorkerHandle {
   readonly worker: Worker;
@@ -42,12 +44,8 @@ let handle: WorkerHandle | null = null;
 let workerInit: Promise<WorkerHandle | null> | null = null;
 let workerIdCounter = 0;
 
-function isWorkerSupported(): boolean {
-  return typeof Worker !== 'undefined';
-}
-
 async function ensureWorker(): Promise<WorkerHandle | null> {
-  if (!isWorkerSupported()) {
+  if (!useWorker) {
     return null;
   }
 
@@ -142,6 +140,10 @@ export { edgeKey };
 export type { EdgeKey, GraphAnalysis, ShortestPathEdge, ShortestPathResult };
 
 export async function analyzeGraph(graph: GraspGraph): Promise<GraphAnalysis> {
+  if (!useWorker) {
+    return analyzeGraphSync(graph);
+  }
+
   try {
     return await runInWorker('analyze', { graph });
   } catch (err) {
@@ -158,6 +160,10 @@ export async function computeShortestPathAsync(
   sourceId: string,
   targetId: string,
 ): Promise<ShortestPathResult | null> {
+  if (!useWorker) {
+    return computeShortestPathSync(graph, sourceId, targetId);
+  }
+
   try {
     return await runInWorker('shortest', { graph, sourceId, targetId });
   } catch (err) {

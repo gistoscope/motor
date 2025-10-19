@@ -1,9 +1,16 @@
-import { createViewer, initMath, fromRealEngine, mountPlayground } from '../src/index.js';
-import {
+window.MOTOR_DISABLE_WORKERS = true;
+
+const {
+  createViewer,
+  initMath,
+  fromRealEngine,
+  mountPlayground,
+} = await import('../src/index.js');
+const {
   decodeViewerStateFromSearch,
   encodeViewerStateToUrl,
   DEFAULT_VIEWER_URL_STATE,
-} from '../src/util/state-url.js';
+} = await import('../src/util/state-url.js');
 
 const GRAPH_EXAMPLES = [
   {
