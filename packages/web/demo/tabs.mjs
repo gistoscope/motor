@@ -9,17 +9,10 @@ const tabEngine =
   $('[data-tab-role="engine"]') ||
   $('[data-role="demo-tab"][data-target="engine"]');
 
-const sectionGraphs =
-  $('[data-role="section-graphs"]') ||
-  $('[data-section-role="graphs"]') ||
-  $('[data-role="graph-viewer"]');
-const sectionEngine =
-  $('[data-role="section-engine"]') ||
-  $('[data-section-role="engine"]') ||
-  $('[data-role="math-playground"]');
-
-const panelGraphs = sectionGraphs?.closest?.('[data-role="demo-panel"]');
-const panelEngine = sectionEngine?.closest?.('[data-role="demo-panel"]');
+const selectGraphsSection = () =>
+  $('[data-role="section-graphs"]') || $('[data-role="graph-viewer"]');
+const selectEngineSection = () =>
+  $('[data-role="section-engine"]') || $('[data-role="math-playground"]');
 
 const setHidden = (element, hidden) => {
   if (!element) {
@@ -64,12 +57,16 @@ const readStoredTab = () => {
 };
 
 function show(which) {
+  const graphsSection = selectGraphsSection();
+  const engineSection = selectEngineSection();
+  const graphsPanel = graphsSection?.closest?.('[data-role="demo-panel"]');
+  const enginePanel = engineSection?.closest?.('[data-role="demo-panel"]');
   const isGraphs = which === 'graphs';
 
-  setHidden(sectionGraphs, !isGraphs);
-  setHidden(panelGraphs, !isGraphs);
-  setHidden(sectionEngine, isGraphs);
-  setHidden(panelEngine, isGraphs);
+  setHidden(graphsSection, !isGraphs);
+  setHidden(graphsPanel, !isGraphs);
+  setHidden(engineSection, isGraphs);
+  setHidden(enginePanel, isGraphs);
 
   setTabState(tabGraphs, isGraphs);
   setTabState(tabEngine, !isGraphs);
@@ -82,15 +79,13 @@ function show(which) {
   }
 }
 
-function init() {
+document.addEventListener('DOMContentLoaded', () => {
   const hash = (location.hash || '').replace('#', '');
   const saved = readStoredTab();
-  const initial = hash === 'engine' || hash === 'graphs' ? hash : saved || 'graphs';
+  const initial = hash === 'engine' || hash === 'graphs' ? hash : saved === 'engine' ? 'engine' : 'graphs';
 
   show(initial);
 
   tabGraphs?.addEventListener('click', () => show('graphs'));
   tabEngine?.addEventListener('click', () => show('engine'));
-}
-
-init();
+});
