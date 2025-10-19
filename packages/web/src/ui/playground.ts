@@ -8,6 +8,7 @@ import type { MathBridgeHandle, MathEngine } from '../math/types';
 import { createSessionPlayer, type SessionPlayerHandle } from './player';
 import type { GraphJSON } from '../api';
 import createViewer, { type ViewerHandle } from '../viewer';
+import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
 
 interface PlaygroundMountOptions {
   initialExpression?: string;
@@ -433,12 +434,19 @@ export function mountPlayground(
 
   const handleFormSubmit = (event: Event) => {
     event.preventDefault();
-    const expression = textarea.value.trim();
-    if (!expression) {
-      showStatus('Enter an expression to parse', 'error');
-      return;
+    const submitterCandidate = (event as { submitter?: EventTarget | null }).submitter;
+    const submitter = submitterCandidate instanceof HTMLButtonElement ? submitterCandidate : null;
+    const release: IdempotentRelease | null = submitter ? isIdempotentClick(submitter) : null;
+    try {
+      const expression = textarea.value.trim();
+      if (!expression) {
+        showStatus('Enter an expression to parse', 'error');
+        return;
+      }
+      applyExpression(expression);
+    } finally {
+      release?.();
     }
-    applyExpression(expression);
   };
 
   const handleInput = () => {

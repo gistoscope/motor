@@ -182,4 +182,41 @@ describe('web demo shell markup', () => {
     expect(handle.getExpression()).toBe('2 + 3');
     handle.destroy();
   });
+
+  it('keeps state stable when parsing or loading repeatedly', async () => {
+    const html = await readFile(new URL('../../web/demo/index.html', import.meta.url), 'utf8');
+    document.open();
+    document.write(html);
+    document.close();
+
+    const playgroundRoot = document.getElementById('math-playground');
+    expect(playgroundRoot).toBeInstanceOf(domWindow.HTMLElement);
+
+    const engine = new StubMathEngine();
+    const handle = mountPlayground(playgroundRoot as HTMLElement, engine, {
+      initialExpression: 'x + y',
+    });
+
+    const form = playgroundRoot?.querySelector('form[data-role="math-input-form"]');
+    const textarea = playgroundRoot?.querySelector<HTMLTextAreaElement>('textarea[data-role="math-input"]');
+    const submitButton = playgroundRoot?.querySelector<HTMLButtonElement>('button[data-role="math-input-apply"]');
+    expect(form).toBeTruthy();
+    expect(textarea).toBeTruthy();
+    expect(submitButton).toBeTruthy();
+
+    textarea!.value = 'a + b';
+    form!.dispatchEvent(new domWindow.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(handle.getExpression()).toBe('a + b');
+
+    form!.dispatchEvent(new domWindow.Event('submit', { bubbles: true, cancelable: true }) as unknown as Event);
+    expect(handle.getExpression()).toBe('a + b');
+    expect(submitButton?.disabled).toBe(false);
+
+    handle.loadExpression('c + d');
+    expect(handle.getExpression()).toBe('c + d');
+    handle.loadExpression('c + d');
+    expect(handle.getExpression()).toBe('c + d');
+
+    handle.destroy();
+  });
 });

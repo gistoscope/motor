@@ -12,6 +12,9 @@ import { createOverlayController, type AnalysisPanelElements } from './overlays'
 import { initHelp, type HelpOverlayHandle } from './ui/help';
 import { attachMathEngine } from './math/bridge';
 import type { MathBridgeHandle, MathEngine } from './math/types';
+import { getWarningMessage, type WebWarningCode } from './errors';
+import { isIdempotentClick, type IdempotentRelease } from './util/dom';
+import { isNonNegativeWeights } from './util/graph';
 
 type ClipboardWriter = {
   writeText(text: string): Promise<void>;
@@ -132,38 +135,6 @@ function unregisterMathMount(mount: MathMountPoint | null): void {
   mathMountPoints.delete(mount);
 }
 
-function hasValidWeights(data: unknown): boolean {
-  if (typeof data !== 'object' || data === null) {
-    return false;
-  }
-
-  const edges = (data as { edges?: unknown }).edges;
-  if (!Array.isArray(edges) || edges.length === 0) {
-    return false;
-  }
-
-  for (const entry of edges) {
-    if (typeof entry !== 'object' || entry === null) {
-      return false;
-    }
-    const raw = entry as { from?: unknown; to?: unknown; weight?: unknown };
-    if (typeof raw.from !== 'string' || typeof raw.to !== 'string') {
-      return false;
-    }
-    if (raw.weight === undefined) {
-      return false;
-    }
-    if (typeof raw.weight !== 'number' || Number.isNaN(raw.weight) || !Number.isFinite(raw.weight)) {
-      return false;
-    }
-    if (raw.weight < 0) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 function ensureTrailingNewline(text: string): string {
   return text.endsWith('\n') ? text : `${text}\n`;
 }
@@ -207,7 +178,12 @@ interface NodeInfoElements {
 
 function resetNodeInfoPanel(elements: NodeInfoElements): void {
   elements.container.dataset.state = 'empty';
+  delete elements.container.dataset.selectedNodeId;
   elements.idValue.textContent = DASH;
+  delete elements.idValue.dataset.nodeId;
+  elements.idValue.removeAttribute('tabindex');
+  elements.idValue.removeAttribute('role');
+  elements.idValue.removeAttribute('aria-label');
   elements.labelValue.textContent = DASH;
   elements.inDegreeValue.textContent = DASH;
   elements.outDegreeValue.textContent = DASH;
@@ -364,6 +340,14 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
             </label>
             <button
               type="button"
+              class="viewer__button viewer__button--small"
+              data-role="shortest-run"
+              disabled
+            >
+              Run
+            </button>
+            <button
+              type="button"
               class="viewer__button viewer__button--secondary viewer__button--small"
               data-role="shortest-reset"
               disabled
@@ -513,6 +497,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const shortestTargetValue = root.querySelector<HTMLElement>('[data-role="shortest-target"]');
   const shortestTotalValue = root.querySelector<HTMLElement>('[data-role="shortest-total"]');
   const shortestStatusValue = root.querySelector<HTMLElement>('[data-role="shortest-status"]');
+  const shortestRunButton = root.querySelector<HTMLButtonElement>('button[data-role="shortest-run"]');
   const shortestResetButton = root.querySelector<HTMLButtonElement>('button[data-role="shortest-reset"]');
   const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
 
@@ -553,6 +538,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !shortestTargetValue ||
     !shortestTotalValue ||
     !shortestStatusValue ||
+    !shortestRunButton ||
     !shortestResetButton ||
     !viewerRoot ||
     !helpButton ||
@@ -636,17 +622,36 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   let currentJSONText = '';
   let currentDOTText = '';
   let currentInspectText = '';
+  let parseInProgress = false;
   let shortestAvailable = false;
   let shortestSourceId: string | null = null;
   let shortestTargetId: string | null = null;
   let shortestResult: ShortestPathResult | null = null;
+  let graphWarningCode: WebWarningCode | null = null;
+  let runtimeWarningCode: WebWarningCode | null = null;
+  let releaseImportGuard: IdempotentRelease | null = null;
 
   function clearGraphOutputs() {
     currentGraph = null;
     currentJSONText = '';
     currentDOTText = '';
     currentInspectText = '';
+    graphWarningCode = null;
     resetShortestState(false);
+  }
+
+  function getActiveWarning(): WebWarningCode | null {
+    return runtimeWarningCode ?? graphWarningCode;
+  }
+
+  function setGraphWarning(code: WebWarningCode | null) {
+    graphWarningCode = code;
+    updateShortestPanel();
+  }
+
+  function setRuntimeWarning(code: WebWarningCode | null) {
+    runtimeWarningCode = code;
+    updateShortestPanel();
   }
 
   function syncShortestOverlay() {
@@ -693,11 +698,21 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       statusText = 'Shortest path ready.';
     }
 
+    const activeWarning = getActiveWarning();
+    if (activeWarning) {
+      statusText = getWarningMessage(activeWarning);
+      statusValue.setAttribute('data-code', activeWarning);
+    } else {
+      statusValue.removeAttribute('data-code');
+    }
+
     panel.dataset.state = panelState;
     statusValue.textContent = statusText;
 
     const hasSelection = Boolean(shortestSourceId || shortestTargetId);
+    const canRun = shortestAvailable && Boolean(shortestSourceId && shortestTargetId);
     resetButton.disabled = !shortestAvailable || !hasSelection;
+    shortestRunButton!.disabled = !canRun;
   }
 
   function syncNodeActions() {
@@ -744,6 +759,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     shortestSourceId = null;
     shortestTargetId = null;
     shortestResult = null;
+    runtimeWarningCode = null;
 
     if (overlayShortestToggle.checked) {
       overlayShortestToggle.checked = false;
@@ -760,12 +776,20 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   function recomputeShortestPath() {
     if (!shortestAvailable || !currentGraph || !shortestSourceId || !shortestTargetId) {
       shortestResult = null;
+      runtimeWarningCode = null;
       syncShortestOverlay();
       updateShortestPanel();
       return;
     }
 
-    shortestResult = computeShortestPath(currentGraph, shortestSourceId, shortestTargetId);
+    const nextResult = computeShortestPath(currentGraph, shortestSourceId, shortestTargetId);
+    if (!nextResult) {
+      shortestResult = null;
+      runtimeWarningCode = 'WEB.E4.NO_PATH';
+    } else {
+      shortestResult = nextResult;
+      runtimeWarningCode = null;
+    }
     syncShortestOverlay();
     updateShortestPanel();
   }
@@ -774,6 +798,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     shortestSourceId = null;
     shortestTargetId = null;
     shortestResult = null;
+    runtimeWarningCode = null;
 
     if (overlayShortestToggle.checked) {
       overlayShortestToggle.checked = false;
@@ -791,6 +816,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
 
     shortestSourceId = nodeId;
+    runtimeWarningCode = null;
     recomputeShortestPath();
     syncNodeActions();
   }
@@ -801,6 +827,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
 
     shortestTargetId = nodeId;
+    runtimeWarningCode = null;
     recomputeShortestPath();
     syncNodeActions();
   }
@@ -894,7 +921,12 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       }
 
       nodeInfoElements.container.dataset.state = 'active';
+      nodeInfoElements.container.dataset.selectedNodeId = info.id;
       nodeInfoElements.idValue.textContent = info.id;
+      nodeInfoElements.idValue.dataset.nodeId = info.id;
+      nodeInfoElements.idValue.tabIndex = 0;
+      nodeInfoElements.idValue.setAttribute('role', 'button');
+      nodeInfoElements.idValue.setAttribute('aria-label', `Highlight node ${info.id} in preview`);
       nodeInfoElements.labelValue.textContent = info.label || DASH;
       nodeInfoElements.inDegreeValue.textContent = String(info.inDegree);
       nodeInfoElements.outDegreeValue.textContent = String(info.outDegree);
@@ -921,7 +953,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       syncEdgeClasses();
     }
 
-    function handleSelection(nodeId: string | null) {
+    function applySelection(nodeId: string | null, _origin: 'preview' | 'panel' = 'preview') {
       if (!nodeId || !nodeStats.has(nodeId)) {
         selectedNodeId = null;
       } else {
@@ -930,6 +962,10 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       syncNodeClasses();
       syncEdgeClasses();
       updateNodeInfoPanel(selectedNodeId);
+    }
+
+    function handleSelection(nodeId: string | null) {
+      applySelection(nodeId, 'preview');
     }
 
   function showErrors(messages: string[]) {
@@ -979,7 +1015,15 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
     const data = parsed as GraphJSON;
     const graph = fromJSON(data);
-    const weightsAttached = hasValidWeights(data);
+    const edges = Array.isArray(data.edges) ? data.edges : [];
+    const hasNegativeWeights = edges.some((edge) => {
+      if (!edge || typeof edge !== 'object') {
+        return false;
+      }
+      const rawWeight = (edge as { weight?: unknown }).weight;
+      return typeof rawWeight === 'number' && Number.isFinite(rawWeight) && rawWeight < 0;
+    });
+    const weightsAttached = isNonNegativeWeights(data);
 
     const jsonText = ensureTrailingNewline(JSON.stringify(data, null, 2));
     const dotText = ensureTrailingNewline(toDOT(graph));
@@ -999,6 +1043,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     syncNodeClasses();
     syncEdgeClasses();
     resetShortestState(weightsAttached);
+    setGraphWarning(hasNegativeWeights ? 'WEB.E3.NEGATIVE_WEIGHT' : null);
 
     currentGraph = data;
     currentJSONText = jsonText;
@@ -1009,7 +1054,15 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   }
 
   function parseAndRender() {
-    processGraphInput(textareaEl.value, { updateTextarea: true });
+    if (parseInProgress) {
+      return;
+    }
+    parseInProgress = true;
+    try {
+      processGraphInput(textareaEl.value, { updateTextarea: true });
+    } finally {
+      parseInProgress = false;
+    }
   }
 
   function startDownload(filename: string, content: string, mimeType: string) {
@@ -1030,36 +1083,42 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   function handleDownload(ev: Event) {
     const button = ev.currentTarget as HTMLButtonElement | null;
     if (!button) return;
+    const release = isIdempotentClick(button);
+    if (!release) {
+      return;
+    }
     const target = button.dataset.target;
     let content = '';
     let filename = '';
     let mimeType = 'text/plain;charset=utf-8';
     let label = 'Export';
-    if (target === 'json') {
-      content = currentJSONText;
-      filename = 'graph.json';
-      mimeType = 'application/json;charset=utf-8';
-      label = 'JSON';
-    } else if (target === 'dot') {
-      content = currentDOTText;
-      filename = 'graph.dot';
-      mimeType = 'text/vnd.graphviz;charset=utf-8';
-      label = 'DOT';
-    } else {
-      return;
-    }
-
-    if (!content) {
-      setStatus(`No ${label} available to download`, 'error');
-      return;
-    }
-
     try {
+      if (target === 'json') {
+        content = currentJSONText;
+        filename = 'graph.json';
+        mimeType = 'application/json;charset=utf-8';
+        label = 'JSON';
+      } else if (target === 'dot') {
+        content = currentDOTText;
+        filename = 'graph.dot';
+        mimeType = 'text/vnd.graphviz;charset=utf-8';
+        label = 'DOT';
+      } else {
+        return;
+      }
+
+      if (!content) {
+        setStatus(`No ${label} available to download`, 'error');
+        return;
+      }
+
       startDownload(filename, content, mimeType);
       setStatus(`${label} download started.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setStatus(`Download failed: ${message}`, 'error');
+    } finally {
+      release();
     }
   }
 
@@ -1085,6 +1144,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
   function handleImportChange(files: FileList | null) {
     if (!files || files.length === 0) {
+      releaseImportGuard?.();
+      releaseImportGuard = null;
       return;
     }
     const file = files[0];
@@ -1106,6 +1167,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       })
       .finally(() => {
         importInputEl.value = '';
+        releaseImportGuard?.();
+        releaseImportGuard = null;
       });
   }
 
@@ -1115,8 +1178,13 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     const target = button.dataset.target;
     const label = target === 'inspect' ? 'Inspect' : 'DOT';
     const raw = target === 'inspect' ? currentInspectText : currentDOTText;
+    const release = isIdempotentClick(button);
+    if (!release) {
+      return;
+    }
     if (!raw) {
       setStatus(`${label} output is empty`, 'error');
+      release();
       return;
     }
 
@@ -1126,10 +1194,24 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       .catch((err) => {
         const message = err instanceof Error ? err.message : String(err);
         setStatus(`Copy failed: ${message}`, 'error');
+      })
+      .finally(() => {
+        release();
       });
   }
 
-  const handleImportButtonClick = () => importInputEl.click();
+  const handleImportButtonClick = () => {
+    if (releaseImportGuard) {
+      importInputEl.click();
+      return;
+    }
+    const release = isIdempotentClick(importBtn);
+    if (!release) {
+      return;
+    }
+    releaseImportGuard = release;
+    importInputEl.click();
+  };
   const handleImportInputChange = () => handleImportChange(importInputEl.files);
   const handlePasteCancel = () => closePastePanel();
   const handlePasteKeydown = (event: KeyboardEvent) => {
@@ -1144,7 +1226,18 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
   };
 
-  parseBtn.addEventListener('click', parseAndRender);
+  const handleParseClick = () => {
+    const release = isIdempotentClick(parseBtn);
+    if (!release) {
+      return;
+    }
+    try {
+      parseAndRender();
+    } finally {
+      release();
+    }
+  };
+  parseBtn.addEventListener('click', handleParseClick);
   const handleKeydown = (event: KeyboardEvent) => {
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault();
@@ -1163,9 +1256,21 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const handleSetSourceClick = () => setShortestSource(selectedNodeId);
   const handleSetTargetClick = () => setShortestTarget(selectedNodeId);
   const handleShortestReset = () => clearShortestSelections();
+  const handleShortestRun = () => {
+    const release = isIdempotentClick(shortestRunButton);
+    if (!release) {
+      return;
+    }
+    try {
+      recomputeShortestPath();
+    } finally {
+      release();
+    }
+  };
   nodeInfoSetSourceButton.addEventListener('click', handleSetSourceClick);
   nodeInfoSetTargetButton.addEventListener('click', handleSetTargetClick);
   shortestResetButton.addEventListener('click', handleShortestReset);
+  shortestRunButton.addEventListener('click', handleShortestRun);
   const handleNodeHoverEvent = (event: Event) => {
     const detail = (event as CustomEvent<{ nodeId: string | null }>).detail;
     handleHover(detail?.nodeId ?? null);
@@ -1180,9 +1285,34 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     const detail = (event as CustomEvent<{ nodeId: string | null }>).detail;
     handleSelection(detail?.nodeId ?? null);
   };
+  const handleNodeInfoSelectEvent = (event: Event) => {
+    const detail = (event as CustomEvent<{ nodeId: string | null }>).detail;
+    applySelection(detail?.nodeId ?? null, 'panel');
+  };
+  const handleNodeInfoValueClick = () => {
+    const nodeId = nodeInfoElements.idValue.dataset.nodeId ?? null;
+    if (!nodeId) {
+      return;
+    }
+    applySelection(nodeId, 'panel');
+  };
+  const handleNodeInfoValueKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' && event.key !== ' ') {
+      return;
+    }
+    event.preventDefault();
+    const nodeId = nodeInfoElements.idValue.dataset.nodeId ?? null;
+    if (!nodeId) {
+      return;
+    }
+    applySelection(nodeId, 'panel');
+  };
   svgNode.addEventListener('motor:node-hover', handleNodeHoverEvent);
   svgNode.addEventListener('motor:node-leave', handleNodeLeaveEvent);
   svgNode.addEventListener('motor:node-select', handleNodeSelectEvent);
+  nodeInfoElements.container.addEventListener('motor:node-info-select', handleNodeInfoSelectEvent);
+  nodeInfoElements.idValue.addEventListener('click', handleNodeInfoValueClick);
+  nodeInfoElements.idValue.addEventListener('keydown', handleNodeInfoValueKeydown);
 
   textareaEl.value = options.initialJSON ?? '';
   resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
@@ -1197,7 +1327,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     parse: parseAndRender,
     destroy: () => {
       contrastToggleEl.removeEventListener('change', handleContrastChange);
-      parseBtn.removeEventListener('click', parseAndRender);
+      parseBtn.removeEventListener('click', handleParseClick);
       textareaEl.removeEventListener('keydown', handleKeydown);
       importBtn.removeEventListener('click', handleImportButtonClick);
       importInputEl.removeEventListener('change', handleImportInputChange);
@@ -1210,9 +1340,15 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       nodeInfoSetSourceButton.removeEventListener('click', handleSetSourceClick);
       nodeInfoSetTargetButton.removeEventListener('click', handleSetTargetClick);
       shortestResetButton.removeEventListener('click', handleShortestReset);
+      shortestRunButton.removeEventListener('click', handleShortestRun);
       svgNode.removeEventListener('motor:node-hover', handleNodeHoverEvent);
       svgNode.removeEventListener('motor:node-leave', handleNodeLeaveEvent);
       svgNode.removeEventListener('motor:node-select', handleNodeSelectEvent);
+      nodeInfoElements.container.removeEventListener('motor:node-info-select', handleNodeInfoSelectEvent);
+      nodeInfoElements.idValue.removeEventListener('click', handleNodeInfoValueClick);
+      nodeInfoElements.idValue.removeEventListener('keydown', handleNodeInfoValueKeydown);
+      releaseImportGuard?.();
+      releaseImportGuard = null;
       unregisterMathMount(mathMount);
       overlayController.destroy();
       helpOverlay.destroy();
