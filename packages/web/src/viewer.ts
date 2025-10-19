@@ -657,8 +657,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   function syncShortestOverlay() {
     overlayController.setShortestPath({
       available: shortestAvailable,
-      nodes: shortestResult ? shortestResult.nodes : [],
-      edges: shortestResult ? shortestResult.edges : [],
+      nodes: shortestResult?.nodes ?? [],
+      edges: shortestResult?.edges ?? [],
     });
   }
 
@@ -968,7 +968,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       applySelection(nodeId, 'preview');
     }
 
-  function showErrors(messages: string[]) {
+  function showErrors(messages: readonly string[]) {
     if (messages.length === 0) {
       errorsNode.textContent = '';
       errorsNode.classList.remove('viewer__errors--visible');

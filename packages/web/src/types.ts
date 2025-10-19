@@ -16,10 +16,18 @@ export interface GraphJSON {
   readonly name?: string;
 }
 
-export interface GraphValidationResult {
-  readonly ok: boolean;
-  readonly errors: string[];
+export interface GraphValidationSuccess {
+  readonly ok: true;
+  readonly errors: readonly string[];
+  readonly graph: GraphJSON;
 }
+
+export interface GraphValidationFailure {
+  readonly ok: false;
+  readonly errors: readonly string[];
+}
+
+export type GraphValidationResult = GraphValidationSuccess | GraphValidationFailure;
 
 export interface GraspModule {
   validateGraphJSON(value: unknown): GraphValidationResult;
