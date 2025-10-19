@@ -4,6 +4,7 @@
   --fg: #0b0f19;
   --code-bg: #f6f8fa;
   --code-fg: #0b0f19;
+  --pane-min-right: 520px;
   --motor-bg: #0b0b0c;
   --motor-fg: #e5e7eb;
   --motor-accent: #60a5fa;
@@ -15,19 +16,19 @@
   --motor-gap: 8px;
 }
 
+.hidden {
+  display: none !important;
+}
+
 body {
   background: var(--bg);
   color: var(--fg);
 }
 
-.hidden {
-  display: none !important;
-}
-
 .app-shell,
+[data-role="app-shell"],
 .container,
-.demo,
-[data-role="app-shell"] {
+.demo {
   max-width: var(--content-max);
   margin-inline: auto;
   padding: 12px;
@@ -59,4 +60,30 @@ textarea {
 
 .scroll-x {
   overflow-x: auto;
+}
+
+.lower-split {
+  display: grid;
+  grid-template-columns: 1fr minmax(var(--pane-min-right), 640px);
+  gap: 16px;
+  align-items: start;
+}
+
+.lower-right {
+  overflow: auto;
+}
+
+[data-role="math-mini-graph"],
+.pane-mini-graph {
+  min-height: 180px;
+  background: var(--code-bg);
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.panel,
+.card,
+.box {
+  background: #ffffff;
+  color: #111111;
 }
