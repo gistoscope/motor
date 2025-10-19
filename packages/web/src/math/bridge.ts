@@ -1302,3 +1302,11 @@ export function attachMathEngine(
     },
   };
 }
+
+export function initMathBridge(
+  engine: MathEngine,
+  hostEl: HTMLElement,
+  options: Parameters<typeof attachMathEngine>[3] = {},
+): MathBridgeHandle {
+  return attachMathEngine(null, engine, hostEl, options);
+}
