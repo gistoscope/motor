@@ -11,21 +11,21 @@
     <title>Motor — Web Demo Playground</title>
     <style>
       :root {
-        color-scheme: light dark;
+        color-scheme: only light;
         font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background-color: #111418;
-        color: #e9edf5;
+        background-color: var(--bg);
+        color: var(--fg);
       }
 
       body {
         margin: 0;
         min-height: 100vh;
-        background: radial-gradient(circle at top, rgba(60, 80, 110, 0.35), transparent 65%),
-          #111418;
+        background: var(--bg);
+        color: var(--fg);
       }
 
       main {
-        max-width: 1200px;
+        max-width: var(--content-max);
         margin: 0 auto;
         padding: 3rem 1.5rem 4rem;
         display: flex;
@@ -48,17 +48,16 @@
 
       header.page-header p {
         margin: 0;
-        color: rgba(233, 237, 245, 0.75);
+        color: rgba(15, 23, 42, 0.7);
         font-size: 1.05rem;
       }
 
       section.card {
-        background: rgba(13, 18, 25, 0.75);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.1);
         border-radius: 20px;
         padding: 1.75rem;
-        backdrop-filter: blur(18px);
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 18px 50px rgba(15, 23, 42, 0.05);
         display: flex;
         flex-direction: column;
         gap: 1.5rem;
@@ -68,11 +67,12 @@
         margin: 0;
         font-size: 1.6rem;
         letter-spacing: 0.03em;
+        color: var(--fg);
       }
 
       .card p.description {
         margin: 0;
-        color: rgba(233, 237, 245, 0.75);
+        color: rgba(15, 23, 42, 0.72);
       }
 
       .card__controls {
@@ -87,7 +87,7 @@
         flex-direction: column;
         gap: 0.35rem;
         font-size: 0.85rem;
-        color: rgba(233, 237, 245, 0.65);
+        color: rgba(15, 23, 42, 0.65);
         min-width: 180px;
       }
 
@@ -95,9 +95,9 @@
       button.control__button {
         font: inherit;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.15);
-        background: rgba(255, 255, 255, 0.06);
-        color: inherit;
+        border: 1px solid rgba(15, 23, 42, 0.15);
+        background: #f8fafc;
+        color: var(--fg);
         padding: 0.55rem 1rem;
         cursor: pointer;
         transition: border-color 0.2s ease, background 0.2s ease;
@@ -106,8 +106,8 @@
       select.control__select:focus,
       button.control__button:focus {
         outline: none;
-        border-color: rgba(117, 180, 255, 0.75);
-        box-shadow: 0 0 0 3px rgba(117, 180, 255, 0.25);
+        border-color: rgba(37, 99, 235, 0.7);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
       }
 
       button.control__button {
@@ -125,7 +125,8 @@
       #graph-viewer {
         border-radius: 16px;
         overflow: hidden;
-        background: rgba(7, 10, 14, 0.65);
+        background: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, 0.45);
       }
 
       .demo-tabs {
@@ -140,9 +141,9 @@
         align-self: center;
         padding: 0.4rem;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(13, 18, 25, 0.65);
-        backdrop-filter: blur(16px);
+        border: 1px solid rgba(15, 23, 42, 0.1);
+        background: rgba(148, 163, 184, 0.16);
+        backdrop-filter: blur(12px);
       }
 
       .demo-tabs__button {
@@ -151,21 +152,23 @@
         border-radius: 999px;
         padding: 0.5rem 1.3rem;
         background: transparent;
-        color: inherit;
+        color: rgba(15, 23, 42, 0.85);
         cursor: pointer;
         transition: background 0.2s ease, border-color 0.2s ease;
       }
 
-      .demo-tabs__button.is-active {
-        background: rgba(117, 180, 255, 0.22);
-        border-color: rgba(117, 180, 255, 0.55);
+      .demo-tabs__button.is-active,
+      .demo-tabs__button.active {
+        background: rgba(37, 99, 235, 0.12);
+        border-color: rgba(37, 99, 235, 0.45);
+        color: #1f2937;
       }
 
       .demo-tabs__button:not(.is-active):hover,
       .demo-tabs__button:not(.is-active):focus {
         outline: none;
-        border-color: rgba(255, 255, 255, 0.18);
-        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(37, 99, 235, 0.35);
+        background: rgba(37, 99, 235, 0.12);
       }
 
       .demo-tabs__panels {
@@ -202,16 +205,16 @@
 
       .engine-pane__label {
         font-size: 0.85rem;
-        color: rgba(233, 237, 245, 0.65);
+        color: rgba(15, 23, 42, 0.65);
       }
 
       .engine-pane__textarea {
         font: inherit;
         padding: 0.75rem;
         border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        background: rgba(7, 10, 14, 0.7);
-        color: inherit;
+        border: 1px solid rgba(15, 23, 42, 0.15);
+        background: var(--code-bg);
+        color: var(--code-fg);
         min-height: 7rem;
         resize: vertical;
       }
@@ -225,9 +228,9 @@
       .engine-pane__button {
         font: inherit;
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.18);
-        background: rgba(117, 180, 255, 0.2);
-        color: inherit;
+        border: 1px solid rgba(37, 99, 235, 0.45);
+        background: rgba(37, 99, 235, 0.15);
+        color: #1f2937;
         padding: 0.55rem 1.25rem;
         cursor: pointer;
         transition: background 0.2s ease, border-color 0.2s ease;
@@ -236,12 +239,13 @@
       .engine-pane__button:hover,
       .engine-pane__button:focus {
         outline: none;
-        border-color: rgba(117, 180, 255, 0.6);
-        background: rgba(117, 180, 255, 0.32);
+        border-color: rgba(37, 99, 235, 0.7);
+        background: rgba(37, 99, 235, 0.22);
       }
 
       .engine-pane__button--secondary {
-        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(15, 23, 42, 0.15);
+        background: #f8fafc;
       }
 
       .engine-pane__samples {
@@ -254,7 +258,7 @@
       .engine-pane__samples-title {
         margin: 0;
         font-size: 0.85rem;
-        color: rgba(233, 237, 245, 0.65);
+        color: rgba(15, 23, 42, 0.65);
       }
 
       .engine-pane__samples-buttons {
@@ -265,9 +269,9 @@
 
       #engine-samples button {
         border-radius: 999px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(255, 255, 255, 0.06);
-        color: inherit;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        background: #f8fafc;
+        color: rgba(15, 23, 42, 0.85);
         padding: 0.45rem 0.9rem;
         font: inherit;
         cursor: pointer;
@@ -278,26 +282,26 @@
       #engine-samples button:hover,
       #engine-samples button:focus {
         outline: none;
-        border-color: rgba(117, 180, 255, 0.45);
-        background: rgba(117, 180, 255, 0.18);
+        border-color: rgba(37, 99, 235, 0.45);
+        background: rgba(37, 99, 235, 0.12);
       }
 
       #engine-samples button[data-active='true'] {
-        border-color: rgba(117, 180, 255, 0.75);
-        background: rgba(117, 180, 255, 0.28);
+        border-color: rgba(37, 99, 235, 0.55);
+        background: rgba(37, 99, 235, 0.2);
       }
 
       .engine-pane__display {
         border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: rgba(7, 10, 14, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        background: #f8fafc;
         padding: 1rem;
         min-height: 160px;
         transition: border-color 0.2s ease;
       }
 
       .engine-pane__display[data-mode='catx'] {
-        border-color: rgba(117, 180, 255, 0.55);
+        border-color: rgba(37, 99, 235, 0.55);
       }
 
       .engine-pane__display-catx,
@@ -319,7 +323,7 @@
       .engine-pane__status {
         margin: 0;
         font-size: 0.85rem;
-        color: rgba(233, 237, 245, 0.7);
+        color: rgba(15, 23, 42, 0.7);
       }
 
       .engine-pane__status[data-tone='error'] {
@@ -329,18 +333,18 @@
       .engine-pane__info {
         margin: 0.35rem 0 0;
         font-size: 0.85rem;
-        color: rgba(233, 237, 245, 0.7);
+        color: rgba(15, 23, 42, 0.7);
       }
 
       footer.page-footer {
         margin-top: 1rem;
         text-align: center;
-        color: rgba(233, 237, 245, 0.5);
+        color: rgba(15, 23, 42, 0.55);
         font-size: 0.8rem;
       }
 
       a.page-link {
-        color: rgba(117, 180, 255, 0.9);
+        color: rgba(37, 99, 235, 0.9);
         text-decoration: none;
       }
 
@@ -351,235 +355,243 @@
     </style>
   </head>
   <body>
-    <main>
-      <header class="page-header">
-        <h1>Motor Web Playground</h1>
-        <p>Graph viewer + mock math engine running without a bundler.</p>
-      </header>
+    <div class="scroll-x">
+      <main>
+        <header class="page-header">
+          <h1>Motor Web Playground</h1>
+          <p>Graph viewer + mock math engine running without a bundler.</p>
+        </header>
 
-      <div class="demo-tabs">
-        <div class="demo-tabs__list" role="tablist" aria-label="Playground panels">
-          <button
-            type="button"
-            class="demo-tabs__button is-active"
-            data-role="demo-tab"
-            data-target="engine"
-            data-state="active"
-            role="tab"
-            id="tab-engine"
-            aria-controls="panel-engine"
-            aria-selected="true"
-            tabindex="0"
-          >
-            Engine
-          </button>
-          <button
-            type="button"
-            class="demo-tabs__button"
-            data-role="demo-tab"
-            data-target="graphs"
-            role="tab"
-            id="tab-graphs"
-            aria-controls="panel-graphs"
-            aria-selected="false"
-            tabindex="-1"
-          >
-            Graphs
-          </button>
-        </div>
-        <div class="demo-tabs__panels">
-          <div
-            class="demo-tabs__panel"
-            data-role="demo-panel"
-            data-panel="engine"
-            data-state="active"
-            id="panel-engine"
-            role="tabpanel"
-            aria-labelledby="tab-engine"
-          >
-            <section class="card" id="engine-card">
-              <div>
-                <h2>Engine</h2>
-                <p class="description">
-                  Try the math engine directly: enter LaTeX or ASCII input and view the rendered output.
-                </p>
-                <p class="engine-pane__info" data-role="engine-info">Engine: loading…</p>
-              </div>
-              <div class="engine-pane" id="engine-pane">
-                <div class="engine-pane__controls">
-                  <form class="engine-pane__form" data-role="engine-form">
-                    <label class="engine-pane__label" for="engine-input">Expression input</label>
-                    <textarea
-                      id="engine-input"
-                      class="engine-pane__textarea"
-                      data-role="engine-input"
-                      spellcheck="false"
-                      rows="5"
-                    ></textarea>
-                    <div class="engine-pane__actions">
-                      <button type="submit" class="engine-pane__button" data-role="engine-apply">
-                        Render expression
-                      </button>
-                      <button
-                        type="button"
-                        class="engine-pane__button engine-pane__button--secondary"
-                        id="engine-input-focus"
-                      >
-                        Focus input
-                      </button>
-                    </div>
-                  </form>
-                  <div class="engine-pane__samples" aria-label="Engine samples">
-                    <p class="engine-pane__samples-title">Quick samples</p>
-                    <div class="engine-pane__samples-buttons" id="engine-samples"></div>
-                  </div>
-                </div>
-                <div class="engine-pane__display" data-role="engine-display" data-mode="idle">
-                  <div class="engine-pane__display-catx" data-role="engine-display-catx"></div>
-                  <div class="engine-pane__display-fallback" data-role="engine-display-fallback"></div>
-                </div>
-                <p class="engine-pane__status" data-role="engine-status"></p>
-              </div>
-            </section>
+        <div class="demo-tabs tabs">
+          <div class="demo-tabs__list" role="tablist" aria-label="Playground panels">
+            <button
+              type="button"
+              class="demo-tabs__button"
+              data-role="demo-tab"
+              data-target="engine"
+              data-state="inactive"
+              role="tab"
+              id="tab-engine"
+              aria-controls="panel-engine"
+              aria-selected="false"
+              tabindex="-1"
+              data-tab-role="engine"
+            >
+              Engine
+            </button>
+            <button
+              type="button"
+              class="demo-tabs__button is-active active"
+              data-role="demo-tab"
+              data-target="graphs"
+              data-state="active"
+              role="tab"
+              id="tab-graphs"
+              aria-controls="panel-graphs"
+              aria-selected="true"
+              tabindex="0"
+              data-tab-role="graphs"
+            >
+              Graphs
+            </button>
           </div>
-          <div
-            class="demo-tabs__panel"
-            data-role="demo-panel"
-            data-panel="graphs"
-            data-state="inactive"
-            id="panel-graphs"
-            role="tabpanel"
-            aria-labelledby="tab-graphs"
-            hidden
-          >
-            <section class="card" id="graph-card">
-              <div>
-                <h2>Graph Viewer</h2>
-                <p class="description">
-                  Pick a sample GraphJSON, inspect its DOT output, and explore overlays powered by
-                  <code>createViewer()</code>.
-                </p>
-              </div>
-              <div class="card__controls">
-                <label class="control" for="graph-example">
-                  Graph example
-                  <select id="graph-example" class="control__select"></select>
-                </label>
-                <button id="graph-apply" class="control__button" type="button">
-                  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-                    <path
-                      fill="currentColor"
-                      d="M3.5 2A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12.5 2h-9Zm0 1h9a.5.5 0 0 1 .5.5V6h-10V3.5a.5.5 0 0 1 .5-.5Zm-.5 4.5h10V12.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V7.5Z"
-                    />
-                  </svg>
-                  Load example
-                </button>
-              </div>
-              <div id="graph-viewer" data-demo="viewer"></div>
-            </section>
-
-            <section class="card" id="math-card">
-              <div>
-                <h2>Math Playground</h2>
-                <p class="description">
-                  The playground looks for <code>window.RealMathEngine</code>, adapts it with
-                  <code>fromRealEngine()</code>, and falls back to a local stub if nothing is found. The same
-                  adapter powers the viewer panel via <code>initMath()</code>.
-                </p>
-              </div>
-              <div
-                class="math-playground"
-                id="math-playground"
-                data-demo="playground"
-                data-role="math-playground"
-              >
-                <div class="math-playground__samples" aria-label="Sample expressions">
-                  <p class="math-playground__samples-title">Quick samples</p>
-                  <div class="math-playground__samples-buttons" id="math-samples"></div>
+          <div class="demo-tabs__panels">
+            <div
+              class="demo-tabs__panel hidden"
+              data-role="demo-panel"
+              data-panel="engine"
+              data-state="inactive"
+              id="panel-engine"
+              role="tabpanel"
+              aria-labelledby="tab-engine"
+              data-section-role="engine"
+              hidden
+            >
+              <section class="card" id="engine-card" data-role="section-engine">
+                <div>
+                  <h2>Engine</h2>
+                  <p class="description">
+                    Try the math engine directly: enter LaTeX or ASCII input and view the rendered output.
+                  </p>
+                  <p class="engine-pane__info" data-role="engine-info">Engine: loading…</p>
                 </div>
-                <div class="math-playground__shell" data-role="math-playground-shell">
-                  <div class="math-playground__panes">
-                    <section class="math-playground__pane math-playground__pane--input">
-                      <header class="math-playground__pane-header">
-                        <h3>Input</h3>
-                        <p>Provide LaTeX or plain-text expression.</p>
-                      </header>
-                      <form class="math-playground__input" data-role="math-input-form">
-                        <label class="math-playground__input-label" for="math-input">
-                          Expression input
-                        </label>
-                        <textarea
-                          id="math-input"
-                          class="math-playground__input-textarea"
-                          data-role="math-input"
-                          spellcheck="false"
-                          rows="6"
-                        ></textarea>
-                        <div class="math-playground__input-actions">
-                          <button
-                            type="submit"
-                            class="math-playground__button"
-                            data-role="math-input-apply"
-                          >
-                            Parse expression
-                          </button>
-                          <button type="button" class="math-playground__button" id="math-input-focus">
-                            Focus input
-                          </button>
-                        </div>
-                      </form>
-                    </section>
-                    <section class="math-playground__pane math-playground__pane--display">
-                      <header class="math-playground__pane-header">
-                        <h3>Display</h3>
-                        <p>CATX output if available, otherwise the engine&apos;s HTML/tokens.</p>
-                      </header>
-                      <p class="math-playground__engine-info" data-role="math-engine-info"></p>
-                      <div class="math-playground__display" data-role="math-display">
-                        <div class="math-playground__display-catx" data-role="math-display-catx"></div>
-                        <div class="math-playground__display-fallback" data-role="math-display-fallback">
-                          <div class="math-playground__display-host" data-role="math-display-host"></div>
-                          <div class="math-playground__display-html" data-role="math-display-fallback-html"></div>
-                        </div>
+                <div class="engine-pane" id="engine-pane">
+                  <div class="engine-pane__controls">
+                    <form class="engine-pane__form" data-role="engine-form">
+                      <label class="engine-pane__label" for="engine-input">Expression input</label>
+                      <textarea
+                        id="engine-input"
+                        class="engine-pane__textarea"
+                        data-role="engine-input"
+                        spellcheck="false"
+                        rows="5"
+                      ></textarea>
+                      <div class="engine-pane__actions">
+                        <button type="submit" class="engine-pane__button" data-role="engine-apply">
+                          Render expression
+                        </button>
+                        <button
+                          type="button"
+                          class="engine-pane__button engine-pane__button--secondary"
+                          id="engine-input-focus"
+                        >
+                          Focus input
+                        </button>
                       </div>
-                      <p class="math-playground__status" data-role="math-status"></p>
-                    </section>
+                    </form>
+                    <div class="engine-pane__samples" aria-label="Engine samples">
+                      <p class="engine-pane__samples-title">Quick samples</p>
+                      <div class="engine-pane__samples-buttons" id="engine-samples"></div>
+                    </div>
                   </div>
-                  <div class="math-playground__panels">
-                    <section class="math-playground__panel">
-                      <header><h3>Actions</h3></header>
-                      <div data-role="math-actions"></div>
-                    </section>
-                    <section class="math-playground__panel">
-                      <header><h3>History</h3></header>
-                      <div data-role="math-history"></div>
-                    </section>
-                    <section class="math-playground__panel">
-                      <header><h3>Player</h3></header>
-                      <div data-role="math-player"></div>
-                    </section>
-                    <section
-                      class="math-playground__panel math-playground__panel--mini-graph"
-                      data-role="math-mini-graph"
-                    >
-                      <header><h3>Mini-graph</h3></header>
-                      <div class="math-playground__mini-graph-viewer" data-role="math-mini-graph-viewer"></div>
-                      <pre class="math-playground__mini-graph-json" data-role="math-mini-graph-json"></pre>
-                    </section>
+                  <div class="engine-pane__display" data-role="engine-display" data-mode="idle">
+                    <div class="engine-pane__display-catx" data-role="engine-display-catx"></div>
+                    <div class="engine-pane__display-fallback" data-role="engine-display-fallback"></div>
+                  </div>
+                  <p class="engine-pane__status" data-role="engine-status"></p>
+                </div>
+              </section>
+            </div>
+            <div
+              class="demo-tabs__panel"
+              data-role="demo-panel"
+              data-panel="graphs"
+              data-state="active"
+              id="panel-graphs"
+              role="tabpanel"
+              aria-labelledby="tab-graphs"
+              data-section-role="graphs"
+            >
+              <section class="card" id="graph-card" data-role="section-graphs">
+                <div>
+                  <h2>Graph Viewer</h2>
+                  <p class="description">
+                    Pick a sample GraphJSON, inspect its DOT output, and explore overlays powered by
+                    <code>createViewer()</code>.
+                  </p>
+                </div>
+                <div class="card__controls">
+                  <label class="control" for="graph-example">
+                    Graph example
+                    <select id="graph-example" class="control__select"></select>
+                  </label>
+                  <button id="graph-apply" class="control__button" type="button">
+                    <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                      <path
+                        fill="currentColor"
+                        d="M3.5 2A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12.5 2h-9Zm0 1h9a.5.5 0 0 1 .5.5V6h-10V3.5a.5.5 0 0 1 .5-.5Zm-.5 4.5h10V12.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V7.5Z"
+                      />
+                    </svg>
+                    Load example
+                  </button>
+                </div>
+                <div id="graph-viewer" data-demo="viewer"></div>
+              </section>
+
+              <section class="card" id="math-card">
+                <div>
+                  <h2>Math Playground</h2>
+                  <p class="description">
+                    The playground looks for <code>window.RealMathEngine</code>, adapts it with
+                    <code>fromRealEngine()</code>, and falls back to a local stub if nothing is found. The same
+                    adapter powers the viewer panel via <code>initMath()</code>.
+                  </p>
+                </div>
+                <div
+                  class="math-playground"
+                  id="math-playground"
+                  data-demo="playground"
+                  data-role="math-playground"
+                >
+                  <div class="math-playground__samples" aria-label="Sample expressions">
+                    <p class="math-playground__samples-title">Quick samples</p>
+                    <div class="math-playground__samples-buttons" id="math-samples"></div>
+                  </div>
+                  <div class="math-playground__shell" data-role="math-playground-shell">
+                    <div class="math-playground__panes">
+                      <section class="math-playground__pane math-playground__pane--input">
+                        <header class="math-playground__pane-header">
+                          <h3>Input</h3>
+                          <p>Provide LaTeX or plain-text expression.</p>
+                        </header>
+                        <form class="math-playground__input" data-role="math-input-form">
+                          <label class="math-playground__input-label" for="math-input">
+                            Expression input
+                          </label>
+                          <textarea
+                            id="math-input"
+                            class="math-playground__input-textarea"
+                            data-role="math-input"
+                            spellcheck="false"
+                            rows="6"
+                          ></textarea>
+                          <div class="math-playground__input-actions">
+                            <button
+                              type="submit"
+                              class="math-playground__button"
+                              data-role="math-input-apply"
+                            >
+                              Parse expression
+                            </button>
+                            <button type="button" class="math-playground__button" id="math-input-focus">
+                              Focus input
+                            </button>
+                          </div>
+                        </form>
+                      </section>
+                      <section class="math-playground__pane math-playground__pane--display">
+                        <header class="math-playground__pane-header">
+                          <h3>Display</h3>
+                          <p>CATX output if available, otherwise the engine&apos;s HTML/tokens.</p>
+                        </header>
+                        <p class="math-playground__engine-info" data-role="math-engine-info"></p>
+                        <div class="math-playground__display" data-role="math-display">
+                          <div class="math-playground__display-catx" data-role="math-display-catx"></div>
+                          <div class="math-playground__display-fallback" data-role="math-display-fallback">
+                            <div class="math-playground__display-host" data-role="math-display-host"></div>
+                            <div class="math-playground__display-html" data-role="math-display-fallback-html"></div>
+                          </div>
+                        </div>
+                        <p class="math-playground__status" data-role="math-status"></p>
+                      </section>
+                    </div>
+                    <div class="math-playground__panels">
+                      <section class="math-playground__panel">
+                        <header><h3>Actions</h3></header>
+                        <div data-role="math-actions"></div>
+                      </section>
+                      <section class="math-playground__panel">
+                        <header><h3>History</h3></header>
+                        <div data-role="math-history"></div>
+                      </section>
+                      <section class="math-playground__panel">
+                        <header><h3>Player</h3></header>
+                        <div data-role="math-player"></div>
+                      </section>
+                      <section
+                        class="math-playground__panel math-playground__panel--mini-graph"
+                        data-role="math-mini-graph"
+                      >
+                        <header><h3>Mini-graph</h3></header>
+                        <div class="math-playground__mini-graph-viewer" data-role="math-mini-graph-viewer"></div>
+                        <pre class="math-playground__mini-graph-json" data-role="math-mini-graph-json"></pre>
+                      </section>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </section>
+              </section>
+            </div>
           </div>
         </div>
-      </div>
 
-      <footer class="page-footer">
-        Built for quick experiments. Launch with <code>node packages/web/demo/server.mjs</code>.
-        <br />
-        Viewer styles come from <span aria-hidden="true">♥</span> <a class="page-link" href="https://github.com/motor-lang/motor">motor</a>.
-      </footer>
-    </main>
+        <footer class="page-footer">
+          Built for quick experiments. Launch with <code>node packages/web/demo/server.mjs</code>.
+          <br />
+          Viewer styles come from <span aria-hidden="true">♥</span> <a class="page-link" href="https://github.com/motor-lang/motor">motor</a>.
+        </footer>
+      </main>
+    </div>
+    <script type="module" src="/demo/tabs.mjs"></script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>
