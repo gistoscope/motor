@@ -3,7 +3,16 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "jsx": "react-jsx"
+    "jsx": "react-jsx",
+    "strict": true,
+    "noImplicitAny": true,
+    "exactOptionalPropertyTypes": true,
+    "paths": {
+      "@motor/grasp": ["./src/stubs/motor-grasp"],
+      "@motor/grasp/*": ["./src/stubs/motor-grasp"],
+      "@motor/tsa": ["./src/stubs/motor-tsa"],
+      "@motor/tsa/*": ["./src/stubs/motor-tsa"]
+    }
   },
   "include": [
     "src"

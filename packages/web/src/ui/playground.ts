@@ -117,7 +117,9 @@ function astToGraph(ast: unknown): GraphJSON {
     nodes.push({ id, label: nodeLabel });
 
     if (parentId) {
-      edges.push({ from: parentId, to: id, label });
+      const edge: GraphJSON['edges'][number] =
+        label === undefined ? { from: parentId, to: id } : { from: parentId, to: id, label };
+      edges.push(edge);
     }
 
     if (Array.isArray(value)) {
@@ -362,13 +364,13 @@ export function mountPlayground(
     }
 
     if (catxContainer.dataset.state !== 'ready') {
-    fallbackContainer.dataset.mode = 'fallback';
-    if (payload.html && payload.html.trim()) {
-      fallbackHtml.innerHTML = payload.html;
-    } else {
-      renderTokenFallback(fallbackHtml, payload.tex);
+      fallbackContainer.dataset.mode = 'fallback';
+      if (payload.html && payload.html.trim()) {
+        fallbackHtml.innerHTML = payload.html;
+      } else {
+        renderTokenFallback(fallbackHtml, payload.tex);
+      }
     }
-  }
   };
 
   const readExpressionFromExport = (exported: { tex?: string; ast?: unknown }): string => {
@@ -391,7 +393,12 @@ export function mountPlayground(
     if (!dirtyInput) {
       textarea.value = exported.tex ?? latestExpression;
     }
-    void renderDisplay({ tex: exported.tex ?? latestExpression, html: exported.html, ast: exported.ast });
+    const renderPayload = {
+      tex: exported.tex ?? latestExpression,
+      ast: exported.ast,
+      ...(exported.html && exported.html.trim() ? { html: exported.html } : {}),
+    };
+    void renderDisplay(renderPayload);
     updateMiniGraph(astToGraph(exported.ast));
     if (pendingBaselineUpdate) {
       baselineExpression = latestExpression;

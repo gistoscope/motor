@@ -168,11 +168,12 @@ export function createSessionPlayer(
   };
 
   const setupPlayback = () => {
-    playback = options.session.replay(options.apply, {
-      delayMs: options.delayMs,
+    const replayOptions = {
       onReset: options.onReset,
       onIndexChange: handleIndexChange,
-    });
+      ...(options.delayMs !== undefined ? { delayMs: options.delayMs } : {}),
+    };
+    playback = options.session.replay(options.apply, replayOptions);
     handleIndexChange({ index: playback.index, total: playback.total });
   };
 

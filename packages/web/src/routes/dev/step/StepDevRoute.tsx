@@ -2,16 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import styles from './StepDevRoute.module.css';
 
 // TSA formatting helpers if present:
-import type { AST as StageAst } from '@motor/tsa';
-import * as tsaModule from '@motor/tsa';
-let tsa: any = tsaModule;
+import type { StageAst, TsaModule } from '../../../types';
+import * as tsaRuntime from '@motor/tsa';
+let tsa: TsaModule = tsaRuntime as TsaModule;
 try {
   const maybeRequire = (globalThis as { require?: (id: string) => any }).require;
   if (typeof maybeRequire === 'function') {
-    tsa = maybeRequire('@motor/tsa');
+    tsa = maybeRequire('@motor/tsa') as TsaModule;
   }
 } catch {
-  tsa = tsaModule;
+  tsa = tsaRuntime as TsaModule;
 }
 
 import { wireExecuteShortcuts } from '../../../til/shortcuts';
