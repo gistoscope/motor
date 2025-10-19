@@ -128,6 +128,210 @@
         background: rgba(7, 10, 14, 0.65);
       }
 
+      .demo-tabs {
+        display: flex;
+        flex-direction: column;
+        gap: 1.75rem;
+      }
+
+      .demo-tabs__list {
+        display: inline-flex;
+        gap: 0.75rem;
+        align-self: center;
+        padding: 0.4rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(13, 18, 25, 0.65);
+        backdrop-filter: blur(16px);
+      }
+
+      .demo-tabs__button {
+        font: inherit;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 0.5rem 1.3rem;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        transition: background 0.2s ease, border-color 0.2s ease;
+      }
+
+      .demo-tabs__button.is-active {
+        background: rgba(117, 180, 255, 0.22);
+        border-color: rgba(117, 180, 255, 0.55);
+      }
+
+      .demo-tabs__button:not(.is-active):hover,
+      .demo-tabs__button:not(.is-active):focus {
+        outline: none;
+        border-color: rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .demo-tabs__panels {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+      }
+
+      .demo-tabs__panel {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+      }
+
+      .engine-pane {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      .engine-pane__controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        align-items: flex-start;
+      }
+
+      .engine-pane__form {
+        flex: 1 1 320px;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+
+      .engine-pane__label {
+        font-size: 0.85rem;
+        color: rgba(233, 237, 245, 0.65);
+      }
+
+      .engine-pane__textarea {
+        font: inherit;
+        padding: 0.75rem;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(7, 10, 14, 0.7);
+        color: inherit;
+        min-height: 7rem;
+        resize: vertical;
+      }
+
+      .engine-pane__actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .engine-pane__button {
+        font: inherit;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(117, 180, 255, 0.2);
+        color: inherit;
+        padding: 0.55rem 1.25rem;
+        cursor: pointer;
+        transition: background 0.2s ease, border-color 0.2s ease;
+      }
+
+      .engine-pane__button:hover,
+      .engine-pane__button:focus {
+        outline: none;
+        border-color: rgba(117, 180, 255, 0.6);
+        background: rgba(117, 180, 255, 0.32);
+      }
+
+      .engine-pane__button--secondary {
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .engine-pane__samples {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        min-width: 180px;
+      }
+
+      .engine-pane__samples-title {
+        margin: 0;
+        font-size: 0.85rem;
+        color: rgba(233, 237, 245, 0.65);
+      }
+
+      .engine-pane__samples-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+
+      #engine-samples button {
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.06);
+        color: inherit;
+        padding: 0.45rem 0.9rem;
+        font: inherit;
+        cursor: pointer;
+        text-align: left;
+        transition: background 0.2s ease, border-color 0.2s ease;
+      }
+
+      #engine-samples button:hover,
+      #engine-samples button:focus {
+        outline: none;
+        border-color: rgba(117, 180, 255, 0.45);
+        background: rgba(117, 180, 255, 0.18);
+      }
+
+      #engine-samples button[data-active='true'] {
+        border-color: rgba(117, 180, 255, 0.75);
+        background: rgba(117, 180, 255, 0.28);
+      }
+
+      .engine-pane__display {
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(7, 10, 14, 0.55);
+        padding: 1rem;
+        min-height: 160px;
+        transition: border-color 0.2s ease;
+      }
+
+      .engine-pane__display[data-mode='catx'] {
+        border-color: rgba(117, 180, 255, 0.55);
+      }
+
+      .engine-pane__display-catx,
+      .engine-pane__display-fallback {
+        min-height: 120px;
+      }
+
+      .engine-pane__display-catx[hidden],
+      .engine-pane__display-fallback[hidden] {
+        display: none;
+      }
+
+      .engine-pane__fallback-tex {
+        margin: 0;
+        font-family: 'SFMono-Regular', Menlo, Consolas, 'Roboto Mono', monospace;
+        white-space: pre-wrap;
+      }
+
+      .engine-pane__status {
+        margin: 0;
+        font-size: 0.85rem;
+        color: rgba(233, 237, 245, 0.7);
+      }
+
+      .engine-pane__status[data-tone='error'] {
+        color: #f87171;
+      }
+
+      .engine-pane__info {
+        margin: 0.35rem 0 0;
+        font-size: 0.85rem;
+        color: rgba(233, 237, 245, 0.7);
+      }
+
       footer.page-footer {
         margin-top: 1rem;
         text-align: center;
@@ -153,120 +357,222 @@
         <p>Graph viewer + mock math engine running without a bundler.</p>
       </header>
 
-      <section class="card" id="graph-card">
-        <div>
-          <h2>Graph Viewer</h2>
-          <p class="description">
-            Pick a sample GraphJSON, inspect its DOT output, and explore overlays powered by
-            <code>createViewer()</code>.
-          </p>
-        </div>
-        <div class="card__controls">
-          <label class="control" for="graph-example">
-            Graph example
-            <select id="graph-example" class="control__select"></select>
-          </label>
-          <button id="graph-apply" class="control__button" type="button">
-            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-              <path
-                fill="currentColor"
-                d="M3.5 2A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12.5 2h-9Zm0 1h9a.5.5 0 0 1 .5.5V6h-10V3.5a.5.5 0 0 1 .5-.5Zm-.5 4.5h10V12.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V7.5Z"
-              />
-            </svg>
-            Load example
+      <div class="demo-tabs">
+        <div class="demo-tabs__list" role="tablist" aria-label="Playground panels">
+          <button
+            type="button"
+            class="demo-tabs__button is-active"
+            data-role="demo-tab"
+            data-target="engine"
+            data-state="active"
+            role="tab"
+            id="tab-engine"
+            aria-controls="panel-engine"
+            aria-selected="true"
+            tabindex="0"
+          >
+            Engine
+          </button>
+          <button
+            type="button"
+            class="demo-tabs__button"
+            data-role="demo-tab"
+            data-target="graphs"
+            role="tab"
+            id="tab-graphs"
+            aria-controls="panel-graphs"
+            aria-selected="false"
+            tabindex="-1"
+          >
+            Graphs
           </button>
         </div>
-        <div id="graph-viewer" data-demo="viewer"></div>
-      </section>
-
-      <section class="card" id="math-card">
-        <div>
-          <h2>Math Playground</h2>
-          <p class="description">
-            The playground looks for <code>window.RealMathEngine</code>, adapts it with
-            <code>fromRealEngine()</code>, and falls back to a local stub if nothing is found. The same
-            adapter powers the viewer panel via <code>initMath()</code>.
-          </p>
-        </div>
-        <div
-          class="math-playground"
-          id="math-playground"
-          data-demo="playground"
-          data-role="math-playground"
-        >
-          <div class="math-playground__samples" aria-label="Sample expressions">
-            <p class="math-playground__samples-title">Quick samples</p>
-            <div class="math-playground__samples-buttons" id="math-samples"></div>
-          </div>
-          <div class="math-playground__shell" data-role="math-playground-shell">
-            <div class="math-playground__panes">
-              <section class="math-playground__pane math-playground__pane--input">
-                <header class="math-playground__pane-header">
-                  <h3>Input</h3>
-                  <p>Provide LaTeX or plain-text expression.</p>
-                </header>
-                <form class="math-playground__input" data-role="math-input-form">
-                  <label class="math-playground__input-label" for="math-input">
-                    Expression input
-                  </label>
-                  <textarea
-                    id="math-input"
-                    class="math-playground__input-textarea"
-                    data-role="math-input"
-                    spellcheck="false"
-                    rows="6"
-                  ></textarea>
-                  <div class="math-playground__input-actions">
-                    <button type="submit" class="math-playground__button" data-role="math-input-apply">
-                      Parse expression
-                    </button>
-                    <button type="button" class="math-playground__button" id="math-input-focus">
-                      Focus input
-                    </button>
-                  </div>
-                </form>
-              </section>
-              <section class="math-playground__pane math-playground__pane--display">
-                <header class="math-playground__pane-header">
-                  <h3>Display</h3>
-                  <p>CATX output if available, otherwise the engine&apos;s HTML/tokens.</p>
-                </header>
-                <p class="math-playground__engine-info" data-role="math-engine-info"></p>
-                <div class="math-playground__display" data-role="math-display">
-                  <div class="math-playground__display-catx" data-role="math-display-catx"></div>
-                  <div class="math-playground__display-fallback" data-role="math-display-fallback">
-                    <div class="math-playground__display-host" data-role="math-display-host"></div>
-                    <div class="math-playground__display-html" data-role="math-display-fallback-html"></div>
+        <div class="demo-tabs__panels">
+          <div
+            class="demo-tabs__panel"
+            data-role="demo-panel"
+            data-panel="engine"
+            data-state="active"
+            id="panel-engine"
+            role="tabpanel"
+            aria-labelledby="tab-engine"
+          >
+            <section class="card" id="engine-card">
+              <div>
+                <h2>Engine</h2>
+                <p class="description">
+                  Try the math engine directly: enter LaTeX or ASCII input and view the rendered output.
+                </p>
+                <p class="engine-pane__info" data-role="engine-info">Engine: loading…</p>
+              </div>
+              <div class="engine-pane" id="engine-pane">
+                <div class="engine-pane__controls">
+                  <form class="engine-pane__form" data-role="engine-form">
+                    <label class="engine-pane__label" for="engine-input">Expression input</label>
+                    <textarea
+                      id="engine-input"
+                      class="engine-pane__textarea"
+                      data-role="engine-input"
+                      spellcheck="false"
+                      rows="5"
+                    ></textarea>
+                    <div class="engine-pane__actions">
+                      <button type="submit" class="engine-pane__button" data-role="engine-apply">
+                        Render expression
+                      </button>
+                      <button
+                        type="button"
+                        class="engine-pane__button engine-pane__button--secondary"
+                        id="engine-input-focus"
+                      >
+                        Focus input
+                      </button>
+                    </div>
+                  </form>
+                  <div class="engine-pane__samples" aria-label="Engine samples">
+                    <p class="engine-pane__samples-title">Quick samples</p>
+                    <div class="engine-pane__samples-buttons" id="engine-samples"></div>
                   </div>
                 </div>
-                <p class="math-playground__status" data-role="math-status"></p>
-              </section>
-            </div>
-            <div class="math-playground__panels">
-              <section class="math-playground__panel">
-                <header><h3>Actions</h3></header>
-                <div data-role="math-actions"></div>
-              </section>
-              <section class="math-playground__panel">
-                <header><h3>History</h3></header>
-                <div data-role="math-history"></div>
-              </section>
-              <section class="math-playground__panel">
-                <header><h3>Player</h3></header>
-                <div data-role="math-player"></div>
-              </section>
-              <section
-                class="math-playground__panel math-playground__panel--mini-graph"
-                data-role="math-mini-graph"
+                <div class="engine-pane__display" data-role="engine-display" data-mode="idle">
+                  <div class="engine-pane__display-catx" data-role="engine-display-catx"></div>
+                  <div class="engine-pane__display-fallback" data-role="engine-display-fallback"></div>
+                </div>
+                <p class="engine-pane__status" data-role="engine-status"></p>
+              </div>
+            </section>
+          </div>
+          <div
+            class="demo-tabs__panel"
+            data-role="demo-panel"
+            data-panel="graphs"
+            data-state="inactive"
+            id="panel-graphs"
+            role="tabpanel"
+            aria-labelledby="tab-graphs"
+            hidden
+          >
+            <section class="card" id="graph-card">
+              <div>
+                <h2>Graph Viewer</h2>
+                <p class="description">
+                  Pick a sample GraphJSON, inspect its DOT output, and explore overlays powered by
+                  <code>createViewer()</code>.
+                </p>
+              </div>
+              <div class="card__controls">
+                <label class="control" for="graph-example">
+                  Graph example
+                  <select id="graph-example" class="control__select"></select>
+                </label>
+                <button id="graph-apply" class="control__button" type="button">
+                  <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                    <path
+                      fill="currentColor"
+                      d="M3.5 2A1.5 1.5 0 0 0 2 3.5v9A1.5 1.5 0 0 0 3.5 14h9a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12.5 2h-9Zm0 1h9a.5.5 0 0 1 .5.5V6h-10V3.5a.5.5 0 0 1 .5-.5Zm-.5 4.5h10V12.5a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5V7.5Z"
+                    />
+                  </svg>
+                  Load example
+                </button>
+              </div>
+              <div id="graph-viewer" data-demo="viewer"></div>
+            </section>
+
+            <section class="card" id="math-card">
+              <div>
+                <h2>Math Playground</h2>
+                <p class="description">
+                  The playground looks for <code>window.RealMathEngine</code>, adapts it with
+                  <code>fromRealEngine()</code>, and falls back to a local stub if nothing is found. The same
+                  adapter powers the viewer panel via <code>initMath()</code>.
+                </p>
+              </div>
+              <div
+                class="math-playground"
+                id="math-playground"
+                data-demo="playground"
+                data-role="math-playground"
               >
-                <header><h3>Mini-graph</h3></header>
-                <div class="math-playground__mini-graph-viewer" data-role="math-mini-graph-viewer"></div>
-                <pre class="math-playground__mini-graph-json" data-role="math-mini-graph-json"></pre>
-              </section>
-            </div>
+                <div class="math-playground__samples" aria-label="Sample expressions">
+                  <p class="math-playground__samples-title">Quick samples</p>
+                  <div class="math-playground__samples-buttons" id="math-samples"></div>
+                </div>
+                <div class="math-playground__shell" data-role="math-playground-shell">
+                  <div class="math-playground__panes">
+                    <section class="math-playground__pane math-playground__pane--input">
+                      <header class="math-playground__pane-header">
+                        <h3>Input</h3>
+                        <p>Provide LaTeX or plain-text expression.</p>
+                      </header>
+                      <form class="math-playground__input" data-role="math-input-form">
+                        <label class="math-playground__input-label" for="math-input">
+                          Expression input
+                        </label>
+                        <textarea
+                          id="math-input"
+                          class="math-playground__input-textarea"
+                          data-role="math-input"
+                          spellcheck="false"
+                          rows="6"
+                        ></textarea>
+                        <div class="math-playground__input-actions">
+                          <button
+                            type="submit"
+                            class="math-playground__button"
+                            data-role="math-input-apply"
+                          >
+                            Parse expression
+                          </button>
+                          <button type="button" class="math-playground__button" id="math-input-focus">
+                            Focus input
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+                    <section class="math-playground__pane math-playground__pane--display">
+                      <header class="math-playground__pane-header">
+                        <h3>Display</h3>
+                        <p>CATX output if available, otherwise the engine&apos;s HTML/tokens.</p>
+                      </header>
+                      <p class="math-playground__engine-info" data-role="math-engine-info"></p>
+                      <div class="math-playground__display" data-role="math-display">
+                        <div class="math-playground__display-catx" data-role="math-display-catx"></div>
+                        <div class="math-playground__display-fallback" data-role="math-display-fallback">
+                          <div class="math-playground__display-host" data-role="math-display-host"></div>
+                          <div class="math-playground__display-html" data-role="math-display-fallback-html"></div>
+                        </div>
+                      </div>
+                      <p class="math-playground__status" data-role="math-status"></p>
+                    </section>
+                  </div>
+                  <div class="math-playground__panels">
+                    <section class="math-playground__panel">
+                      <header><h3>Actions</h3></header>
+                      <div data-role="math-actions"></div>
+                    </section>
+                    <section class="math-playground__panel">
+                      <header><h3>History</h3></header>
+                      <div data-role="math-history"></div>
+                    </section>
+                    <section class="math-playground__panel">
+                      <header><h3>Player</h3></header>
+                      <div data-role="math-player"></div>
+                    </section>
+                    <section
+                      class="math-playground__panel math-playground__panel--mini-graph"
+                      data-role="math-mini-graph"
+                    >
+                      <header><h3>Mini-graph</h3></header>
+                      <div class="math-playground__mini-graph-viewer" data-role="math-mini-graph-viewer"></div>
+                      <pre class="math-playground__mini-graph-json" data-role="math-mini-graph-json"></pre>
+                    </section>
+                  </div>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
-      </section>
+      </div>
 
       <footer class="page-footer">
         Built for quick experiments. Launch with <code>node packages/web/demo/server.mjs</code>.

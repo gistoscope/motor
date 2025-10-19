@@ -9,6 +9,8 @@ import { createSessionPlayer, type SessionPlayerHandle } from './player';
 import type { GraphJSON } from '../api';
 import createViewer, { type ViewerHandle } from '../viewer';
 import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
+import { getRequiredElement } from './dom';
+import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 
 interface PlaygroundMountOptions {
   initialExpression?: string;
@@ -29,22 +31,6 @@ export interface PlaygroundHandle {
   getExpression(): string;
   focusInput(): void;
   setEngineMeta(meta: PlaygroundEngineMeta | null): void;
-}
-
-interface CatxRenderer {
-  render: (...args: unknown[]) => unknown;
-}
-
-function getRequiredElement<ElementType extends HTMLElement>(
-  root: ParentNode,
-  selector: string,
-  context: string,
-): ElementType {
-  const element = root.querySelector<ElementType>(selector);
-  if (!element) {
-    throw new Error(`playground: missing ${selector} in ${context}`);
-  }
-  return element;
 }
 
 function formatEngineMeta(meta: PlaygroundEngineMeta | null): string {
@@ -143,60 +129,6 @@ function astToGraph(ast: unknown): GraphJSON {
   visit(ast, 'root', undefined);
 
   return { nodes, edges };
-}
-
-type CatxRendererCandidate = {
-  render?: (...args: unknown[]) => unknown;
-  default?: { render?: (...args: unknown[]) => unknown };
-} | null | undefined;
-
-function findCatxRenderer(ownerWindow: Window | null): CatxRenderer | null {
-  const candidate = (
-    (ownerWindow as Window & { CATX?: unknown })?.CATX ??
-    (globalThis as { CATX?: unknown }).CATX
-  ) as CatxRendererCandidate;
-  if (!candidate) {
-    return null;
-  }
-  if (typeof candidate.render === 'function') {
-    return candidate as CatxRenderer;
-  }
-  const fallback = candidate.default;
-  if (fallback && typeof fallback.render === 'function') {
-    return fallback as CatxRenderer;
-  }
-  return null;
-}
-
-async function tryRenderCatx(
-  renderer: CatxRenderer,
-  payload: { tex: string; ast: unknown; target: HTMLElement },
-): Promise<boolean> {
-  const { tex, ast, target } = payload;
-  const attempts: Array<() => unknown> = [
-    () => renderer.render({ latex: tex, ast, target }),
-    () => renderer.render(tex, target, ast),
-    () => renderer.render(tex, target),
-    () => renderer.render(tex),
-  ];
-  for (const attempt of attempts) {
-    try {
-      const result = attempt();
-      if (result && typeof (result as Promise<unknown>).then === 'function') {
-        await (result as Promise<unknown>);
-      }
-      if (target.childElementCount > 0 || target.textContent?.trim()) {
-        return true;
-      }
-      if (typeof result === 'string' && result.trim().length > 0) {
-        target.innerHTML = result;
-        return true;
-      }
-    } catch {
-      // try next signature
-    }
-  }
-  return false;
 }
 
 export function mountPlayground(
@@ -348,7 +280,7 @@ export function mountPlayground(
     }
 
     if (catxRenderer) {
-      const success = await tryRenderCatx(catxRenderer, {
+      const success = await renderCatx(catxRenderer, {
         tex: payload.tex,
         ast: payload.ast,
         target: catxContainer,
