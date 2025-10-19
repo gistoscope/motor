@@ -4,10 +4,7 @@ import {
   scc,
   size,
   nodes as listNodes,
-  makeId,
-  dijkstra,
   type GraspGraph,
-  type GraspId,
 } from '@motor/grasp';
 
 export const EDGE_KEY_SEPARATOR = '\u2192';
@@ -35,6 +32,118 @@ export interface ShortestPathResult {
   readonly totalWeight: number;
   readonly nodes: readonly string[];
   readonly edges: readonly ShortestPathEdge[];
+}
+
+export interface ShortestPathGraphNode {
+  readonly id: string;
+}
+
+export interface ShortestPathGraphEdge {
+  readonly from: string;
+  readonly to: string;
+  readonly weight?: number | null;
+}
+
+export interface ShortestPathGraph {
+  readonly nodes?: readonly ShortestPathGraphNode[] | null;
+  readonly edges?: readonly ShortestPathGraphEdge[] | null;
+}
+
+export interface ShortestPathComputation {
+  readonly distance: number;
+  readonly path: readonly string[];
+}
+
+export function shortestPath(
+  graph: ShortestPathGraph | null | undefined,
+  src: string,
+  dst: string,
+): ShortestPathComputation {
+  const nodes = graph?.nodes ?? [];
+  const edges = graph?.edges ?? [];
+  const state = new Map(
+    nodes.map((node) => [
+      node.id,
+      {
+        d: node.id === src ? 0 : Number.POSITIVE_INFINITY,
+        p: null as string | null,
+        done: false,
+        w: Number.POSITIVE_INFINITY,
+      },
+    ]),
+  );
+
+  if (!state.has(src) || !state.has(dst)) {
+    return { distance: Number.POSITIVE_INFINITY, path: [] };
+  }
+
+  const adjacency = new Map<string, Array<{ to: string; w: number }>>();
+  for (const edge of edges) {
+    const weight = Math.max(0, Number(edge.weight ?? 1));
+    if (!Number.isFinite(weight)) {
+      continue;
+    }
+    const bucket = adjacency.get(edge.from);
+    const next = { to: edge.to, w: weight };
+    if (bucket) {
+      bucket.push(next);
+    } else {
+      adjacency.set(edge.from, [next]);
+    }
+  }
+
+  while (true) {
+    let candidate: string | null = null;
+    let best = Number.POSITIVE_INFINITY;
+    for (const [id, info] of state) {
+      if (!info.done && info.d < best) {
+        best = info.d;
+        candidate = id;
+      }
+    }
+
+    if (candidate === null || candidate === dst) {
+      break;
+    }
+
+    const sourceState = state.get(candidate)!;
+    sourceState.done = true;
+    for (const { to, w } of adjacency.get(candidate) ?? []) {
+      const targetState = state.get(to);
+      if (!targetState) {
+        continue;
+      }
+      const distance = sourceState.d + w;
+      const previousWeight = targetState.w;
+      const shouldUpdate =
+        distance < targetState.d ||
+        (distance === targetState.d &&
+          (w < previousWeight ||
+            (w === previousWeight &&
+              (targetState.p === null || candidate.localeCompare(targetState.p) < 0))));
+
+      if (shouldUpdate) {
+        targetState.d = distance;
+        targetState.p = candidate;
+        targetState.w = w;
+      }
+    }
+  }
+
+  const distance = state.get(dst)!.d;
+  if (!Number.isFinite(distance)) {
+    return { distance, path: [] };
+  }
+
+  const path: string[] = [];
+  let current: string | null = dst;
+  while (current) {
+    path.push(current);
+    current = state.get(current)!.p;
+  }
+  path.reverse();
+
+  return { distance, path };
 }
 
 export function edgeKey(from: string, to: string): EdgeKey {
@@ -125,41 +234,6 @@ export function analyzeGraphSync(graph: GraspGraph): GraphAnalysis {
   };
 }
 
-function ensureDeterministicAdjacency(graph: GraspGraph): Map<GraspId, Set<GraspId>> {
-  const adjacency = new Map<GraspId, Set<GraspId>>();
-  const nodes = listNodes(graph);
-  nodes.forEach((id) => {
-    adjacency.set(id, new Set());
-  });
-
-  const edges = listEdges(graph)
-    .map((edge) => ({
-      from: edge.from,
-      to: edge.to,
-      key: edgeKey(String(edge.from), String(edge.to)),
-      fromLabel: String(edge.from),
-      toLabel: String(edge.to),
-    }))
-    .sort((a, b) => {
-      if (a.fromLabel === b.fromLabel) {
-        return a.toLabel.localeCompare(b.toLabel);
-      }
-      return a.fromLabel.localeCompare(b.fromLabel);
-    });
-
-  edges.forEach((entry) => {
-    if (!adjacency.has(entry.from)) {
-      adjacency.set(entry.from, new Set());
-    }
-    if (!adjacency.has(entry.to)) {
-      adjacency.set(entry.to, new Set());
-    }
-    adjacency.get(entry.from)!.add(entry.to);
-  });
-
-  return adjacency;
-}
-
 function resolveWeightMap(graph: GraspGraph): ReadonlyMap<EdgeKey, number> | null {
   const weights = (graph as { weights?: ReadonlyMap<EdgeKey, number> | undefined }).weights;
   if (!weights || weights.size === 0) {
@@ -191,33 +265,47 @@ export function computeShortestPathSync(
     return null;
   }
 
-  const adjacency = ensureDeterministicAdjacency(graph);
-  const source = makeId(sourceId);
-  const target = makeId(targetId);
+  const allNodes = listNodes(graph).map((id) => String(id));
+  const nodeSet = new Set(allNodes);
 
-  if (!adjacency.has(source) || !adjacency.has(target)) {
+  if (!nodeSet.has(sourceId) || !nodeSet.has(targetId)) {
     return null;
   }
 
-  if (source === target) {
+  if (sourceId === targetId) {
     return { totalWeight: 0, nodes: [sourceId], edges: [] };
   }
 
-  const view = { adj: adjacency };
-  const result = dijkstra(view, source, target, (from, to) => {
-    const key = edgeKey(String(from), String(to));
-    const value = weights.get(key);
-    if (value === undefined) {
-      throw new Error(`computeShortestPath: missing weight for edge ${key}`);
-    }
-    return value;
-  });
+  const weightedEdges = listEdges(graph)
+    .map((edge) => {
+      const from = String(edge.from);
+      const to = String(edge.to);
+      const key = edgeKey(from, to);
+      const value = weights.get(key);
+      if (value === undefined) {
+        throw new Error(`computeShortestPath: missing weight for edge ${key}`);
+      }
+      return { from, to, weight: value };
+    })
+    .sort((a, b) => {
+      if (a.from === b.from) {
+        return a.to.localeCompare(b.to);
+      }
+      return a.from.localeCompare(b.from);
+    });
 
-  if (!result) {
+  const graphView: ShortestPathGraph = {
+    nodes: allNodes.map((id) => ({ id })),
+    edges: weightedEdges,
+  };
+
+  const result = shortestPath(graphView, sourceId, targetId);
+
+  if (!Number.isFinite(result.distance) || result.path.length === 0) {
     return null;
   }
 
-  const nodes = result.path.map((id) => String(id));
+  const nodes = [...result.path];
   const edges: ShortestPathEdge[] = [];
   for (let index = 0; index < nodes.length - 1; index += 1) {
     edges.push({ from: nodes[index], to: nodes[index + 1] });
