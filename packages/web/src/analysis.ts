@@ -1,4 +1,4 @@
-import type { GraspGraph } from './api';
+import type { GraphJSON } from './api';
 
 import {
   analyzeGraphSync,
@@ -31,8 +31,8 @@ interface PendingRequest {
 type WorkerTask = AnalysisWorkerRequest['type'];
 
 interface WorkerPayloadMap {
-  analyze: { graph: GraspGraph };
-  shortest: { graph: GraspGraph; sourceId: string; targetId: string };
+  analyze: { graph: GraphJSON };
+  shortest: { graph: GraphJSON; sourceId: string; targetId: string };
 }
 
 interface WorkerResultMap {
@@ -139,7 +139,7 @@ async function runInWorker<T extends WorkerTask>(
 export { edgeKey };
 export type { EdgeKey, GraphAnalysis, ShortestPathEdge, ShortestPathResult };
 
-export async function analyzeGraph(graph: GraspGraph): Promise<GraphAnalysis> {
+export async function analyzeGraph(graph: GraphJSON): Promise<GraphAnalysis> {
   if (!useWorker) {
     return analyzeGraphSync(graph);
   }
@@ -151,12 +151,12 @@ export async function analyzeGraph(graph: GraspGraph): Promise<GraphAnalysis> {
   }
 }
 
-export function analyzeGraphSyncFallback(graph: GraspGraph): GraphAnalysis {
+export function analyzeGraphSyncFallback(graph: GraphJSON): GraphAnalysis {
   return analyzeGraphSync(graph);
 }
 
 export async function computeShortestPathAsync(
-  graph: GraspGraph,
+  graph: GraphJSON,
   sourceId: string,
   targetId: string,
 ): Promise<ShortestPathResult | null> {
@@ -172,7 +172,7 @@ export async function computeShortestPathAsync(
 }
 
 export function computeShortestPath(
-  graph: GraspGraph,
+  graph: GraphJSON,
   sourceId: string,
   targetId: string,
 ): ShortestPathResult | null {

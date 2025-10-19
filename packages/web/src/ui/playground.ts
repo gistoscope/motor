@@ -6,7 +6,7 @@ import type { MathSessionController } from '../math/session';
 import { attachMathEngine } from '../math/bridge';
 import type { MathBridgeHandle, MathEngine } from '../math/types';
 import { createSessionPlayer, type SessionPlayerHandle } from './player';
-import type { GraphJSON } from '../types';
+import type { GraphJSON } from '../api';
 import createViewer, { type ViewerHandle } from '../viewer';
 
 interface PlaygroundMountOptions {

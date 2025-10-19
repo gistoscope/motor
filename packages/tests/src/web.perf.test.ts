@@ -4,12 +4,11 @@ import {
   analyzeGraphSyncFallback,
   computeShortestPath,
   computeShortestPathAsync,
-  edgeKey,
 } from '../../web/src/analysis';
-import { parseGraphJSON, type GraspGraph } from '../../web/src/api';
+import type { GraphJSON } from '../../web/src/api';
 
 type StressGraph = {
-  graph: GraspGraph;
+  graph: GraphJSON;
   edgeCount: number;
   source: string;
   target: string;
@@ -17,7 +16,7 @@ type StressGraph = {
 
 function createStressGraph(nodeCount: number): StressGraph {
   const nodes = Array.from({ length: nodeCount }, (_, index) => ({ id: `N${index}`, label: `N${index}` }));
-  const edges: Array<{ from: string; to: string; weight: number }> = [];
+  const edges: GraphJSON['edges'] = [];
 
   for (let index = 0; index < nodeCount; index += 1) {
     const from = `N${index}`;
@@ -32,21 +31,10 @@ function createStressGraph(nodeCount: number): StressGraph {
     edges.push({ from, to, weight: 2 });
   }
 
-  const parsed = parseGraphJSON({
-    nodes,
-    edges: edges.map(({ from, to }) => ({ from, to })),
-  });
-  if (!parsed.ok) {
-    throw new Error(parsed.errors.join('\n'));
-  }
-
-  const { graph } = parsed;
-
-  const weightEntries = edges.map(({ from, to, weight }) => [edgeKey(from, to), weight] as const);
-  (graph as { weights?: ReadonlyMap<string, number> }).weights = new Map(weightEntries);
-
   const source = 'N0';
   const target = `N${Math.floor(nodeCount / 2)}`;
+
+  const graph: GraphJSON = { nodes, edges };
 
   return { graph, edgeCount: edges.length, source, target };
 }
