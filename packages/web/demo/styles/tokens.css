@@ -1,4 +1,9 @@
 :root {
+  --content-max: 1800px;
+  --bg: #ffffff;
+  --fg: #0b0f19;
+  --code-bg: #f6f8fa;
+  --code-fg: #0b0f19;
   --motor-bg: #0b0b0c;
   --motor-fg: #e5e7eb;
   --motor-accent: #60a5fa;
@@ -8,4 +13,50 @@
   --motor-warn: #f59e0b;
   --motor-bad: #ef4444;
   --motor-gap: 8px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.app-shell,
+.container,
+.demo,
+[data-role="app-shell"] {
+  max-width: var(--content-max);
+  margin-inline: auto;
+  padding: 12px;
+}
+
+textarea,
+pre,
+code {
+  background: var(--code-bg) !important;
+  color: var(--code-fg) !important;
+}
+
+pre,
+code,
+textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.tabs [data-role^="tab-"].active,
+.tabs [data-tab-role].active {
+  border-bottom: 2px solid #2563eb;
+  font-weight: 600;
+}
+
+.grid,
+.demo-grid {
+  gap: 16px;
+}
+
+.scroll-x {
+  overflow-x: auto;
 }
