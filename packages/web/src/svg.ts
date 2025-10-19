@@ -1,5 +1,4 @@
-import type { GraspGraph } from '@motor/grasp';
-import { edges as listEdges, nodes as listNodes } from '@motor/grasp';
+import type { GraphJSON } from './types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const NODE_RADIUS = 24;
@@ -17,15 +16,15 @@ function createSvgElement<T extends keyof SVGElementTagNameMap>(tag: T): SVGElem
   return document.createElementNS(SVG_NS, tag);
 }
 
-function computeNodePositions(graph: GraspGraph): Array<{ id: string; label: string; position: Point }> {
-  const ids = listNodes(graph);
-  const count = ids.length;
+function computeNodePositions(graph: GraphJSON | null | undefined): Array<{ id: string; label: string; position: Point }> {
+  const nodes = graph?.nodes ?? [];
+  const count = nodes.length;
   const cols = Math.max(1, Math.ceil(Math.sqrt(count)));
   const result: Array<{ id: string; label: string; position: Point }> = [];
 
-  ids.forEach((graspId, index) => {
-    const id = String(graspId);
-    const label = graph.nodes?.get(graspId)?.label ?? id;
+  nodes.forEach((graphNode, index) => {
+    const id = String(graphNode.id);
+    const label = graphNode.label ?? id;
     const col = index % cols;
     const row = Math.floor(index / cols);
     const x = PADDING + col * H_SPACING;
@@ -80,7 +79,7 @@ function lineWithArrow(from: Point, to: Point): { start: Point; end: Point } {
   return { start, end };
 }
 
-export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
+export function renderSVG(container: HTMLElement, graph: GraphJSON | null | undefined): void {
   container.innerHTML = '';
   const nodes = computeNodePositions(graph);
 
@@ -105,7 +104,7 @@ export function renderSVG(container: HTMLElement, graph: GraspGraph): void {
   const positionMap = new Map<string, Point>();
   nodes.forEach(({ id, position }) => positionMap.set(id, position));
 
-  const edges = listEdges(graph);
+  const edges = graph?.edges ?? [];
   for (const edge of edges) {
     const fromId = String(edge.from);
     const toId = String(edge.to);
