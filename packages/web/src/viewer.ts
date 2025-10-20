@@ -2,7 +2,7 @@ import './styles.css';
 import './styles/viewer.css';
 
 import { fromJSON, inspect, toDOT, validateGraphJSON, type GraphJSON } from './api';
-import { renderSVG } from './svg';
+import { renderSVG } from './viewer/svg';
 import {
   analyzeGraph,
   computeShortestPath,
@@ -27,6 +27,7 @@ export interface ViewerOptions {
 
 export interface ViewerHandle {
   parse(): void;
+  fitToViewBox(): void;
   destroy(): void;
 }
 
@@ -228,7 +229,7 @@ function renderGraphUI(
   svgEl: HTMLElement,
   dotText: string,
   inspectText: string,
-) {
+): SVGSVGElement | null {
   const nodes = graphJSON?.nodes ?? [];
   const edges = graphJSON?.edges ?? [];
   nodesEl.textContent = String(nodes.length);
@@ -253,7 +254,7 @@ function renderGraphUI(
 
   inspectEl.textContent = inspectText;
 
-  renderSVG(svgEl, graphJSON);
+  return renderSVG(svgEl, graphJSON);
 }
 
 export function createViewer(root: HTMLElement, options: ViewerOptions = {}): ViewerHandle {
@@ -377,7 +378,12 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         <ul class="viewer__edges" data-role="edges-list"></ul>
       </section>
       <section class="viewer__section viewer__section--preview">
-        <h2 class="viewer__title">Preview</h2>
+        <header class="viewer__section-header">
+          <h2 class="viewer__title">Preview</h2>
+          <div class="viewer__actions">
+            <button type="button" class="viewer__button viewer__button--secondary" data-action="fit">Fit</button>
+          </div>
+        </header>
         <div class="viewer__preview" data-role="svg-root" aria-live="polite"></div>
         <aside class="viewer__node-info" data-role="node-info" data-state="empty">
           <h3 class="viewer__subtitle viewer__node-info-title">Node info</h3>
@@ -460,6 +466,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const pasteTextarea = root.querySelector<HTMLTextAreaElement>('textarea[data-role="paste-textarea"]');
   const pasteApplyButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-apply"]');
   const pasteCancelButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-cancel"]');
+  const fitButton = root.querySelector<HTMLButtonElement>('button[data-action="fit"]');
   const viewerRoot = root.querySelector<HTMLElement>('[data-role="viewer-root"]');
   const helpButton = root.querySelector<HTMLButtonElement>('button[data-action="open-help"]');
   const contrastToggle = root.querySelector<HTMLInputElement>('input[data-role="contrast-toggle"]');
@@ -513,6 +520,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !pasteTextarea ||
     !pasteApplyButton ||
     !pasteCancelButton ||
+    !fitButton ||
     !nodesEl ||
     !edgesEl ||
     !listEl ||
@@ -630,6 +638,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   let graphWarningCode: WebWarningCode | null = null;
   let runtimeWarningCode: WebWarningCode | null = null;
   let releaseImportGuard: IdempotentRelease | null = null;
+  let currentSvgElement: SVGSVGElement | null = null;
+  let autoFitApplied = false;
 
   function clearGraphOutputs() {
     currentGraph = null;
@@ -638,6 +648,46 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     currentInspectText = '';
     graphWarningCode = null;
     resetShortestState(false);
+  }
+
+  function fitToViewBox() {
+    const svgElement = currentSvgElement;
+    if (!svgElement) {
+      return;
+    }
+    const parent = svgElement.parentElement;
+    if (!(parent instanceof HTMLElement)) {
+      return;
+    }
+
+    svgElement.style.removeProperty('transform');
+
+    const viewBox = svgElement.viewBox.baseVal;
+    if (!viewBox || viewBox.width <= 0 || viewBox.height <= 0) {
+      return;
+    }
+
+    const parentRect = parent.getBoundingClientRect();
+    const availableWidth = parent.clientWidth || parentRect.width;
+    const availableHeight = parent.clientHeight || parentRect.height;
+    if (availableWidth <= 0 && availableHeight <= 0) {
+      return;
+    }
+
+    const widthScale = availableWidth > 0 ? availableWidth / viewBox.width : Number.POSITIVE_INFINITY;
+    const heightScale = availableHeight > 0 ? availableHeight / viewBox.height : Number.POSITIVE_INFINITY;
+    let scale = Math.min(widthScale, heightScale);
+    if (!Number.isFinite(scale) || scale <= 0) {
+      scale = 1;
+    }
+
+    if (Math.abs(scale - 1) > 0.001) {
+      svgElement.style.transform = `scale(${scale})`;
+    } else {
+      svgElement.style.removeProperty('transform');
+    }
+
+    parent.scrollTo({ left: 0, top: 0 });
   }
 
   function getActiveWarning(): WebWarningCode | null {
@@ -984,6 +1034,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     if (!trimmed) {
       showErrors(['Input is empty']);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
+      currentSvgElement = null;
       clearInteractionState();
       clearGraphOutputs();
       overlayController.setAnalysis(null);
@@ -997,6 +1048,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       const msg = err instanceof Error ? err.message : 'Unknown JSON parse error';
       showErrors([`Invalid JSON: ${msg}`]);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
+      currentSvgElement = null;
       clearInteractionState();
       clearGraphOutputs();
       overlayController.setAnalysis(null);
@@ -1007,6 +1059,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     if (!validation.ok) {
       showErrors(validation.errors);
       resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
+      currentSvgElement = null;
       clearInteractionState();
       clearGraphOutputs();
       overlayController.setAnalysis(null);
@@ -1034,7 +1087,22 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     }
 
     showErrors([]);
-    renderGraphUI(data, nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, dotText, inspectText);
+    const svgElement = renderGraphUI(
+      data,
+      nodesNode,
+      edgesNode,
+      listNode,
+      dotNode,
+      inspectNode,
+      svgNode,
+      dotText,
+      inspectText,
+    );
+    currentSvgElement = svgElement ?? null;
+    if (svgElement && !autoFitApplied) {
+      fitToViewBox();
+      autoFitApplied = true;
+    }
     overlayController.setAnalysis(analyzeGraph(data));
     nodeStats = computeNodeStats(data);
     hoveredNodeId = null;
@@ -1161,6 +1229,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         const message = err instanceof Error ? err.message : String(err);
         showErrors([`Failed to read file: ${message}`]);
         resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
+        currentSvgElement = null;
         clearInteractionState();
         clearGraphOutputs();
         overlayController.setAnalysis(null);
@@ -1177,7 +1246,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     if (!button) return;
     const target = button.dataset.target;
     const label = target === 'inspect' ? 'Inspect' : 'DOT';
-    const raw = target === 'inspect' ? currentInspectText : currentDOTText;
+    const fallbackRaw = target === 'inspect' ? inspectNode.textContent ?? '' : dotNode.textContent ?? '';
+    const rawSource = target === 'inspect' ? currentInspectText : currentDOTText;
+    const raw = rawSource || fallbackRaw;
     const release = isIdempotentClick(button);
     if (!release) {
       return;
@@ -1187,17 +1258,22 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       release();
       return;
     }
-
-    Promise.resolve()
-      .then(() => clipboard.writeText(raw))
-      .then(() => setStatus(`${label} copied to clipboard.`))
-      .catch((err) => {
-        const message = err instanceof Error ? err.message : String(err);
-        setStatus(`Copy failed: ${message}`, 'error');
-      })
-      .finally(() => {
-        release();
-      });
+    try {
+      const result = clipboard.writeText(raw);
+      Promise.resolve(result)
+        .then(() => setStatus(`${label} copied to clipboard.`))
+        .catch((err) => {
+          const message = err instanceof Error ? err.message : String(err);
+          setStatus(`Copy failed: ${message}`, 'error');
+        })
+        .finally(() => {
+          release();
+        });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setStatus(`Copy failed: ${message}`, 'error');
+      release();
+    }
   }
 
   const handleImportButtonClick = () => {
@@ -1223,6 +1299,17 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault();
       handlePasteApply();
+    }
+  };
+  const handleFitClick = () => {
+    const release = isIdempotentClick(fitButton);
+    if (!release) {
+      return;
+    }
+    try {
+      fitToViewBox();
+    } finally {
+      release();
     }
   };
 
@@ -1251,6 +1338,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   pasteApplyBtn.addEventListener('click', handlePasteApply);
   pasteCancelBtn.addEventListener('click', handlePasteCancel);
   pasteTextareaEl.addEventListener('keydown', handlePasteKeydown);
+  fitButton.addEventListener('click', handleFitClick);
   copyButtons.forEach((btn) => btn.addEventListener('click', handleCopy));
   downloadButtons.forEach((btn) => btn.addEventListener('click', handleDownload));
   const handleSetSourceClick = () => setShortestSource(selectedNodeId);
@@ -1316,6 +1404,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
   textareaEl.value = options.initialJSON ?? '';
   resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
+  currentSvgElement = null;
   overlayController.setAnalysis(null);
   clearInteractionState();
   resetShortestState(false);
@@ -1325,6 +1414,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
   return {
     parse: parseAndRender,
+    fitToViewBox,
     destroy: () => {
       contrastToggleEl.removeEventListener('change', handleContrastChange);
       parseBtn.removeEventListener('click', handleParseClick);
@@ -1335,6 +1425,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       pasteApplyBtn.removeEventListener('click', handlePasteApply);
       pasteCancelBtn.removeEventListener('click', handlePasteCancel);
       pasteTextareaEl.removeEventListener('keydown', handlePasteKeydown);
+      fitButton.removeEventListener('click', handleFitClick);
       copyButtons.forEach((btn) => btn.removeEventListener('click', handleCopy));
       downloadButtons.forEach((btn) => btn.removeEventListener('click', handleDownload));
       nodeInfoSetSourceButton.removeEventListener('click', handleSetSourceClick);

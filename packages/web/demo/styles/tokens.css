@@ -2,6 +2,14 @@
   --content-max: 1800px;
   --pane-min-right: 520px;
   --mini-h: 420px;
+  --gv-node-r: 12px;
+  --gv-node-stroke: 1px;
+  --gv-node-fill: #111;
+  --gv-edge-stroke: #555;
+  --gv-edge-width: 1.5px;
+  --mg-node-r: 6px;
+  --mg-edge-stroke: #666;
+  --mg-edge-width: 1.2px;
   --bg: #ffffff;
   --fg: #0b0f19;
   --code-bg: #f6f8fa;
