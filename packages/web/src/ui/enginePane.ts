@@ -2,6 +2,7 @@ import { attachMathEngine } from '../math/bridge';
 import type { MathBridgeHandle, MathEngine } from '../math/types';
 import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
 import { getRequiredElement } from './dom';
+import { renderWithKatex } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 
 export interface EnginePaneMeta {
@@ -169,6 +170,30 @@ export function mountEnginePane(
         }
       } catch (error) {
         console.warn('[engine-pane] CATX render failed', error);
+      }
+    }
+
+    if (destroyed || sequence !== renderSequence) {
+      return;
+    }
+
+    if (tex.trim()) {
+      catxContainer.innerHTML = '';
+      try {
+        const katexSuccess = await renderWithKatex(tex, catxContainer, { throwOnError: false });
+        if (destroyed || sequence !== renderSequence) {
+          return;
+        }
+        if (katexSuccess && (catxContainer.childElementCount > 0 || catxContainer.textContent?.trim())) {
+          catxContainer.hidden = false;
+          fallbackContainer.hidden = true;
+          fallbackContainer.innerHTML = '';
+          displayEl.dataset.mode = 'katex';
+          setStatus('Rendered with KaTeX', 'info');
+          return;
+        }
+      } catch (error) {
+        console.warn('[engine-pane] KaTeX render failed', error);
       }
     }
 
