@@ -6,18 +6,25 @@ const KATEX_READY_EVENT = 'katex:ready';
 const KATEX_POLL_INTERVAL_MS = 150;
 const KATEX_TIMEOUT_MS = 5000;
 
-function getOwner(documentOrElement: Document | HTMLElement) {
-  if (documentOrElement instanceof HTMLElement) {
-    const ownerDocument = documentOrElement.ownerDocument ?? document;
-    return {
-      document: ownerDocument,
-      window: ownerDocument.defaultView ?? window,
-    } as const;
-  }
-  const ownerDocument = documentOrElement;
+function isElement(x: unknown): x is Element {
+  return (
+    !!x &&
+    typeof x === 'object' &&
+    'nodeType' in (x as Record<string, unknown>) &&
+    (x as { nodeType?: unknown }).nodeType === 1
+  );
+}
+
+function getOwner(docOrEl?: Document | Element) {
+  const doc = isElement(docOrEl) ? docOrEl.ownerDocument ?? document : docOrEl ?? document;
+  const globalFallback =
+    typeof window !== 'undefined'
+      ? window
+      : (globalThis as typeof globalThis & { window?: Window | undefined }).window ?? (globalThis as any);
+  const win = (doc as Document & { defaultView?: Window | null }).defaultView ?? globalFallback;
   return {
-    document: ownerDocument,
-    window: ownerDocument.defaultView ?? window,
+    document: doc,
+    window: win as Window,
   } as const;
 }
 
