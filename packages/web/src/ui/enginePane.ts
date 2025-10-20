@@ -4,6 +4,7 @@ import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
 import { getRequiredElement } from './dom';
 import { renderWithKatex } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
+import { dispatchGraphEvent, type GraphEventDetail } from '../viewer/bridgeSync';
 
 export interface EnginePaneMeta {
   name?: string | null;
@@ -89,6 +90,245 @@ export function mountEnginePane(
   let latestExpression = options.initialExpression?.trim() || inputEl.value.trim() || '';
 
   const subscriptions: Array<() => void> = [];
+
+  type InteractionOrigin = 'engine' | 'graph';
+
+  const supportsCssEscape = typeof CSS !== 'undefined' && typeof CSS.escape === 'function';
+  const escapeSelector = (value: string): string =>
+    supportsCssEscape
+      ? CSS.escape(value)
+      : value.replace(/([\u0000-\u001f\u007f\s!"#$%&'()*+,./:;<=>?@[\]^`{|}~])/g, '\\$1');
+
+  let katexHoveredNodeId: string | null = null;
+  let katexSelectedNodeId: string | null = null;
+
+  const isKatexActive = () => !catxContainer.hidden && displayEl.dataset.mode === 'katex';
+
+  const getNodeElementById = (nodeId: string): HTMLElement | null => {
+    if (!isKatexActive()) {
+      return null;
+    }
+    const escaped = escapeSelector(nodeId);
+    return (
+      catxContainer.querySelector<HTMLElement>(`[data-motor-node-id="${escaped}"]`) ??
+      catxContainer.querySelector<HTMLElement>(`#${escaped}`)
+    );
+  };
+
+  const findNodeElementFromTarget = (target: EventTarget | null): HTMLElement | null => {
+    if (!(target instanceof Element)) {
+      return null;
+    }
+    let current: Element | null = target;
+    while (current) {
+      if (current instanceof HTMLElement) {
+        const candidateId = current.dataset.motorNodeId ?? current.id;
+        if (typeof candidateId === 'string' && candidateId.trim().startsWith('node-')) {
+          return current;
+        }
+      }
+      current = current.parentElement;
+    }
+    return null;
+  };
+
+  const syncKatexNodes = () => {
+    if (!isKatexActive()) {
+      return;
+    }
+    const nodes = catxContainer.querySelectorAll<HTMLElement>('[id]');
+    nodes.forEach((node) => {
+      const id = node.id?.trim();
+      if (!id || !id.startsWith('node-')) {
+        return;
+      }
+      node.dataset.motorNodeId = id;
+      node.classList.remove('math-token--hovered', 'math-token--selected');
+    });
+
+    if (katexHoveredNodeId) {
+      const hovered = getNodeElementById(katexHoveredNodeId);
+      if (hovered) {
+        hovered.classList.add('math-token--hovered');
+      } else {
+        katexHoveredNodeId = null;
+      }
+    }
+
+    if (katexSelectedNodeId) {
+      const selected = getNodeElementById(katexSelectedNodeId);
+      if (selected) {
+        selected.classList.add('math-token--selected');
+      } else {
+        katexSelectedNodeId = null;
+      }
+    }
+  };
+
+  const applyHover = (nodeId: string | null, origin: InteractionOrigin, leaveNodeId?: string | null) => {
+    const previous = katexHoveredNodeId;
+    if (previous && previous !== nodeId) {
+      const prevEl = getNodeElementById(previous);
+      prevEl?.classList.remove('math-token--hovered');
+    }
+
+    katexHoveredNodeId = nodeId;
+
+    if (nodeId) {
+      const nextEl = getNodeElementById(nodeId);
+      if (nextEl) {
+        nextEl.classList.add('math-token--hovered');
+      } else {
+        katexHoveredNodeId = null;
+      }
+    }
+
+    if (origin === 'engine') {
+      if (nodeId) {
+        dispatchGraphEvent('motor:node-hover', nodeId);
+      } else if (leaveNodeId || previous) {
+        const fallback = leaveNodeId ?? previous;
+        dispatchGraphEvent('motor:node-leave', fallback ?? null);
+      }
+    }
+  };
+
+  const applySelection = (nodeId: string | null, origin: InteractionOrigin) => {
+    if (katexSelectedNodeId && katexSelectedNodeId !== nodeId) {
+      const prevEl = getNodeElementById(katexSelectedNodeId);
+      prevEl?.classList.remove('math-token--selected');
+    }
+
+    katexSelectedNodeId = nodeId;
+
+    if (nodeId) {
+      const nextEl = getNodeElementById(nodeId);
+      if (nextEl) {
+        nextEl.classList.add('math-token--selected');
+      } else {
+        katexSelectedNodeId = null;
+      }
+    }
+
+    if (origin === 'engine') {
+      dispatchGraphEvent('motor:node-select', nodeId);
+    }
+  };
+
+  const handlePointerOver = (event: PointerEvent) => {
+    if (displayEl.dataset.mode !== 'katex') {
+      return;
+    }
+    const nodeElement = findNodeElementFromTarget(event.target);
+    const nodeId = nodeElement?.dataset.motorNodeId ?? nodeElement?.id ?? null;
+    if (!nodeId) {
+      return;
+    }
+    if (katexHoveredNodeId === nodeId) {
+      return;
+    }
+    applyHover(nodeId, 'engine');
+  };
+
+  const handlePointerOut = (event: PointerEvent) => {
+    if (displayEl.dataset.mode !== 'katex') {
+      return;
+    }
+    const nodeElement = findNodeElementFromTarget(event.target);
+    if (!nodeElement) {
+      return;
+    }
+    const related = event.relatedTarget as Element | null;
+    if (related && nodeElement.contains(related)) {
+      return;
+    }
+    const nodeId = nodeElement.dataset.motorNodeId ?? nodeElement.id ?? null;
+    if (!nodeId) {
+      return;
+    }
+    applyHover(null, 'engine', nodeId);
+  };
+
+  const handlePointerLeave = () => {
+    if (displayEl.dataset.mode !== 'katex') {
+      return;
+    }
+    if (!katexHoveredNodeId) {
+      return;
+    }
+    const previous = katexHoveredNodeId;
+    applyHover(null, 'engine', previous);
+  };
+
+  const handleNodeClick = (event: MouseEvent) => {
+    if (displayEl.dataset.mode !== 'katex') {
+      return;
+    }
+    const nodeElement = findNodeElementFromTarget(event.target);
+    const nodeId = nodeElement?.dataset.motorNodeId ?? nodeElement?.id ?? null;
+    if (!nodeId) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const nextSelection = katexSelectedNodeId === nodeId ? null : nodeId;
+    applySelection(nextSelection, 'engine');
+  };
+
+  catxContainer.addEventListener('pointerover', handlePointerOver);
+  catxContainer.addEventListener('pointerout', handlePointerOut);
+  catxContainer.addEventListener('pointerleave', handlePointerLeave);
+  catxContainer.addEventListener('click', handleNodeClick);
+  subscriptions.push(() => {
+    catxContainer.removeEventListener('pointerover', handlePointerOver);
+    catxContainer.removeEventListener('pointerout', handlePointerOut);
+    catxContainer.removeEventListener('pointerleave', handlePointerLeave);
+    catxContainer.removeEventListener('click', handleNodeClick);
+  });
+
+  const handleGraphHoverEvent = (event: Event) => {
+    const detail = (event as CustomEvent<GraphEventDetail | undefined>).detail;
+    if (detail?.source === 'engine') {
+      return;
+    }
+    const nodeId = detail?.nodeId ?? null;
+    if (nodeId) {
+      applyHover(nodeId, 'graph');
+    } else {
+      applyHover(null, 'graph');
+    }
+  };
+
+  const handleGraphLeaveEvent = (event: Event) => {
+    const detail = (event as CustomEvent<GraphEventDetail | undefined>).detail;
+    if (detail?.source === 'engine') {
+      return;
+    }
+    const nodeId = detail?.nodeId ?? null;
+    if (!nodeId || nodeId === katexHoveredNodeId) {
+      applyHover(null, 'graph');
+    }
+  };
+
+  const handleGraphSelectEvent = (event: Event) => {
+    const detail = (event as CustomEvent<GraphEventDetail | undefined>).detail;
+    if (detail?.source === 'engine') {
+      return;
+    }
+    const nodeId = detail?.nodeId ?? null;
+    applySelection(nodeId, 'graph');
+  };
+
+  if (typeof document !== 'undefined') {
+    document.addEventListener('motor:node-hover', handleGraphHoverEvent as EventListener);
+    document.addEventListener('motor:node-leave', handleGraphLeaveEvent as EventListener);
+    document.addEventListener('motor:node-select', handleGraphSelectEvent as EventListener);
+    subscriptions.push(() => {
+      document.removeEventListener('motor:node-hover', handleGraphHoverEvent as EventListener);
+      document.removeEventListener('motor:node-leave', handleGraphLeaveEvent as EventListener);
+      document.removeEventListener('motor:node-select', handleGraphSelectEvent as EventListener);
+    });
+  }
 
   const setStatus = (message: string, tone: 'info' | 'error' = 'info') => {
     if (!statusEl) {
@@ -180,7 +420,10 @@ export function mountEnginePane(
     if (tex.trim()) {
       catxContainer.innerHTML = '';
       try {
-        const katexSuccess = await renderWithKatex(tex, catxContainer, { throwOnError: false });
+        const katexSuccess = await renderWithKatex(tex, catxContainer, {
+          throwOnError: false,
+          trustHtml: true,
+        });
         if (destroyed || sequence !== renderSequence) {
           return;
         }
@@ -189,6 +432,7 @@ export function mountEnginePane(
           fallbackContainer.hidden = true;
           fallbackContainer.innerHTML = '';
           displayEl.dataset.mode = 'katex';
+          syncKatexNodes();
           setStatus('Rendered with KaTeX', 'info');
           return;
         }
