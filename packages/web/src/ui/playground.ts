@@ -8,7 +8,7 @@ import type { MathBridgeHandle, MathEngine } from '../math/types';
 import { createSessionPlayer, type SessionPlayerHandle } from './player';
 import type { GraphJSON } from '../api';
 import createViewer, { type ViewerHandle } from '../viewer';
-import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
+import { isHTMLButtonElement, isIdempotentClick, type IdempotentRelease } from '../util/dom';
 import { getRequiredElement } from './dom';
 import { createPlaygroundDisplay, type PlaygroundDisplayHandle } from './playgroundDisplay';
 
@@ -319,7 +319,7 @@ export function mountPlayground(
   const handleFormSubmit = (event: Event) => {
     event.preventDefault();
     const submitterCandidate = (event as { submitter?: EventTarget | null }).submitter;
-    const submitter = submitterCandidate instanceof HTMLButtonElement ? submitterCandidate : null;
+    const submitter = isHTMLButtonElement(submitterCandidate) ? submitterCandidate : null;
     const release: IdempotentRelease | null = submitter ? isIdempotentClick(submitter) : null;
     try {
       const expression = textarea.value.trim();

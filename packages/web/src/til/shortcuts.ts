@@ -1,5 +1,6 @@
 import type { AST, NodeId } from './opTokens';
 import { isOperatorChar, getTokenText, getOwnerId } from './opTokens';
+import { isElementNode, isHTMLElement } from '../util/dom';
 
 const SINGLE_CLICK_DELAY = 220;
 
@@ -21,9 +22,20 @@ function shouldClearSelection(
 }
 
 function getClosestAstElement(target: EventTarget | null): HTMLElement | null {
-  if (!target || !(target instanceof Node)) return null;
-  const base = target instanceof Element ? target : target.parentElement;
-  return (base?.closest?.('[data-ast-id]') as HTMLElement | null) ?? null;
+  if (!target || typeof target !== 'object') {
+    return null;
+  }
+  if (isHTMLElement(target)) {
+    return target.closest<HTMLElement>('[data-ast-id]');
+  }
+  if (isElementNode(target)) {
+    return (target as Element).closest<HTMLElement>('[data-ast-id]');
+  }
+  const parent = (target as { parentElement?: Element | null }).parentElement ?? null;
+  if (isElementNode(parent)) {
+    return parent.closest<HTMLElement>('[data-ast-id]');
+  }
+  return null;
 }
 
 function findOperatorInSpan(ast: AST, span: NodeId[] | undefined): NodeId | null {

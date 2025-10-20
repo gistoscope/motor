@@ -1,4 +1,5 @@
 import type { GraphJSON } from './api';
+import { isElementNode, isHTMLElement } from './util/dom';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const NODE_RADIUS = 24;
@@ -80,6 +81,12 @@ function lineWithArrow(from: Point, to: Point): { start: Point; end: Point } {
 }
 
 export function renderSVG(container: HTMLElement, graph: GraphJSON | null | undefined): void {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  if (!isHTMLElement(container)) {
+    return;
+  }
   container.innerHTML = '';
   const nodes = computeNodePositions(graph);
 
@@ -214,7 +221,7 @@ export function renderSVG(container: HTMLElement, graph: GraphJSON | null | unde
   }
 
   const findNodeElement = (target: EventTarget | null): Element | null => {
-    if (!(target instanceof Element)) {
+    if (!isElementNode(target)) {
       return null;
     }
     let current: Element | null = target;
@@ -228,7 +235,7 @@ export function renderSVG(container: HTMLElement, graph: GraphJSON | null | unde
         continue;
       }
       const parentNode: Node | null = current.parentNode;
-      current = parentNode instanceof Element ? parentNode : null;
+      current = isElementNode(parentNode) ? (parentNode as Element) : null;
     }
     return null;
   };

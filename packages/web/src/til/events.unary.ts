@@ -1,5 +1,6 @@
 import { classifyMinus, focusForUnary } from './unary';
 import type { AST, NodeId } from './types';
+import { isElementNode, isHTMLElement } from '../util/dom';
 
 type WireApi = {
   getAst(): AST;
@@ -15,18 +16,18 @@ function resolveElement(target: EventTarget | null): HTMLElement | null {
     return null;
   }
 
-  if (target instanceof HTMLElement) {
+  if (isHTMLElement(target)) {
     return target.closest<HTMLElement>(`[${AST_ATTRIBUTE}]`);
   }
 
-  if (target instanceof Element) {
+  if (isElementNode(target)) {
     return target.closest<HTMLElement>(`[${AST_ATTRIBUTE}]`);
   }
 
-  if (target instanceof Node) {
-    const parent = target instanceof Text ? target.parentElement : (target as Node).parentElement;
-    if (parent) {
-      return parent.closest<HTMLElement>(`[${AST_ATTRIBUTE}]`);
+  if (target && typeof target === 'object') {
+    const candidateParent = (target as { parentElement?: Element | null }).parentElement ?? null;
+    if (isElementNode(candidateParent)) {
+      return candidateParent.closest<HTMLElement>(`[${AST_ATTRIBUTE}]`);
     }
   }
 

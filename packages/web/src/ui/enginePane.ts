@@ -1,7 +1,12 @@
 import { renderWithKaTeX } from '../engine/katex';
 import { attachMathEngine } from '../math/bridge';
 import type { MathBridgeHandle, MathEngine } from '../math/types';
-import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
+import {
+  isHTMLButtonElement,
+  isHTMLFormElement,
+  isIdempotentClick,
+  type IdempotentRelease,
+} from '../util/dom';
 import { getRequiredElement } from './dom';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 
@@ -292,7 +297,7 @@ export function mountEnginePane(
   const handleSubmit = (event: Event) => {
     event.preventDefault();
     const submitterCandidate = (event as { submitter?: EventTarget | null }).submitter;
-    const submitter = submitterCandidate instanceof HTMLButtonElement ? submitterCandidate : null;
+    const submitter = isHTMLButtonElement(submitterCandidate) ? submitterCandidate : null;
     const release: IdempotentRelease | null = submitter ? isIdempotentClick(submitter) : null;
     try {
       applyExpression(inputEl.value);
@@ -330,7 +335,7 @@ export function mountEnginePane(
     inputEl.removeEventListener('keydown', handleKeydown);
   });
 
-  if (formEl instanceof HTMLFormElement) {
+  if (isHTMLFormElement(formEl)) {
     formEl.addEventListener('submit', handleSubmit);
     subscriptions.push(() => {
       formEl.removeEventListener('submit', handleSubmit);

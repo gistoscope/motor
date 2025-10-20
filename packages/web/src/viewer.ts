@@ -13,7 +13,7 @@ import { initHelp, type HelpOverlayHandle } from './ui/help';
 import { attachMathEngine } from './math/bridge';
 import type { MathBridgeHandle, MathEngine } from './math/types';
 import { getWarningMessage, type WebWarningCode } from './errors';
-import { isIdempotentClick, type IdempotentRelease } from './util/dom';
+import { isElementNode, isHTMLElement, isIdempotentClick, type IdempotentRelease } from './util/dom';
 import { isNonNegativeWeights } from './util/graph';
 
 type ClipboardWriter = {
@@ -151,6 +151,42 @@ function resolveClipboard(option?: ClipboardWriter): ClipboardWriter {
   };
 }
 
+function fitToViewBox(container: HTMLElement | null): void {
+  if (!isHTMLElement(container)) {
+    return;
+  }
+  container.style.removeProperty('aspect-ratio');
+  const svg = container.querySelector('svg');
+  if (!isElementNode(svg)) {
+    return;
+  }
+  const viewBox = (svg as Element).getAttribute('viewBox');
+  if (!viewBox) {
+    return;
+  }
+  const parts = viewBox
+    .trim()
+    .split(/[\s,]+/)
+    .map((value) => Number.parseFloat(value));
+  if (parts.length !== 4) {
+    return;
+  }
+  const [, , width, height] = parts;
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return;
+  }
+
+  const svgElement = svg as SVGSVGElement;
+  svgElement.removeAttribute('width');
+  svgElement.removeAttribute('height');
+  if (!svgElement.getAttribute('preserveAspectRatio')) {
+    svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  }
+  svgElement.style.width = '100%';
+  svgElement.style.height = 'auto';
+  container.style.setProperty('aspect-ratio', `${width} / ${height}`);
+}
+
 function createStatusSetter(el: HTMLElement): (text: string, kind?: 'info' | 'error') => void {
   return (text, kind = 'info') => {
     el.textContent = text;
@@ -215,6 +251,7 @@ function resetGraphUI(
   dotEl.textContent = '';
   inspectEl.textContent = '';
   svgEl.innerHTML = '';
+  fitToViewBox(svgEl);
   resetNodeInfoPanel(nodeInfo);
 }
 
@@ -254,9 +291,16 @@ function renderGraphUI(
   inspectEl.textContent = inspectText;
 
   renderSVG(svgEl, graphJSON);
+  fitToViewBox(svgEl);
 }
 
 export function createViewer(root: HTMLElement, options: ViewerOptions = {}): ViewerHandle {
+  if (typeof document === 'undefined') {
+    throw new Error('createViewer requires a DOM environment.');
+  }
+  if (!isHTMLElement(root)) {
+    throw new Error('createViewer requires a DOM element root.');
+  }
   const clipboard = resolveClipboard(options.clipboard);
 
   root.innerHTML = `
@@ -1365,17 +1409,17 @@ export function initViewer(
     throw new Error('initViewer requires a DOM environment.');
   }
 
-  const root =
+  const rootCandidate =
     typeof target === 'string'
       ? document.querySelector<HTMLElement>(target)
       : target;
 
-  if (!root) {
+  if (!isHTMLElement(rootCandidate)) {
     const selector = typeof target === 'string' ? target : '[object HTMLElement]';
     throw new Error(`Viewer root not found for selector: ${selector}`);
   }
 
-  return createViewer(root, options);
+  return createViewer(rootCandidate, options);
 }
 
 export function initViewers(
@@ -1386,7 +1430,9 @@ export function initViewers(
     throw new Error('initViewers requires a DOM environment.');
   }
 
-  const nodes = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  const nodes = Array.from(document.querySelectorAll(selector)).filter((node): node is HTMLElement =>
+    isHTMLElement(node),
+  );
   return nodes.map((node) => createViewer(node, options));
 }
 
