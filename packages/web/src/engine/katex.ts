@@ -1,10 +1,25 @@
+type KatexTrustContext = {
+  command?: string;
+};
+
+type KatexStrictBehavior = 'ignore' | 'warn' | 'error';
+
+type KatexRenderOptions = {
+  throwOnError?: boolean;
+  trust?: boolean | ((context: KatexTrustContext) => boolean);
+  strict?:
+    | KatexStrictBehavior
+    | ((errorCode: string, errorMessage: string, token?: unknown) => KatexStrictBehavior);
+};
+
 type KatexLike = {
-  render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
+  render: (tex: string, element: HTMLElement, options?: KatexRenderOptions) => void;
 };
 
 const KATEX_READY_EVENT = 'katex:ready';
 const KATEX_POLL_INTERVAL_MS = 150;
 const KATEX_TIMEOUT_MS = 5000;
+const TRUSTED_HTML_COMMANDS = new Set(['\\htmlId', '\\htmlClass']);
 
 function getOwner(documentOrElement: Document | HTMLElement) {
   if (documentOrElement instanceof HTMLElement) {
@@ -148,7 +163,16 @@ export async function renderWithKaTeX(
   }
 
   try {
-    katex.render(content, targetEl, { throwOnError: false });
+    katex.render(content, targetEl, {
+      throwOnError: false,
+      trust: (context: KatexTrustContext) => {
+        if (!context?.command) {
+          return false;
+        }
+        return TRUSTED_HTML_COMMANDS.has(context.command);
+      },
+      strict: 'ignore',
+    });
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
     return true;
   } catch (error) {
