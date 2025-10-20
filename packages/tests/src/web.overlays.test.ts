@@ -56,10 +56,14 @@ describe('web overlays', () => {
     parseButton!.click();
 
     await vi.waitFor(() => {
-      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="scc"]');
+      const toggle = root.querySelector<HTMLInputElement>(
+        'input[data-role="overlay-toggle"][data-overlay="scc"]',
+      );
       expect(toggle?.disabled).toBe(false);
     });
-    const sccToggle = root.querySelector<HTMLInputElement>('input[data-overlay="scc"]');
+    const sccToggle = root.querySelector<HTMLInputElement>(
+      'input[data-role="overlay-toggle"][data-overlay="scc"]',
+    );
     sccToggle!.checked = true;
     sccToggle!.dispatchEvent(new Event('change', { bubbles: true }));
 
@@ -117,10 +121,14 @@ describe('web overlays', () => {
     parseButton!.click();
 
     await vi.waitFor(() => {
-      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="cycles"]');
+      const toggle = root.querySelector<HTMLInputElement>(
+        'input[data-role="overlay-toggle"][data-overlay="cycles"]',
+      );
       expect(toggle?.disabled).toBe(false);
     });
-    const cycleToggle = root.querySelector<HTMLInputElement>('input[data-overlay="cycles"]');
+    const cycleToggle = root.querySelector<HTMLInputElement>(
+      'input[data-role="overlay-toggle"][data-overlay="cycles"]',
+    );
     cycleToggle!.checked = true;
     cycleToggle!.dispatchEvent(new Event('change', { bubbles: true }));
 
