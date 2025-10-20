@@ -363,53 +363,23 @@
         </header>
 
         <div class="demo-tabs tabs">
-          <div class="demo-tabs__list" role="tablist" aria-label="Playground panels">
-            <button
-              type="button"
-              class="demo-tabs__button"
-              data-role="tab-engine"
-              data-target="engine"
-              data-state="inactive"
-              role="tab"
-              id="tab-engine"
-              aria-controls="panel-engine"
-              aria-selected="false"
-              tabindex="-1"
-              data-tab-role="engine"
-            >
-              Engine
-            </button>
-            <button
-              type="button"
-              class="demo-tabs__button is-active active"
-              data-role="tab-graphs"
-              data-target="graphs"
-              data-state="active"
-              role="tab"
-              id="tab-graphs"
-              aria-controls="panel-graphs"
-              aria-selected="true"
-              tabindex="0"
-              data-tab-role="graphs"
-            >
-              Graphs
-            </button>
-          </div>
+          <nav class="demo-tabs__list" aria-label="Playground sections">
+            <a class="demo-tabs__button" data-role="tab-engine" href="#engine">Engine</a>
+            <a class="demo-tabs__button" data-role="tab-graphs" href="#graphs">Graphs</a>
+          </nav>
           <div class="demo-tabs__panels">
             <div
-              class="demo-tabs__panel hidden"
+              class="demo-tabs__panel"
               data-role="demo-panel"
               data-panel="engine"
-              data-state="inactive"
+              data-state="active"
               id="panel-engine"
-              role="tabpanel"
-              aria-labelledby="tab-engine"
               data-section-role="engine"
-              hidden
             >
+              <a id="engine" class="anchor"></a>
               <section class="card" id="engine-card" data-role="section-engine">
                 <div>
-                  <h2>Engine</h2>
+                  <h2 class="section-title">Engine</h2>
                   <p class="description">
                     Try the math engine directly: enter LaTeX or ASCII input and view the rendered output.
                   </p>
@@ -458,13 +428,12 @@
               data-panel="graphs"
               data-state="active"
               id="panel-graphs"
-              role="tabpanel"
-              aria-labelledby="tab-graphs"
               data-section-role="graphs"
             >
+              <a id="graphs" class="anchor"></a>
               <section class="card" id="graph-card" data-role="section-graphs">
                 <div>
-                  <h2>Graph Viewer</h2>
+                  <h2 class="section-title">Graph Viewer</h2>
                   <p class="description">
                     Pick a sample GraphJSON, inspect its DOT output, and explore overlays powered by
                     <code>createViewer()</code>.
@@ -490,7 +459,7 @@
 
               <section class="card" id="math-card">
                 <div>
-                  <h2>Math Playground</h2>
+                  <h2 class="section-title">Math Playground</h2>
                   <p class="description">
                     The playground looks for <code>window.RealMathEngine</code>, adapts it with
                     <code>fromRealEngine()</code>, and falls back to a local stub if nothing is found. The same
