@@ -1,3 +1,4 @@
+import { latexFromAst } from '../engine/latexGen';
 import { renderWithKaTeX } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 
@@ -101,9 +102,13 @@ export function createPlaygroundDisplay({
     lastPreview = null;
     resetContainers();
 
-    const trimmedTex = payload.tex?.trim() ?? '';
-    const plain = payload.plain ?? trimmedTex;
+    const tex = typeof payload.tex === 'string' ? payload.tex : undefined;
+    const trimmedTex = tex?.trim() ?? '';
+    const plain = payload.plain ?? tex ?? trimmedTex;
     const htmlOutput = payload.html?.trim() ? payload.html : undefined;
+    const latexResult = latexFromAst(payload.ast ?? tex ?? plain ?? '');
+    const latexForRender = latexResult.latex.trim().length > 0 ? latexResult.latex : tex ?? plain ?? '';
+    const trimmedLatex = latexForRender.trim();
 
     const renderer = ensureCatxRenderer();
     if (renderer && trimmedTex) {
@@ -124,7 +129,7 @@ export function createPlaygroundDisplay({
       catxContainer.dataset.state = 'error';
     }
 
-    const katexSuccess = await renderWithKaTeX(catxContainer, trimmedTex, plain, badge);
+    const katexSuccess = await renderWithKaTeX(catxContainer, trimmedLatex ? latexForRender : plain, plain, badge);
     if (destroyed || sequence !== renderSequence) {
       return;
     }

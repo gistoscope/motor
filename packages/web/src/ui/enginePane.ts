@@ -1,3 +1,4 @@
+import { latexFromAst } from '../engine/latexGen';
 import { renderWithKaTeX } from '../engine/katex';
 import { attachMathEngine } from '../math/bridge';
 import type { MathBridgeHandle, MathEngine } from '../math/types';
@@ -183,10 +184,13 @@ export function mountEnginePane(
       return;
     }
     const sequence = ++renderSequence;
-    const tex = typeof exported.tex === 'string' && exported.tex.trim().length > 0 ? exported.tex : latestExpression;
+    const exportedTex = typeof exported.tex === 'string' ? exported.tex : null;
+    const tex = exportedTex && exportedTex.trim().length > 0 ? exportedTex : latestExpression;
     const htmlOutput = typeof exported.html === 'string' ? exported.html : null;
     const renderer = ensureCatxRenderer();
     const trimmedTex = tex.trim();
+    const latexResult = latexFromAst(exported.ast ?? exportedTex ?? tex);
+    const latexForRender = latexResult.latex.trim().length > 0 ? latexResult.latex : tex;
 
     if (renderer && trimmedTex) {
       catxContainer.innerHTML = '';
@@ -230,7 +234,7 @@ export function mountEnginePane(
     catxContainer.innerHTML = '';
     displayEl.dataset.mode = 'katex-loading';
     setStatus('Waiting for KaTeX to load', 'info');
-    const katexSuccess = await renderWithKaTeX(catxContainer, trimmedTex, tex, katexBadge);
+    const katexSuccess = await renderWithKaTeX(catxContainer, latexForRender, tex, katexBadge);
     if (destroyed || sequence !== renderSequence) {
       return;
     }
