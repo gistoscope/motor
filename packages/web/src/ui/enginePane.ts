@@ -2,7 +2,6 @@ import { attachMathEngine } from '../math/bridge';
 import type { MathBridgeHandle, MathEngine } from '../math/types';
 import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
 import { getRequiredElement } from './dom';
-import { renderWithKatex } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 
 export interface EnginePaneMeta {
@@ -119,6 +118,18 @@ export function mountEnginePane(
     return catxRenderer;
   };
 
+  const getWindowKatex = (): {
+    render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
+  } | null => {
+    const candidate = (ownerWindow as Window & { katex?: unknown }).katex;
+    if (candidate && typeof (candidate as { render?: unknown }).render === 'function') {
+      return candidate as {
+        render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
+      };
+    }
+    return null;
+  };
+
   const renderFallback = (expression: string, htmlOutput: string | null) => {
     fallbackContainer.innerHTML = '';
     fallbackContainer.hidden = false;
@@ -177,14 +188,15 @@ export function mountEnginePane(
       return;
     }
 
-    if (tex.trim()) {
+    const windowKatex = tex.trim() ? getWindowKatex() : null;
+    if (windowKatex) {
       catxContainer.innerHTML = '';
       try {
-        const katexSuccess = await renderWithKatex(tex, catxContainer, { throwOnError: false });
+        windowKatex.render(tex, catxContainer, { throwOnError: false });
         if (destroyed || sequence !== renderSequence) {
           return;
         }
-        if (katexSuccess && (catxContainer.childElementCount > 0 || catxContainer.textContent?.trim())) {
+        if (catxContainer.childElementCount > 0 || catxContainer.textContent?.trim()) {
           catxContainer.hidden = false;
           fallbackContainer.hidden = true;
           fallbackContainer.innerHTML = '';
