@@ -10,7 +10,7 @@ import type { GraphJSON } from '../api';
 import createViewer, { type ViewerHandle } from '../viewer';
 import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
 import { getRequiredElement } from './dom';
-import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
+import { createPlaygroundDisplay, type PlaygroundDisplayHandle } from './playgroundDisplay';
 
 interface PlaygroundMountOptions {
   initialExpression?: string;
@@ -41,26 +41,6 @@ function formatEngineMeta(meta: PlaygroundEngineMeta | null): string {
   const origin = meta.origin?.trim() || (meta.source === 'real' ? 'window.RealMathEngine' : 'demo stub');
   const version = meta.version?.trim();
   return version ? `${name} (v${version}) — ${origin}` : `${name} — ${origin}`;
-}
-
-function renderTokenFallback(container: HTMLElement, expression: string): void {
-  container.textContent = '';
-  const tokens = expression.match(/[^\s]+/gu) ?? [];
-  if (tokens.length === 0) {
-    container.textContent = '∅';
-    return;
-  }
-  const fragment = document.createDocumentFragment();
-  tokens.forEach((token, index) => {
-    const span = document.createElement('span');
-    span.dataset.role = 'math-fallback-token';
-    span.textContent = token;
-    if (index < tokens.length - 1) {
-      span.insertAdjacentText('afterend', ' ');
-    }
-    fragment.appendChild(span);
-  });
-  container.appendChild(fragment);
 }
 
 function summarizeValue(value: unknown): string {
@@ -222,13 +202,20 @@ export function mountPlayground(
   let session: MathSessionController | null = null;
   let player: SessionPlayerHandle | null = null;
   let miniViewer: ViewerHandle | null = null;
-  let catxRenderer: CatxRenderer | null = null;
-  let renderSequence = 0;
+  let display: PlaygroundDisplayHandle | null = null;
 
   const subscriptions: Array<() => void> = [];
 
   const sessionController = createMathSession();
   session = sessionController;
+
+  display = createPlaygroundDisplay({
+    root: displayContainer,
+    catxContainer,
+    fallbackContainer,
+    fallbackHtml,
+  });
+  void display?.preview(textarea.value);
 
   const showStatus = (message: string, tone: 'info' | 'error' = 'info', timeoutMs = 3200) => {
     if (destroyed) {
@@ -268,44 +255,6 @@ export function mountPlayground(
     }
   };
 
-  const renderDisplay = async (payload: { tex: string; html?: string; ast: unknown }) => {
-    const sequence = (renderSequence += 1);
-    catxContainer.textContent = '';
-    fallbackHtml.textContent = '';
-    fallbackContainer.dataset.mode = 'fallback';
-    catxContainer.dataset.state = 'idle';
-
-    if (!catxRenderer) {
-      catxRenderer = findCatxRenderer(ownerWindow);
-    }
-
-    if (catxRenderer) {
-      const success = await renderCatx(catxRenderer, {
-        tex: payload.tex,
-        ast: payload.ast,
-        target: catxContainer,
-      }).catch(() => false);
-      if (destroyed || sequence !== renderSequence) {
-        return;
-      }
-      if (success) {
-        catxContainer.dataset.state = 'ready';
-        fallbackContainer.dataset.mode = 'shadow';
-      } else {
-        catxContainer.dataset.state = 'error';
-      }
-    }
-
-    if (catxContainer.dataset.state !== 'ready') {
-      fallbackContainer.dataset.mode = 'fallback';
-      if (payload.html && payload.html.trim()) {
-        fallbackHtml.innerHTML = payload.html;
-      } else {
-        renderTokenFallback(fallbackHtml, payload.tex);
-      }
-    }
-  };
-
   const readExpressionFromExport = (exported: { tex?: string; ast?: unknown }): string => {
     if (typeof exported.tex === 'string' && exported.tex.trim()) {
       return exported.tex.trim();
@@ -328,10 +277,11 @@ export function mountPlayground(
     }
     const renderPayload = {
       tex: exported.tex ?? latestExpression,
+      plain: latestExpression,
       ast: exported.ast,
       ...(exported.html && exported.html.trim() ? { html: exported.html } : {}),
     };
-    void renderDisplay(renderPayload);
+    void display?.render(renderPayload);
     updateMiniGraph(astToGraph(exported.ast));
     if (pendingBaselineUpdate) {
       baselineExpression = latestExpression;
@@ -340,6 +290,7 @@ export function mountPlayground(
   };
 
   const applyExpression = (expression: string) => {
+    void display?.preview(expression);
     if (!bridge) {
       return;
     }
@@ -362,6 +313,7 @@ export function mountPlayground(
 
   const focusInput = () => {
     textarea.focus();
+    void display?.preview(textarea.value);
   };
 
   const handleFormSubmit = (event: Event) => {
@@ -427,6 +379,7 @@ export function mountPlayground(
       latestExpression = baselineExpression;
       options.onExpressionChange?.(baselineExpression);
       options.onInputChange?.(baselineExpression);
+      void display?.preview(baselineExpression);
     },
   });
 
@@ -476,6 +429,12 @@ export function mountPlayground(
       // ignore
     }
     player = null;
+    try {
+      display?.destroy();
+    } catch {
+      // ignore
+    }
+    display = null;
     if (miniViewer) {
       miniViewer.destroy();
       miniViewer = null;

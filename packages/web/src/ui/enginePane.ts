@@ -1,3 +1,4 @@
+import { renderWithKaTeX } from '../engine/katex';
 import { attachMathEngine } from '../math/bridge';
 import type { MathBridgeHandle, MathEngine } from '../math/types';
 import { isIdempotentClick, type IdempotentRelease } from '../util/dom';
@@ -143,59 +144,12 @@ export function mountEnginePane(
     }
   };
 
-  const getWindowKatex = (): {
-    render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
-  } | null => {
+  const hasWindowKatex = () => {
     const candidate = (ownerWindow as Window & { katex?: unknown }).katex;
-    if (candidate && typeof (candidate as { render?: unknown }).render === 'function') {
-      return candidate as {
-        render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
-      };
-    }
-    return null;
+    return Boolean(candidate && typeof (candidate as { render?: unknown }).render === 'function');
   };
 
-  const whenKatexReady = (timeoutMs = 5000): Promise<boolean> => {
-    return new Promise((resolve) => {
-      if (getWindowKatex()) {
-        resolve(true);
-        return;
-      }
-      let settled = false;
-      let intervalId: number | null = null;
-      let timeoutId: number | null = null;
-      const finish = (ready: boolean) => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        ownerDocument.removeEventListener('katex:ready', onReady);
-        if (intervalId !== null) {
-          ownerWindow.clearInterval(intervalId);
-        }
-        if (timeoutId !== null) {
-          ownerWindow.clearTimeout(timeoutId);
-        }
-        resolve(ready);
-      };
-      const onReady = () => {
-        if (getWindowKatex()) {
-          finish(true);
-        }
-      };
-      ownerDocument.addEventListener('katex:ready', onReady);
-      intervalId = ownerWindow.setInterval(() => {
-        if (getWindowKatex()) {
-          finish(true);
-        }
-      }, 150);
-      timeoutId = ownerWindow.setTimeout(() => {
-        finish(getWindowKatex() !== null);
-      }, timeoutMs);
-    });
-  };
-
-  if (getWindowKatex()) {
+  if (hasWindowKatex()) {
     setKatexBadge('KaTeX: loaded', 'loaded');
   }
 
@@ -261,49 +215,32 @@ export function mountEnginePane(
     }
 
     if (!trimmedTex) {
-      if (getWindowKatex()) {
+      if (hasWindowKatex()) {
         setKatexBadge('KaTeX: loaded', 'loaded');
+      } else {
+        setKatexBadge('KaTeX: fallback', 'fallback');
       }
       renderFallback(tex, htmlOutput);
       return;
     }
 
-    let windowKatex = getWindowKatex();
-    if (!windowKatex) {
+    catxContainer.hidden = false;
+    fallbackContainer.hidden = true;
+    fallbackContainer.innerHTML = '';
+    catxContainer.innerHTML = '';
+    displayEl.dataset.mode = 'katex-loading';
+    setStatus('Waiting for KaTeX to load', 'info');
+    const katexSuccess = await renderWithKaTeX(catxContainer, trimmedTex, tex, katexBadge);
+    if (destroyed || sequence !== renderSequence) {
+      return;
+    }
+    if (katexSuccess && (catxContainer.childElementCount > 0 || catxContainer.textContent?.trim())) {
       catxContainer.hidden = false;
       fallbackContainer.hidden = true;
       fallbackContainer.innerHTML = '';
-      catxContainer.innerHTML = '';
-      catxContainer.textContent = 'Loading KaTeX…';
-      displayEl.dataset.mode = 'katex-loading';
-      setStatus('Waiting for KaTeX to load', 'info');
-      setKatexBadge('KaTeX: loading', 'loading');
-      await whenKatexReady();
-      if (destroyed || sequence !== renderSequence) {
-        return;
-      }
-      windowKatex = getWindowKatex();
-    }
-
-    if (windowKatex) {
-      catxContainer.innerHTML = '';
-      try {
-        windowKatex.render(trimmedTex, catxContainer, { throwOnError: false });
-        if (destroyed || sequence !== renderSequence) {
-          return;
-        }
-        if (catxContainer.childElementCount > 0 || catxContainer.textContent?.trim()) {
-          catxContainer.hidden = false;
-          fallbackContainer.hidden = true;
-          fallbackContainer.innerHTML = '';
-          displayEl.dataset.mode = 'katex';
-          setStatus('Rendered with KaTeX', 'info');
-          setKatexBadge('KaTeX: loaded', 'loaded');
-          return;
-        }
-      } catch (error) {
-        console.warn('[engine-pane] KaTeX render failed', error);
-      }
+      displayEl.dataset.mode = 'katex';
+      setStatus('Rendered with KaTeX', 'info');
+      return;
     }
 
     if (destroyed || sequence !== renderSequence) {
