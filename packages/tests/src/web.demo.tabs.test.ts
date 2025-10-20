@@ -46,7 +46,13 @@ describe('demo tabs controller', () => {
 
   const bootstrapTabs = async () => {
     vi.resetModules();
-    await import('../../web/demo/tabs.mjs');
+    const moduleScripts = Array.from(
+      document.querySelectorAll<HTMLScriptElement>('script[type="module"]:not([src])'),
+    );
+    for (const script of moduleScripts) {
+      const source = script.textContent ?? '';
+      await import(`data:text/javascript,${encodeURIComponent(source)}`);
+    }
     window.dispatchEvent(new Event('DOMContentLoaded'));
   };
 
@@ -91,6 +97,13 @@ describe('demo tabs controller', () => {
     expect(graphsTab?.getAttribute('aria-selected')).toBe('false');
     expect(enginePane?.hidden).toBe(false);
     expect(graphsPane?.hidden).toBe(true);
+
+    graphsTab?.click();
+
+    expect(engineTab?.getAttribute('aria-selected')).toBe('false');
+    expect(graphsTab?.getAttribute('aria-selected')).toBe('true');
+    expect(enginePane?.hidden).toBe(true);
+    expect(graphsPane?.hidden).toBe(false);
   });
 
   it('uses ?tab=engine initial state when present', async () => {

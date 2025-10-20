@@ -643,7 +643,37 @@
         });
       })();
     </script>
-    <script type="module" src="/demo/tabs.mjs"></script>
+    <script type="module">
+      function initTabs(root = document) {
+        const engTab = root.querySelector('[data-tab="engine"]');
+        const grpTab = root.querySelector('[data-tab="graphs"]');
+        const engPane = root.querySelector('[data-pane="engine"]');
+        const grpPane = root.querySelector('[data-pane="graphs"]');
+        if (!engTab || !grpTab || !engPane || !grpPane) return;
+        const select = (which) => {
+          const isEng = which === 'engine';
+          engTab.setAttribute('aria-selected', isEng ? 'true' : 'false');
+          grpTab.setAttribute('aria-selected', isEng ? 'false' : 'true');
+          engPane.hidden = !isEng;
+          grpPane.hidden = isEng;
+        };
+        try {
+          const tab = new URLSearchParams(window.location.search).get('tab');
+          select(tab === 'engine' ? 'engine' : 'graphs');
+        } catch {
+          select('graphs');
+        }
+        engTab.addEventListener('click', (e) => {
+          e.preventDefault();
+          select('engine');
+        });
+        grpTab.addEventListener('click', (e) => {
+          e.preventDefault();
+          select('graphs');
+        });
+      }
+      window.addEventListener('DOMContentLoaded', () => initTabs(document));
+    </script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>
