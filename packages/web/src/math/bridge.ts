@@ -5,6 +5,11 @@ import { applyMathDiff, type MathDiffPayload } from '../ui/diff';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import { createToastManager } from '../ui/toast';
+import {
+  isHTMLElement,
+  isHTMLInputElement,
+  isHTMLTextAreaElement,
+} from '../util/dom';
 import type {
   MathBridgeHandle,
   MathBridgeOptions,
@@ -522,24 +527,24 @@ function extractPreviewInfo(payload: unknown): { actionId: string | null; tokenI
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
+  if (!isHTMLElement(target)) {
     return false;
   }
   if (target.isContentEditable) {
     return true;
   }
-  if (target instanceof HTMLInputElement) {
-    const type = target.type.toLowerCase();
+  if (isHTMLInputElement(target)) {
+    const type = target.type?.toLowerCase?.() ?? '';
     return !['button', 'checkbox', 'radio', 'range', 'color', 'file', 'submit', 'reset', 'image'].includes(type);
   }
-  if (target instanceof HTMLTextAreaElement) {
+  if (isHTMLTextAreaElement(target)) {
     return true;
   }
   return false;
 }
 
 function findTokenElement(target: EventTarget | null): HTMLElement | null {
-  if (!(target instanceof HTMLElement)) {
+  if (!isHTMLElement(target)) {
     return null;
   }
   return target.closest<HTMLElement>('[data-token-id]');
@@ -952,7 +957,7 @@ export function attachMathEngine(
   };
 
   const findActionButton = (target: EventTarget | null): HTMLButtonElement | null => {
-    if (!(target instanceof HTMLElement)) {
+    if (!isHTMLElement(target)) {
       return null;
     }
     return target.closest<HTMLButtonElement>('button[data-role="math-action"]');

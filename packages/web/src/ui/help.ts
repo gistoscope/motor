@@ -1,3 +1,9 @@
+import {
+  isHTMLElement,
+  isHTMLInputElement,
+  isHTMLTextAreaElement,
+} from '../util/dom';
+
 const FOCUSABLE_SELECTOR =
   'a[href], area[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -17,17 +23,17 @@ const GESTURES: Array<{ key: string; description: string }> = [
 ];
 
 function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
+  if (!isHTMLElement(target)) {
     return false;
   }
   if (target.isContentEditable) {
     return true;
   }
-  if (target instanceof HTMLTextAreaElement) {
+  if (isHTMLTextAreaElement(target)) {
     return true;
   }
-  if (target instanceof HTMLInputElement) {
-    const type = target.type.toLowerCase();
+  if (isHTMLInputElement(target)) {
+    const type = target.type?.toLowerCase?.() ?? '';
     return !['button', 'checkbox', 'radio', 'range', 'color', 'file', 'submit', 'reset', 'image'].includes(type);
   }
   return false;
@@ -156,7 +162,7 @@ export function initHelp(options: HelpInitOptions): HelpOverlayHandle {
       trigger.setAttribute('aria-expanded', 'true');
     }
     const active = doc.activeElement;
-    lastFocused = active instanceof HTMLElement ? active : null;
+    lastFocused = isHTMLElement(active) ? active : null;
     focusFirst();
   };
 

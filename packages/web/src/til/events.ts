@@ -1,4 +1,5 @@
 import { NodeId } from './types';
+import { isElementNode } from '../util/dom';
 
 type HoverCallback = (id: NodeId | null, event: MouseEvent) => void;
 type SelectCallback = (id: NodeId, event: MouseEvent) => void;
@@ -13,7 +14,7 @@ export type EventCallbacks = {
 const AST_ATTRIBUTE = 'data-ast-id';
 
 function getNodeIdFromTarget(target: EventTarget | null): NodeId | null {
-  if (!(target instanceof Element)) {
+  if (!isElementNode(target)) {
     return null;
   }
 

@@ -1,3 +1,5 @@
+import { isHTMLElement } from '../util/dom';
+
 type KatexLike = {
   render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
 };
@@ -7,7 +9,7 @@ const KATEX_POLL_INTERVAL_MS = 150;
 const KATEX_TIMEOUT_MS = 5000;
 
 function getOwner(documentOrElement: Document | HTMLElement) {
-  if (documentOrElement instanceof HTMLElement) {
+  if (isHTMLElement(documentOrElement)) {
     const ownerDocument = documentOrElement.ownerDocument ?? document;
     return {
       document: ownerDocument,
