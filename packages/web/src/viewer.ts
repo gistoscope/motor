@@ -413,7 +413,10 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
               <dd class="viewer__shortest-value" data-role="shortest-total">${DASH}</dd>
             </div>
           </dl>
-          <p class="viewer__shortest-status" data-role="shortest-status">Edge weights required.</p>
+          <p class="viewer__shortest-status" data-role="shortest-info">Edge weights required.</p>
+          <div class="viewer__shortest-warning" data-role="shortest-warning-panel" data-state="hidden" hidden>
+            <p class="viewer__shortest-status" data-role="shortest-status"></p>
+          </div>
         </section>
         <h3 class="viewer__subtitle">Warnings</h3>
         <ul class="viewer__edges" data-role="analysis-warnings"></ul>
@@ -540,7 +543,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   const shortestSourceValue = root.querySelector<HTMLElement>('[data-role="shortest-source"]');
   const shortestTargetValue = root.querySelector<HTMLElement>('[data-role="shortest-target"]');
   const shortestTotalValue = root.querySelector<HTMLElement>('[data-role="shortest-total"]');
-  const shortestStatusValue = root.querySelector<HTMLElement>('[data-role="shortest-status"]');
+  const shortestInfoValue = root.querySelector<HTMLElement>('[data-role="shortest-info"]');
+  const shortestWarningPanel = root.querySelector<HTMLElement>('[data-role="shortest-warning-panel"]');
+  const shortestWarningValue = root.querySelector<HTMLElement>('[data-role="shortest-status"]');
   const shortestRunButton = root.querySelector<HTMLButtonElement>('button[data-role="shortest-run"]');
   const shortestResetButton = root.querySelector<HTMLButtonElement>('button[data-role="shortest-reset"]');
   const copyButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('button[data-action="copy"]'));
@@ -581,7 +586,9 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     !shortestSourceValue ||
     !shortestTargetValue ||
     !shortestTotalValue ||
-    !shortestStatusValue ||
+    !shortestInfoValue ||
+    !shortestWarningPanel ||
+    !shortestWarningValue ||
     !shortestRunButton ||
     !shortestResetButton ||
     !viewerRoot ||
@@ -711,10 +718,21 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     const sourceValue = shortestSourceValue;
     const targetValue = shortestTargetValue;
     const totalValue = shortestTotalValue;
-    const statusValue = shortestStatusValue;
+    const infoValue = shortestInfoValue;
+    const warningPanel = shortestWarningPanel;
+    const warningValue = shortestWarningValue;
     const resetButton = shortestResetButton;
 
-    if (!panel || !sourceValue || !targetValue || !totalValue || !statusValue || !resetButton) {
+    if (
+      !panel ||
+      !sourceValue ||
+      !targetValue ||
+      !totalValue ||
+      !infoValue ||
+      !warningPanel ||
+      !warningValue ||
+      !resetButton
+    ) {
       return;
     }
 
@@ -723,35 +741,40 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     totalValue.textContent = shortestResult ? String(shortestResult.totalWeight) : DASH;
 
     let panelState: string;
-    let statusText: string;
+    let infoText: string;
 
     if (!shortestAvailable) {
       panelState = 'disabled';
-      statusText = 'Edge weights (≥ 0) required.';
+      infoText = 'Edge weights (≥ 0) required.';
     } else if (!shortestSourceId && !shortestTargetId) {
       panelState = 'idle';
-      statusText = 'Select source and target nodes to compute a path.';
+      infoText = 'Select source and target nodes to compute a path.';
     } else if (!shortestSourceId || !shortestTargetId) {
       panelState = 'incomplete';
-      statusText = 'Select the remaining node.';
+      infoText = 'Select the remaining node.';
     } else if (!shortestResult) {
       panelState = 'no-path';
-      statusText = 'No path found.';
+      infoText = 'No path found.';
     } else {
       panelState = 'path';
-      statusText = 'Shortest path ready.';
+      infoText = 'Shortest path ready.';
     }
 
     const activeWarning = getActiveWarning();
     if (activeWarning) {
-      statusText = getWarningMessage(activeWarning);
-      statusValue.setAttribute('data-code', activeWarning);
+      warningPanel.dataset.state = 'visible';
+      warningPanel.hidden = false;
+      warningValue.dataset.code = activeWarning;
+      warningValue.textContent = getWarningMessage(activeWarning);
     } else {
-      statusValue.removeAttribute('data-code');
+      warningPanel.dataset.state = 'hidden';
+      warningPanel.hidden = true;
+      warningValue.dataset.code = '';
+      warningValue.textContent = '';
     }
 
     panel.dataset.state = panelState;
-    statusValue.textContent = statusText;
+    infoValue.textContent = infoText;
 
     const hasSelection = Boolean(shortestSourceId || shortestTargetId);
     const canRun = shortestAvailable && Boolean(shortestSourceId && shortestTargetId);
