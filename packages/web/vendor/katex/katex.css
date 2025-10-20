@@ -1,0 +1,66 @@
+/*
+ * Lightweight KaTeX CSS placeholder
+ *
+ * This CSS mimics the essential structure of KaTeX output so that rendered
+ * math content remains readable even when the full KaTeX styles are not
+ * available. The class names intentionally match KaTeX to keep compatibility
+ * with the runtime renderer.
+ */
+
+.katex {
+  display: inline-block;
+  font-size: 1.1em;
+  line-height: 1.2;
+  font-family: 'KaTeX_Main', 'Times New Roman', Times, serif;
+}
+
+.katex-display {
+  display: block;
+  text-align: center;
+  margin: 0.5em 0 0.75em;
+}
+
+.katex .base,
+.katex .mord,
+.katex .mop,
+.katex .mbin,
+.katex .mrel,
+.katex .mopen,
+.katex .mclose,
+.katex .minner {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.katex sup {
+  font-size: 0.75em;
+  vertical-align: super;
+}
+
+.katex sub {
+  font-size: 0.75em;
+  vertical-align: sub;
+}
+
+.katex .frac {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.katex .frac > span:first-child {
+  border-bottom: 1px solid currentColor;
+  padding: 0 0.2em 0.15em;
+}
+
+.katex .frac > span:last-child {
+  padding-top: 0.15em;
+}
+
+.katex-error {
+  color: #c2410c;
+  background: rgba(252, 165, 165, 0.2);
+  padding: 0.2em 0.4em;
+  border-radius: 0.25em;
+  font-size: 0.9em;
+}
