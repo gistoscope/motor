@@ -67,6 +67,7 @@ function findSccClass(list: DOMTokenList): string | null {
 
 function updateWarnings(list: HTMLElement, analysis: GraphAnalysis | null): void {
   list.innerHTML = '';
+  list.dataset.state = analysis ? 'ready' : 'disabled';
   const item = document.createElement('li');
   item.dataset.role = 'analysis-warning-item';
   if (!analysis) {
