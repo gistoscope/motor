@@ -1,43 +1,18 @@
-const $ = (selector, root = document) => root.querySelector(selector);
-
-const tabGraphs = $('[data-role="tab-graphs"]');
-const tabEngine = $('[data-role="tab-engine"]');
+const btnEngine = document.querySelector('[data-tab="engine"]');
+const btnGraphs = document.querySelector('[data-tab="graphs"]');
+const panelEngine = document.querySelector('[data-panel="engine"]');
+const panelGraphs = document.querySelector('[data-panel="graphs"]');
 
 function show(which) {
-  const target = which === 'engine' ? 'engine' : which === 'graphs' ? 'graphs' : null;
-  if (!target) {
-    return;
-  }
-
-  const hash = `#${target}`;
-  if (window.location.hash !== hash) {
-    try {
-      history.replaceState(null, '', hash);
-    } catch (error) {
-      window.location.hash = hash;
-    }
-  }
-
-  try {
-    localStorage.setItem('motor.activeTab', target);
-  } catch (error) {
-    // Ignore storage failures (private mode, etc.)
-  }
+  const isEngine = which === 'engine';
+  btnEngine?.setAttribute('aria-selected', String(isEngine));
+  btnGraphs?.setAttribute('aria-selected', String(!isEngine));
+  if (panelEngine) panelEngine.hidden = !isEngine;
+  if (panelGraphs) panelGraphs.hidden = isEngine;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const saved = (() => {
-    try {
-      return localStorage.getItem('motor.activeTab');
-    } catch (error) {
-      return null;
-    }
-  })();
+// начальное состояние — показываем Graphs (как было)
+show('graphs');
 
-  if (saved === 'engine' || saved === 'graphs') {
-    show(saved);
-  }
-
-  tabGraphs && tabGraphs.addEventListener('click', () => show('graphs'));
-  tabEngine && tabEngine.addEventListener('click', () => show('engine'));
-});
+btnEngine?.addEventListener('click', () => show('engine'));
+btnGraphs?.addEventListener('click', () => show('graphs'));
