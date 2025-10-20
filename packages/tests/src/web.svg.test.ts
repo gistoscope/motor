@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Window } from 'happy-dom';
 
-import { renderSVG } from '../../web/src/svg';
+import { renderSVG } from '../../web/src/viewer/svg';
 
 let domWindow: Window;
 

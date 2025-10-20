@@ -243,15 +243,21 @@ export function mountPlayground(
 
   const updateMiniGraph = (graph: GraphJSON) => {
     miniGraphJson.textContent = JSON.stringify(graph, null, 2);
+    const hostStyle = miniGraphViewerHost.style;
+    hostStyle.setProperty('--gv-node-r', 'var(--mg-node-r)');
+    hostStyle.setProperty('--gv-edge-stroke', 'var(--mg-edge-stroke)');
+    hostStyle.setProperty('--gv-edge-width', 'var(--mg-edge-width)');
     if (!miniViewer) {
       miniViewer = createViewer(miniGraphViewerHost, { initialJSON: miniGraphJson.textContent });
       miniViewer.parse();
+      miniViewer.fitToViewBox();
       return;
     }
     const textareaEl = miniGraphViewerHost.querySelector<HTMLTextAreaElement>('textarea[data-role="input"]');
     if (textareaEl) {
       textareaEl.value = miniGraphJson.textContent;
       miniViewer.parse();
+      miniViewer.fitToViewBox();
     }
   };
 
