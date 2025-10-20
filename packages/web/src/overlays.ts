@@ -216,18 +216,18 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
     microtaskPending = false;
   };
 
-  const updatePanel = () => {
+  const updatePanel = (analysis: GraphAnalysis | null) => {
     const { hasCycleValue, sccCountValue, cycleEdgeCountValue, warningsList } = options.panel;
-    if (!currentAnalysis) {
+    if (!analysis) {
       hasCycleValue.textContent = '—';
       sccCountValue.textContent = '—';
       cycleEdgeCountValue.textContent = '—';
       updateWarnings(warningsList, null);
     } else {
-      hasCycleValue.textContent = currentAnalysis.hasCycle ? 'Yes' : 'No';
-      sccCountValue.textContent = String(currentAnalysis.sccCount);
-      cycleEdgeCountValue.textContent = String(currentAnalysis.cycleEdgeCount);
-      updateWarnings(warningsList, currentAnalysis);
+      hasCycleValue.textContent = analysis.hasCycle ? 'Yes' : 'No';
+      sccCountValue.textContent = String(analysis.sccCount);
+      cycleEdgeCountValue.textContent = String(analysis.cycleEdgeCount);
+      updateWarnings(warningsList, analysis);
     }
   };
 
@@ -240,8 +240,9 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
     const cyclesToggle = options.toggles.cycles;
     const shortestToggle = options.toggles.shortest;
 
-    sccToggle.disabled = pending || !hasData;
-    cyclesToggle.disabled = pending || !hasData;
+    const overlaysEnabled = !pending && hasData;
+    sccToggle.disabled = !overlaysEnabled;
+    cyclesToggle.disabled = !overlaysEnabled;
     if (!hasData && !pending) {
       sccToggle.checked = false;
       cyclesToggle.checked = false;
@@ -256,7 +257,7 @@ export function createOverlayController(options: OverlayOptions): OverlayControl
       shortestToggle.disabled = !hasData || !currentShortest.available;
     }
 
-    updatePanel();
+    updatePanel(currentAnalysis);
     scheduleFlush();
   };
 
