@@ -1,6 +1,20 @@
-type KatexLike = {
-  render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
+type KatexTrustContext = {
+  command?: string;
+  url?: string;
+  attr?: string;
+  [key: string]: unknown;
 };
+
+type KatexRenderOptions = {
+  throwOnError?: boolean;
+  trust?: boolean | ((context: KatexTrustContext) => boolean);
+};
+
+type KatexLike = {
+  render: (tex: string, element: HTMLElement, options?: KatexRenderOptions) => void;
+};
+
+const TRUSTED_COMMANDS = new Set(['\\htmlId', '\\htmlClass']);
 
 const KATEX_READY_EVENT = 'katex:ready';
 const KATEX_POLL_INTERVAL_MS = 150;
@@ -102,6 +116,15 @@ function clearBadgeTone(badgeEl: HTMLElement | undefined) {
   delete badgeEl.dataset.tone;
 }
 
+function isTrustedHtmlCommand(context: KatexTrustContext): boolean {
+  const command = context.command;
+  if (typeof command !== 'string' || command.length === 0) {
+    return false;
+  }
+  const normalized = command.startsWith('\\') ? command : `\\${command}`;
+  return TRUSTED_COMMANDS.has(normalized);
+}
+
 function setFallbackContent(targetEl: HTMLElement, latex: string, plain: string) {
   targetEl.innerHTML = '';
   const fallback = plain || latex;
@@ -148,7 +171,7 @@ export async function renderWithKaTeX(
   }
 
   try {
-    katex.render(content, targetEl, { throwOnError: false });
+    katex.render(content, targetEl, { throwOnError: false, trust: isTrustedHtmlCommand });
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
     return true;
   } catch (error) {
