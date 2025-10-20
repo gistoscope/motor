@@ -1120,31 +1120,77 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     return true;
   }
 
-  function parseAndRender() {
+  function applyGraphInput(raw: string, options: { updateTextarea: boolean }): boolean {
+    const ok = processGraphInput(raw, options);
+    if (ok) {
+      closePastePanel();
+    }
+    return ok;
+  }
+
+  function parseAndRender(): boolean {
     if (parseInProgress) {
-      return;
+      return false;
     }
     parseInProgress = true;
     try {
-      processGraphInput(textareaEl.value, { updateTextarea: true });
+      return applyGraphInput(textareaEl.value, { updateTextarea: true });
     } finally {
       parseInProgress = false;
     }
   }
 
-  function startDownload(filename: string, content: string, mimeType: string) {
+  function startDownload(filename: string, content: string, mimeType: string): Blob {
     const blob = new Blob([content], { type: mimeType });
     const canUseObjectURL = typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function';
     const href = canUseObjectURL ? URL.createObjectURL(blob) : `data:${mimeType},${encodeURIComponent(content)}`;
-    const link = document.createElement('a');
-    link.href = href;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    if (canUseObjectURL && typeof URL.revokeObjectURL === 'function') {
-      URL.revokeObjectURL(href);
+
+    const cleanup = () => {
+      if (canUseObjectURL && typeof URL.revokeObjectURL === 'function') {
+        URL.revokeObjectURL(href);
+      }
+    };
+
+    let downloadTriggered = false;
+    if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
+      let link: HTMLAnchorElement | null = null;
+      try {
+        link = document.createElement('a');
+        link.href = href;
+        link.download = filename;
+        const body = document.body;
+        if (body && typeof body.appendChild === 'function') {
+          body.appendChild(link);
+        }
+        if (typeof link.click === 'function') {
+          link.click();
+          downloadTriggered = true;
+        }
+      } catch {
+        downloadTriggered = false;
+      } finally {
+        link?.remove();
+      }
     }
+
+    if (!downloadTriggered && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('motor:download', {
+            detail: {
+              filename,
+              blob,
+              mimeType,
+            },
+          }),
+        );
+      } catch {
+        // ignore dispatch errors in non-browser environments
+      }
+    }
+
+    cleanup();
+    return blob;
   }
 
   function handleDownload(ev: Event) {
@@ -1179,6 +1225,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
         return;
       }
 
+      content = ensureTrailingNewline(content);
       startDownload(filename, content, mimeType);
       setStatus(`${label} download started.`);
     } catch (err) {
@@ -1203,10 +1250,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   }
 
   function handlePasteApply() {
-    const ok = processGraphInput(pasteTextareaEl.value, { updateTextarea: true });
-    if (ok) {
-      closePastePanel();
-    }
+    applyGraphInput(pasteTextareaEl.value, { updateTextarea: true });
   }
 
   function handleImportChange(files: FileList | null) {
@@ -1219,7 +1263,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     file
       .text()
       .then((content) => {
-        const ok = processGraphInput(content, { updateTextarea: true });
+        const ok = applyGraphInput(content, { updateTextarea: true });
         if (ok) {
           setStatus('File imported successfully.');
         }
