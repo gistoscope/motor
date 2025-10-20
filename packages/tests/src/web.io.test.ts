@@ -100,6 +100,8 @@ describe('web viewer import/export', () => {
     };
 
     const { root } = setup();
+    const shortestPanel = root.querySelector<HTMLElement>('[data-role="shortest-panel"]');
+    expect(shortestPanel?.dataset.state).toBe('hidden');
 
     const pasteButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-open"]');
     expect(pasteButton).toBeTruthy();
@@ -132,10 +134,12 @@ describe('web viewer import/export', () => {
     expect(inspectOutput.endsWith('\n')).toBe(true);
 
     expect(panel?.dataset.state).toBe('hidden');
+    expect(shortestPanel?.dataset.state).toBe('disabled');
   });
 
   it('shows validation error for invalid pasted JSON', async () => {
     const { root } = setup();
+    const shortestPanel = root.querySelector<HTMLElement>('[data-role="shortest-panel"]');
 
     const pasteButton = root.querySelector<HTMLButtonElement>('button[data-action="paste-open"]');
     pasteButton!.click();
@@ -153,6 +157,7 @@ describe('web viewer import/export', () => {
 
     const panel = root.querySelector<HTMLElement>('[data-role="paste-panel"]');
     expect(panel?.dataset.state).toBe('visible');
+    expect(shortestPanel?.dataset.state).toBe('hidden');
   });
 
   it('imports graph JSON from file input', async () => {

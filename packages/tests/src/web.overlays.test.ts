@@ -178,11 +178,13 @@ describe('web overlays', () => {
       const sccCount = root.querySelector('[data-role="analysis-scc-count"]')?.textContent?.trim();
       const cycleEdges = root.querySelector('[data-role="analysis-cycle-edges"]')?.textContent?.trim();
       const warningText = root.querySelector('[data-role="analysis-warnings"] li')?.textContent?.trim();
+      const warningsList = root.querySelector<HTMLElement>('[data-role="analysis-warnings"]');
 
       expect(hasCycle).toBe('Yes');
       expect(sccCount).toBe('1');
       expect(cycleEdges).toBe('3');
       expect(warningText).toBe('Cycles detected in the graph.');
+      expect(warningsList?.dataset.state).toBe('ready');
     });
   });
 });

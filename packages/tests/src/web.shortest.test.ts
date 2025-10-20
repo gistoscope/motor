@@ -63,11 +63,8 @@ describe('web shortest path overlay', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
-    await vi.waitFor(() => {
-      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
-      expect(toggle?.disabled).toBe(false);
-    });
     const shortestToggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
+    expect(shortestToggle?.disabled).toBe(true);
 
     const svgRoot = root.querySelector<HTMLElement>('[data-role="svg-root"]');
     const selectA = new domWindow.CustomEvent('motor:node-select', {
@@ -98,7 +95,10 @@ describe('web shortest path overlay', () => {
 
     await vi.waitFor(() => {
       const panel = root.querySelector<HTMLElement>('[data-role="shortest-panel"]');
-      expect(panel?.dataset.state).toBe('path');
+      expect(panel?.dataset.state).toBe('ready');
+    });
+    await vi.waitFor(() => {
+      expect(shortestToggle?.disabled).toBe(false);
     });
     const shortestPanel = root.querySelector<HTMLElement>('[data-role="shortest-panel"]');
 
@@ -185,10 +185,8 @@ describe('web shortest path overlay', () => {
     textarea!.value = JSON.stringify(sample, null, 2);
     parseButton!.click();
 
-    await vi.waitFor(() => {
-      const toggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
-      expect(toggle?.disabled).toBe(false);
-    });
+    const shortestToggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
+    expect(shortestToggle?.disabled).toBe(true);
 
     const svgRoot = root.querySelector<HTMLElement>('[data-role="svg-root"]');
     svgRoot?.dispatchEvent(
@@ -206,7 +204,10 @@ describe('web shortest path overlay', () => {
       expect(totalValue?.textContent?.trim()).toBe('3');
     });
 
-    const shortestToggle = root.querySelector<HTMLInputElement>('input[data-overlay="shortest"]');
+    await vi.waitFor(() => {
+      expect(shortestToggle?.disabled).toBe(false);
+    });
+
     shortestToggle!.checked = true;
     shortestToggle!.dispatchEvent(new domWindow.Event('change', { bubbles: true }) as unknown as Event);
 
