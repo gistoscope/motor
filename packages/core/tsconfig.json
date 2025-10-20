@@ -1,9 +1,12 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "rootDir": "src",
+    "composite": true,
     "declaration": true,
-    "outDir": "dist"
+    "declarationMap": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "moduleResolution": "Bundler"
   },
-  "include": ["src"]
+  "include": ["src/**/*"]
 }
