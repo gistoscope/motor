@@ -15,6 +15,13 @@
   --motor-warn: #f59e0b;
   --motor-bad: #ef4444;
   --motor-gap: 8px;
+  --gr-node-radius: 14px;
+  --gr-node-stroke: #3a3a3a;
+  --gr-node-stroke-w: 1.5;
+  --gr-node-fill: #ffffff;
+  --gr-edge-stroke: #4a4a4a;
+  --gr-edge-stroke-w: 1.5;
+  --gr-text-fill: #111111;
 }
 
 .anchor {
@@ -119,4 +126,21 @@ textarea {
 .box {
   background: #ffffff;
   color: #111111;
+}
+
+svg.motor-graph .motor-node-circle {
+  r: var(--gr-node-radius);
+  fill: var(--gr-node-fill);
+  stroke: var(--gr-node-stroke);
+  stroke-width: var(--gr-node-stroke-w);
+}
+
+svg.motor-graph .motor-edge {
+  stroke: var(--gr-edge-stroke);
+  stroke-width: var(--gr-edge-stroke-w);
+}
+
+svg.motor-graph .motor-node-label {
+  fill: var(--gr-text-fill);
+  font: 12px/1.2 system-ui, 'Segoe UI', Arial, sans-serif;
 }
