@@ -79,55 +79,6 @@ function formatGraphJSON(example) {
   return JSON.stringify(example.data, null, 2);
 }
 
-function setupDemoTabs() {
-  const tabButtons = Array.from(
-    document.querySelectorAll('[data-role="demo-tab"][data-target]'),
-  );
-  const panelMap = new Map(
-    Array.from(document.querySelectorAll('[data-role="demo-panel"][data-panel]')).map((panel) => [
-      panel.dataset.panel ?? '',
-      panel,
-    ]),
-  );
-
-  if (tabButtons.length === 0 || panelMap.size === 0) {
-    return () => {};
-  }
-
-  const activate = (target) => {
-    tabButtons.forEach((button) => {
-      const isActive = button.dataset.target === target;
-      button.classList.toggle('is-active', isActive);
-      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-      button.setAttribute('tabindex', isActive ? '0' : '-1');
-    });
-
-    panelMap.forEach((panel, key) => {
-      const isActive = key === target;
-      panel.hidden = !isActive;
-      panel.dataset.state = isActive ? 'active' : 'inactive';
-    });
-  };
-
-  tabButtons.forEach((button) => {
-    const target = button.dataset.target;
-    if (!target) {
-      return;
-    }
-    button.addEventListener('click', () => {
-      activate(target);
-    });
-  });
-
-  const initialButton = tabButtons.find((button) => button.dataset.state === 'active');
-  const initialTarget = initialButton?.dataset.target ?? tabButtons[0]?.dataset.target ?? null;
-  if (initialTarget) {
-    activate(initialTarget);
-  }
-
-  return activate;
-}
-
 function getViewerTextarea(root) {
   return root.querySelector('textarea[data-role="input"]');
 }
@@ -847,7 +798,6 @@ function createMathPlayground(engine, meta) {
 }
 
 async function bootstrap() {
-  setupDemoTabs();
   createViewerSection();
 
   try {

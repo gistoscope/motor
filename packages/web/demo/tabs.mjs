@@ -1,43 +1,45 @@
-const $ = (selector, root = document) => root.querySelector(selector);
+export function initTabs(root = document) {
+  const engineTab = root.querySelector('[data-tab="engine"]');
+  const graphsTab = root.querySelector('[data-tab="graphs"]');
+  const enginePane = root.querySelector('[data-pane="engine"]');
+  const graphsPane = root.querySelector('[data-pane="graphs"]');
 
-const tabGraphs = $('[data-role="tab-graphs"]');
-const tabEngine = $('[data-role="tab-engine"]');
-
-function show(which) {
-  const target = which === 'engine' ? 'engine' : which === 'graphs' ? 'graphs' : null;
-  if (!target) {
+  if (!engineTab || !graphsTab || !enginePane || !graphsPane) {
     return;
   }
 
-  const hash = `#${target}`;
-  if (window.location.hash !== hash) {
-    try {
-      history.replaceState(null, '', hash);
-    } catch (error) {
-      window.location.hash = hash;
-    }
-  }
+  const select = (which) => {
+    const isEngine = which === 'engine';
+    engineTab.setAttribute('aria-selected', isEngine ? 'true' : 'false');
+    graphsTab.setAttribute('aria-selected', isEngine ? 'false' : 'true');
+    enginePane.hidden = !isEngine;
+    graphsPane.hidden = isEngine;
+  };
 
   try {
-    localStorage.setItem('motor.activeTab', target);
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    select(tab === 'engine' ? 'engine' : 'graphs');
   } catch (error) {
-    // Ignore storage failures (private mode, etc.)
+    select('graphs');
   }
+
+  const onEngineClick = (event) => {
+    event.preventDefault();
+    select('engine');
+  };
+
+  const onGraphsClick = (event) => {
+    event.preventDefault();
+    select('graphs');
+  };
+
+  engineTab.addEventListener('click', onEngineClick);
+  graphsTab.addEventListener('click', onGraphsClick);
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  const saved = (() => {
-    try {
-      return localStorage.getItem('motor.activeTab');
-    } catch (error) {
-      return null;
-    }
-  })();
-
-  if (saved === 'engine' || saved === 'graphs') {
-    show(saved);
-  }
-
-  tabGraphs && tabGraphs.addEventListener('click', () => show('graphs'));
-  tabEngine && tabEngine.addEventListener('click', () => show('engine'));
-});
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', () => {
+    initTabs(document);
+  });
+}

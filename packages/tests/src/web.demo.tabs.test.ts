@@ -1,73 +1,110 @@
 /** @vitest-environment happy-dom */
 export {};
 
+import { Window } from 'happy-dom';
+import { readFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const TABS_MARKUP = `
-  <div class="tabs" data-role="tabs">
-    <button type="button" data-role="tab-engine" data-tab="engine" data-state="active">
-      Engine
-    </button>
-    <button type="button" data-role="tab-graphs" data-tab="graphs">
-      Graphs
-    </button>
-    <div data-role="demo-panel" data-panel="engine" data-state="active"></div>
-    <div data-role="demo-panel" data-panel="graphs" hidden></div>
-  </div>
-`;
+const resolveFixturePath = (metaUrl: string, relativePath: string) => {
+  if (metaUrl.startsWith('file:')) {
+    return resolve(dirname(fileURLToPath(metaUrl)), relativePath);
+  }
+  const parsed = new URL(metaUrl);
+  if (parsed.protocol === 'http:' && parsed.pathname.startsWith('/@fs/')) {
+    const basePath = decodeURIComponent(parsed.pathname.slice('/@fs/'.length));
+    return resolve(basePath, relativePath);
+  }
+  throw new Error(`Unsupported import.meta.url protocol: ${parsed.protocol}`);
+};
 
 describe('demo tabs controller', () => {
+  let domWindow: Window;
+
+  const mountDocument = async (search = '') => {
+    const htmlPath = resolveFixturePath(import.meta.url, '../../web/demo/index.html');
+    const html = await readFile(htmlPath, 'utf8');
+    const fileUrl = pathToFileURL(htmlPath);
+    const targetUrl = new URL(fileUrl.href);
+    if (search) {
+      targetUrl.search = search.startsWith('?') ? search : `?${search}`;
+    } else {
+      targetUrl.search = '';
+    }
+    if (typeof domWindow.happyDOM?.setURL === 'function') {
+      domWindow.happyDOM.setURL(targetUrl.href);
+    } else {
+      domWindow.location.href = targetUrl.href;
+    }
+    document.open();
+    document.write(html);
+    document.close();
+    document.querySelector('script[type="module"][src="./main.js"]')?.remove();
+    document.querySelector('script[type="module"][src="/demo/tabs.mjs"]')?.remove();
+  };
+
+  const bootstrapTabs = async () => {
+    vi.resetModules();
+    await import('../../web/demo/tabs.mjs');
+    window.dispatchEvent(new Event('DOMContentLoaded'));
+  };
+
   beforeEach(() => {
-    document.body.innerHTML = TABS_MARKUP;
+    domWindow = new Window();
+    globalThis.window = domWindow as unknown as typeof window;
+    globalThis.document = domWindow.document as unknown as typeof document;
+    globalThis.navigator = domWindow.navigator as unknown as typeof navigator;
+    (globalThis as any).HTMLElement = domWindow.HTMLElement;
+    (globalThis as any).HTMLButtonElement = domWindow.HTMLButtonElement;
+    (globalThis as any).Event = domWindow.Event;
   });
 
   afterEach(() => {
-    document.body.innerHTML = '';
     vi.restoreAllMocks();
+    document.body.innerHTML = '';
+    delete (globalThis as any).Event;
+    delete (globalThis as any).HTMLButtonElement;
+    delete (globalThis as any).HTMLElement;
+    delete (globalThis as any).navigator;
+    delete (globalThis as any).document;
+    delete (globalThis as any).window;
   });
 
-  it('activates panels when clicking tabs', async () => {
-    const panelEngine = document.querySelector<HTMLElement>('[data-panel="engine"]')!;
-    const panelGraphs = document.querySelector<HTMLElement>('[data-panel="graphs"]')!;
+  it('activates graphs pane by default and toggles to engine', async () => {
+    await mountDocument('');
+    await bootstrapTabs();
 
-    const applyTarget = (target: string | null) => {
-      if (target === 'engine' || target === 'graphs') {
-        panelEngine.hidden = target !== 'engine';
-        panelGraphs.hidden = target !== 'graphs';
-      }
-    };
+    const engineTab = document.querySelector<HTMLButtonElement>('[data-tab="engine"]');
+    const graphsTab = document.querySelector<HTMLButtonElement>('[data-tab="graphs"]');
+    const enginePane = document.querySelector<HTMLElement>('[data-pane="engine"]');
+    const graphsPane = document.querySelector<HTMLElement>('[data-pane="graphs"]');
 
-    const originalReplaceState = history.replaceState.bind(history);
-    vi.spyOn(history, 'replaceState').mockImplementation((data, title, url) => {
-      const result = originalReplaceState(data, title, url);
-      if (typeof url === 'string' && url.startsWith('#')) {
-        applyTarget(url.slice(1));
-      }
-      return result;
-    });
+    expect(engineTab?.getAttribute('aria-selected')).toBe('false');
+    expect(graphsTab?.getAttribute('aria-selected')).toBe('true');
+    expect(enginePane?.hidden).toBe(true);
+    expect(graphsPane?.hidden).toBe(false);
 
-    vi.spyOn(window.localStorage, 'getItem').mockReturnValue(null);
-    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {});
+    engineTab?.click();
 
-    vi.resetModules();
-    await import('../../web/demo/tabs.mjs');
+    expect(engineTab?.getAttribute('aria-selected')).toBe('true');
+    expect(graphsTab?.getAttribute('aria-selected')).toBe('false');
+    expect(enginePane?.hidden).toBe(false);
+    expect(graphsPane?.hidden).toBe(true);
+  });
 
-    document.dispatchEvent(new Event('DOMContentLoaded'));
+  it('uses ?tab=engine initial state when present', async () => {
+    await mountDocument('?tab=engine');
+    await bootstrapTabs();
 
-    const btnEngine = document.querySelector<HTMLButtonElement>('[data-tab="engine"]')!;
-    const btnGraphs = document.querySelector<HTMLButtonElement>('[data-tab="graphs"]')!;
+    const engineTab = document.querySelector<HTMLButtonElement>('[data-tab="engine"]');
+    const graphsTab = document.querySelector<HTMLButtonElement>('[data-tab="graphs"]');
+    const enginePane = document.querySelector<HTMLElement>('[data-pane="engine"]');
+    const graphsPane = document.querySelector<HTMLElement>('[data-pane="graphs"]');
 
-    expect(panelEngine.hidden).toBe(false);
-    expect(panelGraphs.hidden).toBe(true);
-
-    btnGraphs.click();
-
-    expect(panelEngine.hidden).toBe(true);
-    expect(panelGraphs.hidden).toBe(false);
-
-    btnEngine.click();
-
-    expect(panelEngine.hidden).toBe(false);
-    expect(panelGraphs.hidden).toBe(true);
+    expect(engineTab?.getAttribute('aria-selected')).toBe('true');
+    expect(graphsTab?.getAttribute('aria-selected')).toBe('false');
+    expect(enginePane?.hidden).toBe(false);
+    expect(graphsPane?.hidden).toBe(true);
   });
 });

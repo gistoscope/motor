@@ -28,6 +28,10 @@
         color: var(--fg);
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
       main {
         max-width: var(--content-max);
         margin: 0 auto;
@@ -161,8 +165,7 @@
         transition: background 0.2s ease, border-color 0.2s ease;
       }
 
-      .demo-tabs__button.is-active,
-      .demo-tabs__button.active {
+      .demo-tabs__button[aria-selected='true'] {
         background: rgba(37, 99, 235, 0.12);
         border-color: rgba(37, 99, 235, 0.45);
         color: #1f2937;
@@ -185,6 +188,10 @@
         display: flex;
         flex-direction: column;
         gap: 2rem;
+      }
+
+      [role='tab'][aria-selected='true'] {
+        font-weight: 600;
       }
 
       .engine-pane {
@@ -397,18 +404,38 @@
         </header>
 
         <div class="demo-tabs tabs">
-          <nav class="demo-tabs__list" aria-label="Playground sections">
-            <a class="demo-tabs__button" data-role="tab-engine" href="#engine">Engine</a>
-            <a class="demo-tabs__button" data-role="tab-graphs" href="#graphs">Graphs</a>
+          <nav class="demo-tabs__list" aria-label="Playground sections" role="tablist">
+            <button
+              class="demo-tabs__button"
+              type="button"
+              data-tab="engine"
+              id="demo-tab-engine"
+              role="tab"
+              aria-selected="false"
+              aria-controls="demo-pane-engine"
+            >
+              Engine
+            </button>
+            <button
+              class="demo-tabs__button"
+              type="button"
+              data-tab="graphs"
+              id="demo-tab-graphs"
+              role="tab"
+              aria-selected="true"
+              aria-controls="demo-pane-graphs"
+            >
+              Graphs
+            </button>
           </nav>
           <div class="demo-tabs__panels">
-            <div
+            <section
               class="demo-tabs__panel"
-              data-role="demo-panel"
-              data-panel="engine"
-              data-state="active"
-              id="panel-engine"
-              data-section-role="engine"
+              data-pane="engine"
+              id="demo-pane-engine"
+              role="tabpanel"
+              aria-labelledby="demo-tab-engine"
+              hidden
             >
               <a id="engine" class="anchor"></a>
               <section class="card" id="engine-card" data-role="section-engine">
@@ -461,14 +488,13 @@
                   <p class="engine-pane__status" data-role="engine-status"></p>
                 </div>
               </section>
-            </div>
-            <div
+            </section>
+            <section
               class="demo-tabs__panel"
-              data-role="demo-panel"
-              data-panel="graphs"
-              data-state="active"
-              id="panel-graphs"
-              data-section-role="graphs"
+              data-pane="graphs"
+              id="demo-pane-graphs"
+              role="tabpanel"
+              aria-labelledby="demo-tab-graphs"
             >
               <a id="graphs" class="anchor"></a>
               <section class="card" id="graph-card" data-role="section-graphs">
@@ -586,7 +612,7 @@
                   </div>
                 </div>
               </section>
-            </div>
+            </section>
           </div>
         </div>
 
