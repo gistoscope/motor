@@ -66,6 +66,19 @@ export function mountEnginePane(
     fallbackContainer.classList.add('engine-pane__display-fallback');
     displayEl.appendChild(fallbackContainer);
   }
+  const katexBadge =
+    displayEl.querySelector<HTMLElement>('[data-role="engine-display-katex-badge"]') ??
+    ownerDocument.createElement('span');
+  if (!katexBadge.dataset.role) {
+    katexBadge.dataset.role = 'engine-display-katex-badge';
+    katexBadge.classList.add('engine-pane__display-badge', 'katex-badge');
+    katexBadge.textContent = 'KaTeX: loading';
+    katexBadge.dataset.tone = 'loading';
+    displayEl.appendChild(katexBadge);
+  }
+  if (!katexBadge.dataset.tone) {
+    katexBadge.dataset.tone = 'loading';
+  }
   catxContainer.hidden = true;
   fallbackContainer.hidden = true;
   displayEl.dataset.mode = displayEl.dataset.mode ?? 'idle';
@@ -118,6 +131,18 @@ export function mountEnginePane(
     return catxRenderer;
   };
 
+  const setKatexBadge = (
+    message: string,
+    tone: 'loading' | 'loaded' | 'fallback' | null = null,
+  ) => {
+    katexBadge.textContent = message;
+    if (tone) {
+      katexBadge.dataset.tone = tone;
+    } else {
+      delete katexBadge.dataset.tone;
+    }
+  };
+
   const getWindowKatex = (): {
     render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
   } | null => {
@@ -129,6 +154,51 @@ export function mountEnginePane(
     }
     return null;
   };
+
+  const whenKatexReady = (timeoutMs = 5000): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (getWindowKatex()) {
+        resolve(true);
+        return;
+      }
+      let settled = false;
+      let intervalId: number | null = null;
+      let timeoutId: number | null = null;
+      const finish = (ready: boolean) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        ownerDocument.removeEventListener('katex:ready', onReady);
+        if (intervalId !== null) {
+          ownerWindow.clearInterval(intervalId);
+        }
+        if (timeoutId !== null) {
+          ownerWindow.clearTimeout(timeoutId);
+        }
+        resolve(ready);
+      };
+      const onReady = () => {
+        if (getWindowKatex()) {
+          finish(true);
+        }
+      };
+      ownerDocument.addEventListener('katex:ready', onReady);
+      intervalId = ownerWindow.setInterval(() => {
+        if (getWindowKatex()) {
+          finish(true);
+        }
+      }, 150);
+      timeoutId = ownerWindow.setTimeout(() => {
+        finish(getWindowKatex() !== null);
+      }, timeoutMs);
+    });
+  };
+
+  if (getWindowKatex()) {
+    setKatexBadge('KaTeX: loaded', 'loaded');
+  }
+
 
   const renderFallback = (expression: string, htmlOutput: string | null) => {
     fallbackContainer.innerHTML = '';
@@ -162,8 +232,9 @@ export function mountEnginePane(
     const tex = typeof exported.tex === 'string' && exported.tex.trim().length > 0 ? exported.tex : latestExpression;
     const htmlOutput = typeof exported.html === 'string' ? exported.html : null;
     const renderer = ensureCatxRenderer();
+    const trimmedTex = tex.trim();
 
-    if (renderer && tex.trim()) {
+    if (renderer && trimmedTex) {
       catxContainer.innerHTML = '';
       fallbackContainer.hidden = true;
       try {
@@ -176,11 +247,12 @@ export function mountEnginePane(
           fallbackContainer.hidden = true;
           fallbackContainer.innerHTML = '';
           displayEl.dataset.mode = 'catx';
-          setStatus('Rendered with CATX', 'info');
+          setStatus('Rendered with KaTeX renderer', 'info');
+          setKatexBadge('KaTeX: loaded', 'loaded');
           return;
         }
       } catch (error) {
-        console.warn('[engine-pane] CATX render failed', error);
+        console.warn('[engine-pane] KaTeX renderer failed', error);
       }
     }
 
@@ -188,11 +260,35 @@ export function mountEnginePane(
       return;
     }
 
-    const windowKatex = tex.trim() ? getWindowKatex() : null;
+    if (!trimmedTex) {
+      if (getWindowKatex()) {
+        setKatexBadge('KaTeX: loaded', 'loaded');
+      }
+      renderFallback(tex, htmlOutput);
+      return;
+    }
+
+    let windowKatex = getWindowKatex();
+    if (!windowKatex) {
+      catxContainer.hidden = false;
+      fallbackContainer.hidden = true;
+      fallbackContainer.innerHTML = '';
+      catxContainer.innerHTML = '';
+      catxContainer.textContent = 'Loading KaTeX…';
+      displayEl.dataset.mode = 'katex-loading';
+      setStatus('Waiting for KaTeX to load', 'info');
+      setKatexBadge('KaTeX: loading', 'loading');
+      await whenKatexReady();
+      if (destroyed || sequence !== renderSequence) {
+        return;
+      }
+      windowKatex = getWindowKatex();
+    }
+
     if (windowKatex) {
       catxContainer.innerHTML = '';
       try {
-        windowKatex.render(tex, catxContainer, { throwOnError: false });
+        windowKatex.render(trimmedTex, catxContainer, { throwOnError: false });
         if (destroyed || sequence !== renderSequence) {
           return;
         }
@@ -202,6 +298,7 @@ export function mountEnginePane(
           fallbackContainer.innerHTML = '';
           displayEl.dataset.mode = 'katex';
           setStatus('Rendered with KaTeX', 'info');
+          setKatexBadge('KaTeX: loaded', 'loaded');
           return;
         }
       } catch (error) {
@@ -213,8 +310,26 @@ export function mountEnginePane(
       return;
     }
 
+    setKatexBadge('KaTeX: fallback', 'fallback');
     renderFallback(tex, htmlOutput);
   };
+
+  const handleKatexReady = () => {
+    if (destroyed) {
+      return;
+    }
+    setKatexBadge('KaTeX: loaded', 'loaded');
+    try {
+      const exported = engine.export();
+      void renderEngineState(exported);
+    } catch (error) {
+      console.warn('[engine-pane] Failed to re-render after KaTeX ready', error);
+    }
+  };
+  ownerDocument.addEventListener('katex:ready', handleKatexReady);
+  subscriptions.push(() => {
+    ownerDocument.removeEventListener('katex:ready', handleKatexReady);
+  });
 
   const applyExpression = (expression: string) => {
     const trimmed = expression.trim();

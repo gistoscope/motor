@@ -302,20 +302,50 @@
         padding: 1rem;
         min-height: 160px;
         transition: border-color 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
       }
 
-      .engine-pane__display[data-mode='catx'] {
+      .engine-pane__display[data-mode='catx'],
+      .engine-pane__display[data-mode='katex'] {
         border-color: rgba(37, 99, 235, 0.55);
+      }
+
+      .engine-pane__display[data-mode='katex-loading'] {
+        border-color: rgba(148, 163, 184, 0.7);
       }
 
       .engine-pane__display-catx,
       .engine-pane__display-fallback {
         min-height: 120px;
+        flex: 1;
       }
 
       .engine-pane__display-catx[hidden],
       .engine-pane__display-fallback[hidden] {
         display: none;
+      }
+
+      .engine-pane__display-badge {
+        align-self: flex-start;
+        border-radius: 999px;
+        padding: 0.15rem 0.65rem;
+        background: rgba(148, 163, 184, 0.16);
+        color: rgba(15, 23, 42, 0.75);
+        letter-spacing: 0.02em;
+      }
+
+      .engine-pane__display-badge[data-tone='loading'] {
+        color: rgba(37, 99, 235, 0.8);
+      }
+
+      .engine-pane__display-badge[data-tone='loaded'] {
+        color: rgba(22, 101, 52, 0.85);
+      }
+
+      .engine-pane__display-badge[data-tone='fallback'] {
+        color: rgba(180, 83, 9, 0.9);
       }
 
       .engine-pane__fallback-tex {
@@ -421,6 +451,12 @@
                   <div class="engine-pane__display" data-role="engine-display" data-mode="idle">
                     <div class="engine-pane__display-catx" data-role="engine-display-catx"></div>
                     <div class="engine-pane__display-fallback" data-role="engine-display-fallback"></div>
+                    <span
+                      class="engine-pane__display-badge katex-badge"
+                      data-role="engine-display-katex-badge"
+                    >
+                      KaTeX: loading
+                    </span>
                   </div>
                   <p class="engine-pane__status" data-role="engine-status"></p>
                 </div>
@@ -562,9 +598,25 @@
       </main>
     </div>
     <script
+      id="katex-cdn"
       defer
       src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
     ></script>
+    <script>
+      (function () {
+        var script = document.getElementById('katex-cdn');
+        if (!script) {
+          return;
+        }
+        script.addEventListener('load', function () {
+          try {
+            document.dispatchEvent(new Event('katex:ready'));
+          } catch (error) {
+            // ignore dispatch failures
+          }
+        });
+      })();
+    </script>
     <script type="module" src="/demo/tabs.mjs"></script>
     <script type="module" src="./main.js"></script>
   </body>
