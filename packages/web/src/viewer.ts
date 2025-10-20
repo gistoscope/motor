@@ -187,6 +187,17 @@ function fitToViewBox(container: HTMLElement | null): void {
   container.style.setProperty('aspect-ratio', `${width} / ${height}`);
 }
 
+function scheduleFitToViewBox(container: HTMLElement | null): void {
+  if (!isHTMLElement(container)) {
+    return;
+  }
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => fitToViewBox(container));
+    return;
+  }
+  window.setTimeout(() => fitToViewBox(container), 0);
+}
+
 function createStatusSetter(el: HTMLElement): (text: string, kind?: 'info' | 'error') => void {
   return (text, kind = 'info') => {
     el.textContent = text;
@@ -251,7 +262,7 @@ function resetGraphUI(
   dotEl.textContent = '';
   inspectEl.textContent = '';
   svgEl.innerHTML = '';
-  fitToViewBox(svgEl);
+  scheduleFitToViewBox(svgEl);
   resetNodeInfoPanel(nodeInfo);
 }
 
@@ -291,7 +302,7 @@ function renderGraphUI(
   inspectEl.textContent = inspectText;
 
   renderSVG(svgEl, graphJSON);
-  fitToViewBox(svgEl);
+  scheduleFitToViewBox(svgEl);
 }
 
 export function createViewer(root: HTMLElement, options: ViewerOptions = {}): ViewerHandle {

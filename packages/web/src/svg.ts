@@ -2,7 +2,7 @@ import type { GraphJSON } from './api';
 import { isElementNode, isHTMLElement } from './util/dom';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const NODE_RADIUS = 24;
+const DEFAULT_NODE_RADIUS = 24;
 const H_SPACING = 160;
 const V_SPACING = 160;
 const PADDING = 48;
@@ -56,26 +56,61 @@ function ensureMarker(svg: SVGSVGElement): void {
   svg.appendChild(defs);
 }
 
-function lineWithArrow(from: Point, to: Point): { start: Point; end: Point } {
+function parsePositiveLength(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null;
+  }
+  return parsed;
+}
+
+function resolveNodeRadius(container: HTMLElement): number {
+  const readFromElement = (element: Element | null): number | null => {
+    if (!element) {
+      return null;
+    }
+    try {
+      const computed = getComputedStyle(element);
+      const value = computed.getPropertyValue('--gr-node-radius');
+      return parsePositiveLength(value);
+    } catch {
+      return null;
+    }
+  };
+
+  const fromContainer = readFromElement(container);
+  if (fromContainer) {
+    return fromContainer;
+  }
+
+  const ownerDocument = container.ownerDocument ?? document;
+  const fromRoot = readFromElement(ownerDocument.documentElement);
+  return fromRoot ?? DEFAULT_NODE_RADIUS;
+}
+
+function lineWithArrow(from: Point, to: Point, nodeRadius: number): { start: Point; end: Point } {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   const distance = Math.sqrt(dx * dx + dy * dy);
 
   if (distance === 0) {
-    const start: Point = { x: from.x + NODE_RADIUS, y: from.y };
-    const end: Point = { x: from.x + NODE_RADIUS, y: from.y - 0.01 }; // keep marker direction stable
+    const start: Point = { x: from.x + nodeRadius, y: from.y };
+    const end: Point = { x: from.x + nodeRadius, y: from.y - 0.01 }; // keep marker direction stable
     return { start, end };
   }
 
   const ux = dx / distance;
   const uy = dy / distance;
   const start: Point = {
-    x: from.x + ux * NODE_RADIUS,
-    y: from.y + uy * NODE_RADIUS,
+    x: from.x + ux * nodeRadius,
+    y: from.y + uy * nodeRadius,
   };
   const end: Point = {
-    x: to.x - ux * NODE_RADIUS,
-    y: to.y - uy * NODE_RADIUS,
+    x: to.x - ux * nodeRadius,
+    y: to.y - uy * nodeRadius,
   };
   return { start, end };
 }
@@ -94,6 +129,7 @@ export function renderSVG(container: HTMLElement, graph: GraphJSON | null | unde
     return;
   }
 
+  const nodeRadius = resolveNodeRadius(container);
   const cols = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
   const rows = Math.max(1, Math.ceil(nodes.length / cols));
   const width = PADDING * 2 + (cols - 1) * H_SPACING;
@@ -131,15 +167,15 @@ export function renderSVG(container: HTMLElement, graph: GraphJSON | null | unde
     path.setAttribute('focusable', 'true');
 
     if (fromId === toId) {
-      const c1x = from.x + NODE_RADIUS;
-      const c1y = from.y - NODE_RADIUS * 1.5;
-      const c2x = from.x - NODE_RADIUS;
-      const c2y = from.y - NODE_RADIUS * 1.5;
+      const c1x = from.x + nodeRadius;
+      const c1y = from.y - nodeRadius * 1.5;
+      const c2x = from.x - nodeRadius;
+      const c2y = from.y - nodeRadius * 1.5;
       const endX = from.x;
-      const endY = from.y - NODE_RADIUS;
+      const endY = from.y - nodeRadius;
       path.setAttribute('d', `M ${from.x} ${from.y} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`);
     } else {
-      const { start, end } = lineWithArrow(from, to);
+      const { start, end } = lineWithArrow(from, to, nodeRadius);
       path.setAttribute('d', `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
     }
 
@@ -164,7 +200,7 @@ export function renderSVG(container: HTMLElement, graph: GraphJSON | null | unde
 
     const circle = createSvgElement('circle');
     circle.setAttribute('class', 'motor-node-circle');
-    circle.setAttribute('r', String(NODE_RADIUS));
+    circle.setAttribute('r', String(nodeRadius));
     circle.setAttribute('cx', String(node.position.x));
     circle.setAttribute('cy', String(node.position.y));
     circle.dataset.nodeId = node.id;
@@ -174,7 +210,7 @@ export function renderSVG(container: HTMLElement, graph: GraphJSON | null | unde
       const text = createSvgElement('text');
       text.setAttribute('class', 'motor-node-label');
       text.setAttribute('x', String(node.position.x));
-      text.setAttribute('y', String(node.position.y - NODE_RADIUS - 8));
+      text.setAttribute('y', String(node.position.y - nodeRadius - 8));
       text.setAttribute('text-anchor', 'middle');
       text.textContent = node.label;
       group.appendChild(text);
