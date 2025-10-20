@@ -1,5 +1,20 @@
+export interface KatexTrustContext {
+  readonly command: string;
+}
+
+export type KatexStrictResult = 'ignore' | 'warn' | 'error';
+
+export interface KatexRenderConfig {
+  throwOnError?: boolean;
+  trust?: boolean | ((context: KatexTrustContext) => boolean);
+  strict?:
+    | boolean
+    | KatexStrictResult
+    | ((errorCode: string, errorMsg?: string, token?: unknown) => KatexStrictResult);
+}
+
 export interface KatexModule {
-  render(tex: string, element: HTMLElement, options?: { throwOnError?: boolean }): void;
+  render(tex: string, element: HTMLElement, options?: KatexRenderConfig): void;
 }
 
 let cachedPromise: Promise<KatexModule | null> | null = null;
@@ -25,17 +40,39 @@ export function getKatexModule(): Promise<KatexModule | null> {
   return cachedPromise;
 }
 
+export interface RenderWithKatexOptions {
+  throwOnError?: boolean;
+  trustHtml?: boolean;
+}
+
+const TRUSTED_COMMANDS = new Set(['\\htmlId', '\\htmlClass']);
+
+function createRenderConfig(options: RenderWithKatexOptions): KatexRenderConfig {
+  const throwOnError = options.throwOnError ?? false;
+  if (!options.trustHtml) {
+    return { throwOnError };
+  }
+
+  return {
+    throwOnError,
+    trust: (context: KatexTrustContext) => TRUSTED_COMMANDS.has(context.command),
+    strict: (errorCode: string): KatexStrictResult =>
+      errorCode === 'htmlExtension' ? 'ignore' : 'warn',
+  };
+}
+
 export async function renderWithKatex(
   tex: string,
   element: HTMLElement,
-  options: { throwOnError?: boolean } = { throwOnError: false },
+  options: RenderWithKatexOptions = {},
 ): Promise<boolean> {
   const module = await getKatexModule();
   if (!module) {
     return false;
   }
   try {
-    module.render(tex, element, options);
+    const renderOptions = createRenderConfig(options);
+    module.render(tex, element, renderOptions);
     return true;
   } catch (error) {
     if (options.throwOnError) {
