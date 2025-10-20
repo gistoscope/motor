@@ -1,9 +1,15 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "composite": true,
     "rootDir": "src",
     "outDir": "dist",
-    "declaration": true
+    "moduleResolution": "Bundler"
   },
-  "include": ["src"]
+  "references": [
+    {
+      "path": "../core"
+    }
+  ],
+  "include": ["src/**/*"]
 }
