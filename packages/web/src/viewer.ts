@@ -9,10 +9,17 @@ import {
   type ShortestPathResult,
 } from './analysis';
 import { createOverlayController, type AnalysisPanelElements } from './overlays';
+import { createEventHub } from './ui/events';
 import { initHelp, type HelpOverlayHandle } from './ui/help';
+import {
+  bindShortestPanel,
+  type ShortestPanelElements,
+  type ShortestPanelEvents,
+  type ShortestPanelState,
+} from './ui/shortest';
 import { attachMathEngine } from './math/bridge';
 import type { MathBridgeHandle, MathEngine } from './math/types';
-import { getWarningMessage, type WebWarningCode } from './errors';
+import type { WebWarningCode } from './errors';
 import { isElementNode, isHTMLElement, isIdempotentClick, type IdempotentRelease } from './util/dom';
 import { isNonNegativeWeights } from './util/graph';
 
@@ -667,6 +674,21 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     },
     panel: analysisPanel,
   });
+  const shortestPanelElements: ShortestPanelElements = {
+    panel: shortestPanel,
+    sourceValue: shortestSourceValue,
+    targetValue: shortestTargetValue,
+    totalValue: shortestTotalValue,
+    infoValue: shortestInfoValue,
+    warningPanel: shortestWarningPanel,
+    warningValue: shortestWarningValue,
+    runButton: shortestRunButton,
+    resetButton: shortestResetButton,
+  };
+  const shortestEvents = createEventHub<ShortestPanelEvents>();
+  const releaseShortestPanel = bindShortestPanel(shortestEvents, shortestPanelElements, {
+    placeholder: DASH,
+  });
   const helpOverlay: HelpOverlayHandle = initHelp({ root: viewerRootEl, trigger: helpButtonEl });
   const mathMount = registerMathMount(mathPanelEl, mathHostEl, mathActionsEl);
 
@@ -685,7 +707,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   let currentDOTText = '';
   let currentInspectText = '';
   let parseInProgress = false;
-  let shortestAvailable = false;
+  let shortestMode: ShortestPanelState = 'hidden';
   let shortestSourceId: string | null = null;
   let shortestTargetId: string | null = null;
   let shortestResult: ShortestPathResult | null = null;
@@ -699,7 +721,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     currentDOTText = '';
     currentInspectText = '';
     graphWarningCode = null;
-    resetShortestState(false);
+    resetShortestState('hidden');
   }
 
   function getActiveWarning(): WebWarningCode | null {
@@ -718,79 +740,49 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
 
   function syncShortestOverlay() {
     overlayController.setShortestPath({
-      available: shortestAvailable,
+      available: shortestMode === 'ready' && Boolean(shortestResult),
       nodes: shortestResult?.nodes ?? [],
       edges: shortestResult?.edges ?? [],
     });
   }
 
   function updateShortestPanel() {
-    const panel = shortestPanel;
-    const sourceValue = shortestSourceValue;
-    const targetValue = shortestTargetValue;
-    const totalValue = shortestTotalValue;
-    const infoValue = shortestInfoValue;
-    const warningPanel = shortestWarningPanel;
-    const warningValue = shortestWarningValue;
-    const resetButton = shortestResetButton;
+    shortestEvents.emit('shortest:values', {
+      source: shortestSourceId,
+      target: shortestTargetId,
+      total: shortestResult ? shortestResult.totalWeight : null,
+    });
 
-    if (
-      !panel ||
-      !sourceValue ||
-      !targetValue ||
-      !totalValue ||
-      !infoValue ||
-      !warningPanel ||
-      !warningValue ||
-      !resetButton
-    ) {
-      return;
-    }
-
-    sourceValue.textContent = shortestSourceId ?? DASH;
-    targetValue.textContent = shortestTargetId ?? DASH;
-    totalValue.textContent = shortestResult ? String(shortestResult.totalWeight) : DASH;
-
-    let panelState: string;
     let infoText: string;
-
-    if (!shortestAvailable) {
-      panelState = 'disabled';
+    if (shortestMode === 'hidden') {
+      infoText = 'Load a graph to enable shortest paths.';
+    } else if (shortestMode === 'disabled') {
       infoText = 'Edge weights (≥ 0) required.';
     } else if (!shortestSourceId && !shortestTargetId) {
-      panelState = 'idle';
       infoText = 'Select source and target nodes to compute a path.';
     } else if (!shortestSourceId || !shortestTargetId) {
-      panelState = 'incomplete';
       infoText = 'Select the remaining node.';
     } else if (!shortestResult) {
-      panelState = 'no-path';
       infoText = 'No path found.';
     } else {
-      panelState = 'path';
       infoText = 'Shortest path ready.';
     }
 
-    const activeWarning = getActiveWarning();
-    if (activeWarning) {
-      warningPanel.dataset.state = 'visible';
-      warningPanel.hidden = false;
-      warningValue.dataset.code = activeWarning;
-      warningValue.textContent = getWarningMessage(activeWarning);
-    } else {
-      warningPanel.dataset.state = 'hidden';
-      warningPanel.hidden = true;
-      warningValue.dataset.code = '';
-      warningValue.textContent = '';
-    }
+    shortestEvents.emit('shortest:info', {
+      state: shortestMode,
+      message: infoText,
+    });
 
-    panel.dataset.state = panelState;
-    infoValue.textContent = infoText;
+    const activeWarning = shortestMode === 'hidden' ? null : getActiveWarning();
+    shortestEvents.emit('shortest:warning', activeWarning);
 
     const hasSelection = Boolean(shortestSourceId || shortestTargetId);
-    const canRun = shortestAvailable && Boolean(shortestSourceId && shortestTargetId);
-    resetButton.disabled = !shortestAvailable || !hasSelection;
-    shortestRunButton!.disabled = !canRun;
+    const canRun = shortestMode === 'ready' && Boolean(shortestSourceId && shortestTargetId);
+    const canReset = shortestMode === 'ready' && hasSelection;
+    shortestEvents.emit('shortest:controls', {
+      canRun,
+      canReset,
+    });
   }
 
   function syncNodeActions() {
@@ -809,8 +801,8 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       return;
     }
 
-    if (!shortestAvailable) {
-      actions.dataset.state = 'disabled';
+    if (shortestMode !== 'ready') {
+      actions.dataset.state = shortestMode === 'hidden' ? 'hidden' : 'disabled';
       sourceButton.disabled = true;
       targetButton.disabled = true;
       sourceButton.textContent = SOURCE_BUTTON_LABEL;
@@ -833,7 +825,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     targetButton.textContent = isTarget ? 'Target' : TARGET_BUTTON_LABEL;
   }
 
-  function resetShortestState(available: boolean) {
+  function resetShortestState(mode: ShortestPanelState) {
     shortestSourceId = null;
     shortestTargetId = null;
     shortestResult = null;
@@ -844,7 +836,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       overlayShortestToggle.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    shortestAvailable = available;
+    shortestMode = mode;
 
     syncShortestOverlay();
     updateShortestPanel();
@@ -852,7 +844,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   }
 
   function recomputeShortestPath() {
-    if (!shortestAvailable || !currentGraph || !shortestSourceId || !shortestTargetId) {
+    if (shortestMode !== 'ready' || !currentGraph || !shortestSourceId || !shortestTargetId) {
       shortestResult = null;
       runtimeWarningCode = null;
       syncShortestOverlay();
@@ -889,7 +881,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   }
 
   function setShortestSource(nodeId: string | null) {
-    if (!nodeId || !shortestAvailable || !nodeStats.has(nodeId)) {
+    if (!nodeId || shortestMode !== 'ready' || !nodeStats.has(nodeId)) {
       return;
     }
 
@@ -900,7 +892,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   }
 
   function setShortestTarget(nodeId: string | null) {
-    if (!nodeId || !shortestAvailable || !nodeStats.has(nodeId)) {
+    if (!nodeId || shortestMode !== 'ready' || !nodeStats.has(nodeId)) {
       return;
     }
 
@@ -1120,7 +1112,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
     resetNodeInfoPanel(nodeInfoElements);
     syncNodeClasses();
     syncEdgeClasses();
-    resetShortestState(weightsAttached);
+    resetShortestState(weightsAttached ? 'ready' : 'disabled');
     setGraphWarning(hasNegativeWeights ? 'WEB.E3.NEGATIVE_WEIGHT' : null);
 
     currentGraph = data;
@@ -1440,7 +1432,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
   resetGraphUI(nodesNode, edgesNode, listNode, dotNode, inspectNode, svgNode, nodeInfoElements);
   overlayController.setAnalysis(null);
   clearInteractionState();
-  resetShortestState(false);
+  resetShortestState('hidden');
   if (textareaEl.value.trim()) {
     parseAndRender();
   }
@@ -1472,6 +1464,7 @@ export function createViewer(root: HTMLElement, options: ViewerOptions = {}): Vi
       releaseImportGuard?.();
       releaseImportGuard = null;
       unregisterMathMount(mathMount);
+      releaseShortestPanel();
       overlayController.destroy();
       helpOverlay.destroy();
       root.innerHTML = '';
