@@ -1,57 +1,51 @@
 export type EventMap = Record<string, unknown>;
 
-export type Unsubscribe = () => void;
+export type EventListener<T> = (payload: T) => void;
 
-export type EventHub<T extends EventMap> = {
-  on<K extends keyof T & string>(event: K, cb: (payload: T[K]) => void): Unsubscribe;
-  off<K extends keyof T & string>(event: K, cb: (payload: T[K]) => void): void;
-  emit<K extends keyof T & string>(event: K, payload: T[K]): void;
+export interface EventHub<E extends EventMap = EventMap> {
+  on<K extends keyof E & string>(type: K, listener: EventListener<E[K]>): () => void;
+  once<K extends keyof E & string>(type: K, listener: EventListener<E[K]>): () => void;
+  off<K extends keyof E & string>(type: K, listener: EventListener<E[K]>): void;
+  emit<K extends keyof E & string>(type: K, payload: E[K]): void;
   clear(): void;
-};
+}
 
-type EventHandler<T extends EventMap, K extends keyof T & string = keyof T & string> = (
-  payload: T[K],
-) => void;
+/**
+ * Minimal type-safe event hub with no deps.
+ */
+export function createEventHub<E extends EventMap = EventMap>(): EventHub<E> {
+  const table = new Map<string, Set<Function>>();
 
-export function createEventHub<T extends EventMap>(): EventHub<T> {
-  const handlers = new Map<keyof T & string, Set<EventHandler<T>>>();
-
-  const on = <K extends keyof T & string>(event: K, cb: EventHandler<T, K>): Unsubscribe => {
-    let listeners = handlers.get(event);
-    if (!listeners) {
-      listeners = new Set();
-      handlers.set(event, listeners);
-    }
-    listeners.add(cb as EventHandler<T>);
-    return () => {
-      off(event, cb);
-    };
+  const _on = (type: string, listener: Function) => {
+    let set = table.get(type);
+    if (!set) { set = new Set(); table.set(type, set); }
+    set.add(listener);
+    return () => set!.delete(listener);
   };
 
-  const off = <K extends keyof T & string>(event: K, cb: EventHandler<T, K>): void => {
-    const listeners = handlers.get(event);
-    if (!listeners) {
-      return;
-    }
-    listeners.delete(cb as EventHandler<T>);
-    if (listeners.size === 0) {
-      handlers.delete(event);
-    }
-  };
+  return {
+    on: _on as EventHub<E>['on'],
 
-  const emit = <K extends keyof T & string>(event: K, payload: T[K]): void => {
-    const listeners = handlers.get(event);
-    if (!listeners) {
-      return;
-    }
-    for (const handler of listeners) {
-      (handler as EventHandler<T, K>)(payload);
-    }
-  };
+    once(type, listener) {
+      const off = _on(type, (payload: unknown) => {
+        off();
+        (listener as any)(payload);
+      });
+      return off as any;
+    },
 
-  const clear = () => {
-    handlers.clear();
-  };
+    off(type, listener) {
+      table.get(type)?.delete(listener as any);
+    },
 
-  return { on, off, emit, clear };
+    emit(type, payload) {
+      const set = table.get(type);
+      if (!set) return;
+      for (const fn of Array.from(set)) (fn as any)(payload);
+    },
+
+    clear() {
+      table.clear();
+    },
+  };
 }
