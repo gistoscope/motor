@@ -1,16 +1,23 @@
-import { createEventHub, type EventHub, type EventMap } from './events';
+import type { EventMap } from './events';
 
+export type NodeId = string;
+
+/**
+ * Events for the "Shortest path" panel.
+ * Must extend EventMap so it satisfies createEventHub<E extends EventMap>.
+ */
 export interface ShortestPanelEvents extends EventMap {
-  'shortest:enabled': { enabled: boolean };
-  'shortest:warning': {
-    code: 'WEB.E3.NEGATIVE_WEIGHT' | 'WEB.E4.NO_PATH' | null;
-    message?: string | null;
-  };
-  'shortest:reset': {};
-}
+  'shortest:availability': null;
+  'shortest:status': { code: string | null; message: string | null };
 
-export type ShortestPanelEventHub = EventHub<ShortestPanelEvents>;
+  'shortest:set-source': NodeId | null;
+  'shortest:set-target': NodeId | null;
 
-export function createShortestPanelEventHub(): ShortestPanelEventHub {
-  return createEventHub<ShortestPanelEvents>();
+  'shortest:run': { source: NodeId; target: NodeId } | null;
+
+  'overlay:toggle': { kind: 'scc' | 'cycles'; enabled: boolean };
+  'analysis:recompute': null;
+  'analysis:update': { hasCycle: boolean; sccCount: number; cycleEdges: number };
+
+  'graph:loaded': null;
 }
