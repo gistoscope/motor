@@ -12,34 +12,74 @@ export interface EventHub<E extends EventMap = EventMap> {
 
 /** Minimal type-safe event hub with no deps. */
 export function createEventHub<E extends EventMap = EventMap>(): EventHub<E> {
-  const table = new Map<string, Set<Function>>();
+  type UnknownListener = (payload: unknown) => void;
+  const table = new Map<string, Set<UnknownListener>>();
 
-  const _on = (type: string, listener: Function) => {
+  const ensureListeners = (type: string): Set<UnknownListener> => {
     let set = table.get(type);
-    if (!set) { set = new Set(); table.set(type, set); }
+    if (!set) {
+      set = new Set();
+      table.set(type, set);
+    }
+    return set;
+  };
+
+  const addListener = (type: string, listener: UnknownListener): (() => void) => {
+    const set = ensureListeners(type);
     set.add(listener);
-    return () => set!.delete(listener);
+    return () => {
+      const listeners = table.get(type);
+      if (!listeners) {
+        return;
+      }
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        table.delete(type);
+      }
+    };
+  };
+
+  const removeListener = (type: string, listener: UnknownListener): void => {
+    const listeners = table.get(type);
+    if (!listeners) {
+      return;
+    }
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      table.delete(type);
+    }
   };
 
   return {
-    on: _on as EventHub<E>['on'],
+    on(type, listener) {
+      return addListener(type, listener as UnknownListener) as () => void;
+    },
 
     once(type, listener) {
-      const off = _on(type, (payload: unknown) => {
-        off();
-        (listener as any)(payload);
-      });
-      return off as any;
+      let release: (() => void) | null = null;
+      const wrapped: UnknownListener = (payload) => {
+        release?.();
+        (listener as UnknownListener)(payload);
+      };
+      release = addListener(type, wrapped);
+      return () => {
+        release?.();
+        release = null;
+      };
     },
 
     off(type, listener) {
-      table.get(type)?.delete(listener as any);
+      removeListener(type, listener as UnknownListener);
     },
 
     emit(type, payload) {
-      const set = table.get(type);
-      if (!set) return;
-      for (const fn of Array.from(set)) (fn as any)(payload);
+      const listeners = table.get(type);
+      if (!listeners) {
+        return;
+      }
+      for (const fn of Array.from(listeners)) {
+        fn(payload);
+      }
     },
 
     clear() {
