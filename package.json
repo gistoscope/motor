@@ -8,6 +8,7 @@
   "scripts": {
     "verify": "node scripts/verify-no-web.mjs",
     "build": "pnpm -r build",
+    "build:libs": "tsc -b packages/core packages/tsa",
     "test": "pnpm -r test",
     "log2test": "node scripts/log2test.mjs",
     "dev:web": "pnpm --filter @motor/web dev",
