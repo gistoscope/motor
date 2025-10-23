@@ -329,10 +329,10 @@ export function mountEnginePane(
   };
 
   inputEl.addEventListener('input', handleInput);
-  inputEl.addEventListener('keydown', handleKeydown);
+  inputEl.addEventListener('keydown', handleKeydown as unknown as EventListener);
   subscriptions.push(() => {
     inputEl.removeEventListener('input', handleInput);
-    inputEl.removeEventListener('keydown', handleKeydown);
+    inputEl.removeEventListener('keydown', handleKeydown as unknown as EventListener);
   });
 
   if (isHTMLFormElement(formEl)) {

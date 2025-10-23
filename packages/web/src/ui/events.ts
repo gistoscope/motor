@@ -10,9 +10,7 @@ export interface EventHub<E extends EventMap = EventMap> {
   clear(): void;
 }
 
-/**
- * Minimal type-safe event hub with no deps.
- */
+/** Minimal type-safe event hub with no deps. */
 export function createEventHub<E extends EventMap = EventMap>(): EventHub<E> {
   const table = new Map<string, Set<Function>>();
 
