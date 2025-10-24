@@ -1,0 +1,37 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "declarationMap": false,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@motor/core": [
+        "../core/src/index.ts"
+      ],
+      "@motor/core/*": [
+        "../core/src/*"
+      ],
+      "@motor/parser": [
+        "../parser/src/index.ts"
+      ],
+      "@motor/parser/*": [
+        "../parser/src/*"
+      ]
+    }
+  },
+  "references": [
+    {
+      "path": "../core/tsconfig.build.json"
+    },
+    {
+      "path": "../parser/tsconfig.build.json"
+    }
+  ],
+  "include": [
+    "src/**/*"
+  ]
+}

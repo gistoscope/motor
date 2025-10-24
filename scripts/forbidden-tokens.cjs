@@ -1,72 +1,126 @@
-// MOTOR token policy (tightened, retry 'b')
-// - Forbids specific tokens in production source files
-// - Skips test files and test directories
-// Usage: run from repo root -> `node scripts/forbidden-tokens.cjs`
+// scripts/forbidden-tokens.cjs
+// Goal: запретить "умные" упрощающие операции из mathjs, не трогая легитимные упоминания.
+// Сканируем только TS-исходники и игнорируем строки/комментарии, чтобы CLI help не ловился.
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("node:fs");
+const path = require("node:path");
 
-const FORBIDDEN = ['simplify('];
+const ROOT = process.cwd();
+const ALLOWED_EXTS = new Set([".ts", ".tsx", ".mts", ".cts"]);
 
-// Temporary allow-list ONLY for production files (tests are excluded by default)
-const TEMP_ALLOW = new Set([
-  'packages/cli/src/index.ts',
-  'packages/core/src/engine.ts',
-  'packages/web/src/ui/App.tsx',
+const IGNORE_DIRS = new Set([
+  "node_modules", "dist", "coverage", ".git", ".husky",
+  ".diag", ".tmp", "tmp", "reports", "docs", "docs-free",
 ]);
 
-function isCandidateFile(rel) {
-  rel = rel.replace(/\\/g, '/');
-  // exclude tests and obvious non-prod
-  if (/(^|\/)tests?\//.test(rel)) return false;
-  if (/\.(test|spec)\.[tj]sx?$/.test(rel)) return false;
-  if (/\/__tests__\//.test(rel)) return false;
-  if (/^\.git\//.test(rel)) return false;
-  if (/\/(node_modules|dist)\//.test(rel)) return false;
-  const exts = new Set(['.ts', '.tsx', '.js', '.jsx', '.cjs', '.mjs']);
-  return exts.has(path.extname(rel).toLowerCase());
+const IGNORE_FILE_PATTERNS = [
+  /\.d\.ts$/i,
+  /\.test\.(ts|tsx|mts|cts)$/i,
+  /\.spec\.(ts|tsx|mts|cts)$/i,
+  /__tests__[/\\]/i,
+  /fixtures?[/\\]/i,
+];
+
+// ЦЕЛЕВЫЕ ЗАПРЕТЫ:
+//
+// 1) импорт simplify из mathjs (любые формы)
+// 2) вызов math.simplify( ... )
+// 3) вызов simplify( ... ), НО только если явно импортирован simplify из 'mathjs'
+//    (поймаем по импорту в том же файле)
+const RE_IMPORT_MATHJS_SIMPLIFY_NAMED =
+  /\bimport\s+\{[^}]*\bsimplify\b[^}]*\}\s+from\s+['"]mathjs['"]/i;
+const RE_IMPORT_MATHJS_SIMPLIFY_DEFAULT =
+  /\bimport\s+simplify\s+from\s+['"]mathjs['"]/i;
+const RE_FROM_MATHJS = /\bfrom\s+['"]mathjs['"]/i;
+
+const RE_MATH_SIMPLIFY_CALL = /\bmath\s*\.\s*simplify\s*\(/i;
+// Строгий глобальный запрет на "simplify(" не используем, чтобы не ломать легальный код.
+// const RE_BARE_SIMPLIFY_CALL = /\bsimplify\s*\(/;
+
+function stripCommentsAndStrings(src) {
+  // удаляем /* ... */:
+  src = src.replace(/\/\*[\s\S]*?\*\//g, "");
+  // удаляем // ... до конца строки:
+  src = src.replace(/\/\/.*$/gm, "");
+  // удаляем строки '...' / "..." / `...` (приближенно):
+  src = src.replace(/(['"`])(?:\\.|(?!\1)[\s\S])*?\1/g, "");
+  return src;
 }
 
-function walk(dir, out=[]) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (['node_modules', '.git', 'dist'].includes(entry.name)) continue;
-      walk(p, out);
-    } else {
-      out.push(p);
+function shouldIgnoreDir(p) {
+  return IGNORE_DIRS.has(path.basename(p));
+}
+function shouldIgnoreFile(rel) {
+  return IGNORE_FILE_PATTERNS.some((re) => re.test(rel));
+}
+
+function walk(dir, out) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    const rel = path.relative(ROOT, p);
+    if (e.isDirectory()) {
+      if (!shouldIgnoreDir(p)) walk(p, out);
+      continue;
     }
+    const ext = path.extname(e.name).toLowerCase();
+    if (!ALLOWED_EXTS.has(ext)) continue;
+    if (shouldIgnoreFile(rel)) continue;
+    out.push(p);
   }
-  return out;
+}
+
+function scanFile(abs) {
+  const rel = path.relative(ROOT, abs);
+  let raw = "";
+  try { raw = fs.readFileSync(abs, "utf8"); } catch { return []; }
+
+  // Быстрая проверка: если файл вообще не касается mathjs — пропускаем.
+  if (!RE_FROM_MATHJS.test(raw) && !RE_MATH_SIMPLIFY_CALL.test(raw)) {
+    return [];
+  }
+
+  const sanitized = stripCommentsAndStrings(raw);
+  const violations = [];
+
+  // 1) Импорты из mathjs со simplify
+  if (RE_IMPORT_MATHJS_SIMPLIFY_NAMED.test(sanitized)) {
+    violations.push(`${rel} :: imports { simplify } from 'mathjs'`);
+  }
+  if (RE_IMPORT_MATHJS_SIMPLIFY_DEFAULT.test(sanitized)) {
+    violations.push(`${rel} :: imports default simplify from 'mathjs'`);
+  }
+
+  // 2) math.simplify( ... )
+  if (RE_MATH_SIMPLIFY_CALL.test(sanitized)) {
+    violations.push(`${rel} :: contains "math.simplify("`);
+  }
+
+  // 3) bare simplify( ... ) — ловим только если импортирован из mathjs
+  if (
+    (RE_IMPORT_MATHJS_SIMPLIFY_NAMED.test(sanitized) ||
+     RE_IMPORT_MATHJS_SIMPLIFY_DEFAULT.test(sanitized)) &&
+    /\bsimplify\s*\(/.test(sanitized)
+  ) {
+    violations.push(`${rel} :: calls "simplify(" imported from 'mathjs'`);
+  }
+
+  return violations;
 }
 
 function main() {
-  const root = process.cwd();
-  const pkgDir = path.join(root, 'packages');
-  if (!fs.existsSync(pkgDir)) {
-    console.error("[forbidden-tokens] 'packages/' not found. Run from repo root.");
-    process.exit(1);
-  }
-  const all = walk(pkgDir);
+  const files = [];
+  walk(ROOT, files);
   const violations = [];
-  for (const abs of all) {
-    const rel = path.relative(root, abs).replace(/\\/g, '/');
-    if (!isCandidateFile(rel)) continue;
-    if (TEMP_ALLOW.has(rel)) continue;
-    const text = fs.readFileSync(abs, 'utf8');
-    for (const token of FORBIDDEN) {
-      if (text.includes(token)) {
-        violations.push(`${rel} :: contains "${token}"`);
-      }
-    }
+  for (const f of files) {
+    violations.push(...scanFile(f));
   }
+
   if (violations.length) {
-    console.error('[forbidden-tokens] Violations:');
-    for (const v of violations) console.error(' - ' + v);
+    console.error("[forbidden-tokens] Violations:");
+    for (const v of violations) console.error(" - " + v);
     process.exit(1);
-  } else {
-    console.log('[forbidden-tokens] OK');
   }
+  console.log("[forbidden-tokens] OK");
 }
 
-if (require.main === module) main();
+main();

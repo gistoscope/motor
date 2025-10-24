@@ -16,3 +16,7 @@
 *.gif binary
 *.zip binary
 *.pdf binary
+
+.husky/* text eol=lf
+
+.husky/* text eol=lf
