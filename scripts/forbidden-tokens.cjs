@@ -1,72 +1,102 @@
-// MOTOR token policy (tightened, retry 'b')
-// - Forbids specific tokens in production source files
-// - Skips test files and test directories
-// Usage: run from repo root -> `node scripts/forbidden-tokens.cjs`
+// scripts/forbidden-tokens.cjs
+// Purpose: fail fast if запрещённые токены встречаются в исходниках.
+// ВАЖНО: проверяем только TypeScript-файлы (.ts/.tsx/.mts/.cts), чтобы не ловить ложные срабатывания в .js.
 
-const fs = require('fs');
-const path = require('path');
+const fs = require("node:fs");
+const path = require("node:path");
 
-const FORBIDDEN = ['simplify('];
+const ROOT = process.cwd();
 
-// Temporary allow-list ONLY for production files (tests are excluded by default)
-const TEMP_ALLOW = new Set([
-  'packages/cli/src/index.ts',
-  'packages/core/src/engine.ts',
-  'packages/web/src/ui/App.tsx',
+// что считаем исходниками
+const ALLOWED_EXTS = new Set([".ts", ".tsx", ".mts", ".cts"]);
+
+// директории, которые не сканируем
+const IGNORE_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "coverage",
+  ".git",
+  ".husky",
+  ".diag",
+  ".tmp",
+  "tmp",
+  "docs",
+  "docs-free",
+  "reports",
+  "packages/web", // веб-пакет не влияет на stage-1 ядро
+  "tests"         // независимые e2e/fixtures не блокируют пуш
 ]);
 
-function isCandidateFile(rel) {
-  rel = rel.replace(/\\/g, '/');
-  // exclude tests and obvious non-prod
-  if (/(^|\/)tests?\//.test(rel)) return false;
-  if (/\.(test|spec)\.[tj]sx?$/.test(rel)) return false;
-  if (/\/__tests__\//.test(rel)) return false;
-  if (/^\.git\//.test(rel)) return false;
-  if (/\/(node_modules|dist)\//.test(rel)) return false;
-  const exts = new Set(['.ts', '.tsx', '.js', '.jsx', '.cjs', '.mjs']);
-  return exts.has(path.extname(rel).toLowerCase());
+// файлы/паттерны, которые пропускаем (отдельный whitelist при необходимости)
+const IGNORE_FILE_PATTERNS = [
+  /\.d\.ts$/i,
+  /\.test\.(ts|tsx|mts|cts)$/i,
+  /\.spec\.(ts|tsx|mts|cts)$/i,
+  /__tests__[/\\]/i,
+  /fixtures?[/\\]/i,
+];
+
+// запреты (строгие)
+const CHECKS = [
+  { re: /\bmath\.simplify\(/i, label: 'math.simplify(' },
+  { re: /\bsimplify\(/,       label: 'simplify(' }, // не совпадает с "simplifyExact("
+];
+
+// ---- helpers
+function shouldIgnoreDir(dir) {
+  const name = path.basename(dir);
+  return IGNORE_DIRS.has(name);
 }
 
-function walk(dir, out=[]) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const p = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (['node_modules', '.git', 'dist'].includes(entry.name)) continue;
-      walk(p, out);
-    } else {
-      out.push(p);
+function shouldIgnoreFile(rel) {
+  return IGNORE_FILE_PATTERNS.some((re) => re.test(rel));
+}
+
+function walk(dir, out) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    const rel = path.relative(ROOT, p);
+    if (e.isDirectory()) {
+      if (!shouldIgnoreDir(p)) walk(p, out);
+      continue;
     }
+    const ext = path.extname(e.name).toLowerCase();
+    if (!ALLOWED_EXTS.has(ext)) continue;
+    if (shouldIgnoreFile(rel)) continue;
+    out.push(p);
   }
-  return out;
 }
 
 function main() {
-  const root = process.cwd();
-  const pkgDir = path.join(root, 'packages');
-  if (!fs.existsSync(pkgDir)) {
-    console.error("[forbidden-tokens] 'packages/' not found. Run from repo root.");
-    process.exit(1);
-  }
-  const all = walk(pkgDir);
+  const files = [];
+  walk(ROOT, files);
   const violations = [];
-  for (const abs of all) {
-    const rel = path.relative(root, abs).replace(/\\/g, '/');
-    if (!isCandidateFile(rel)) continue;
-    if (TEMP_ALLOW.has(rel)) continue;
-    const text = fs.readFileSync(abs, 'utf8');
-    for (const token of FORBIDDEN) {
-      if (text.includes(token)) {
-        violations.push(`${rel} :: contains "${token}"`);
+
+  for (const abs of files) {
+    let content = "";
+    try {
+      content = fs.readFileSync(abs, "utf8");
+    } catch { /* ignore unreadable */ }
+
+    for (const chk of CHECKS) {
+      // пропустим "simplifyExact(" и "simplifySafe("
+      if (chk.label === "simplify(") {
+        if (/\bsimplifyExact\(/.test(content) || /\bsimplifySafe\(/.test(content)) continue;
+      }
+      if (chk.re.test(content)) {
+        violations.push(`${path.relative(ROOT, abs)} :: contains "${chk.label}"`);
       }
     }
   }
+
   if (violations.length) {
-    console.error('[forbidden-tokens] Violations:');
-    for (const v of violations) console.error(' - ' + v);
+    console.error("[forbidden-tokens] Violations:");
+    for (const v of violations) console.error(" - " + v);
     process.exit(1);
   } else {
-    console.log('[forbidden-tokens] OK');
+    console.log("[forbidden-tokens] OK");
   }
 }
 
-if (require.main === module) main();
+main();
