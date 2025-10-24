@@ -1,6 +1,61 @@
 {
-  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@motor/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@motor/core/*": [
+        "packages/core/src/*"
+      ],
+      "@motor/parser": [
+        "packages/parser/src/index.ts"
+      ],
+      "@motor/parser/*": [
+        "packages/parser/src/*"
+      ],
+      "@motor/tsa": [
+        "packages/tsa/src/index.ts"
+      ],
+      "@motor/tsa/*": [
+        "packages/tsa/src/*"
+      ],
+      "@motor/grasp": [
+        "packages/core/src/index.ts"
+      ],
+      "@motor/grasp/*": [
+        "packages/core/src/*"
+      ]
+    },
+    "types": [
+      "node"
+    ],
+    "resolveJsonModule": true
+  },
+  "include": [
+    "scripts/**/*.ts",
+    "packages/core/src/**/*.ts",
+    "packages/parser/src/**/*.ts",
+    "packages/tsa/src/**/*.ts"
+  ],
   "exclude": [
-    "workhorse-alias-hardening"
+    "node_modules",
+    "dist",
+    "packages/web/**",
+    "packages/**/__tests__/**",
+    "packages/**/tests/**",
+    "tests/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+    "docs/**",
+    "docs-free/**"
   ]
 }

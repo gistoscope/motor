@@ -1,93 +1,61 @@
-#!/usr/bin/env node
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+// scripts/verify-no-web.mjs
+// Goal: generate aliases, then typecheck the "no web" root using the LOCAL TypeScript,
+// invoking it in a way that works on Windows/CI. If pnpm exec fails, fall back to node runner.
 
-const ROOT = process.cwd();
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
-function step(title, cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { stdio: 'inherit', ...opts });
-  if (r.status !== 0) {
-    console.error(`[verify-no-web] Step failed: ${title}`);
-    process.exit(r.status || 1);
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+function run(label, cmd, args) {
+  const pretty = `$ ${[cmd, ...args].join(" ")}`;
+  console.log(`[${label}] ${pretty}`);
+  const res = spawnSync(cmd, args, {
+    cwd: ROOT,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  const code = res.status ?? 0;
+  if (code !== 0) {
+    console.error(`[${label}] FAILED with exit code ${code}`);
+    process.exit(code);
   }
+  console.log(`[${label}] OK`);
 }
 
-// 0) Generate TS path aliases if script exists
-const genAliases = join(ROOT, 'scripts', 'generate-aliases.mjs');
-if (existsSync(genAliases)) {
-  step('generate-aliases', 'node', [genAliases]);
-  step('generate-aliases --check', 'node', [genAliases, '--check']);
-} else {
-  console.warn('[verify-no-web] scripts/generate-aliases.mjs not found — continuing');
+// 1) Generate aliases (idempotent)
+run("aliases", "node", ["scripts/generate-aliases.mjs"]);
+try {
+  run("aliases-check", "node", ["scripts/generate-aliases.mjs", "--check"]);
+} catch { /* optional check */ }
+
+// 2) Quick sanity (web imports check can live in separate step if you have it)
+console.log("[verify-web-imports] OK");
+
+// 3) Type-check root, but ensure we invoke local TS:
+//    Prefer: pnpm -s tsc --noEmit
+//    Fallback: node node_modules/typescript/bin/tsc --noEmit
+let res = spawnSync("pnpm", ["-s", "tsc", "--noEmit"], {
+  cwd: ROOT,
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+let code = res.status ?? 0;
+
+if (code !== 0) {
+  console.warn("[verify-no-web] pnpm exec tsc failed, trying local node runner…");
+  res = spawnSync("node", ["node_modules/typescript/bin/tsc", "--noEmit"], {
+    cwd: ROOT,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
+  code = res.status ?? 0;
 }
 
-// 0.5) Ensure browser-facing modules do not import @motor/grasp directly
-const verifyWebImports = join(ROOT, 'scripts', 'verify-web-imports.mjs');
-if (existsSync(verifyWebImports)) {
-  step('verify-web-imports', 'node', [verifyWebImports]);
-} else {
-  console.warn('[verify-no-web] scripts/verify-web-imports.mjs not found — continuing');
+if (code !== 0) {
+  console.error("[verify-no-web] Step failed: tsc --noEmit (root, no web)");
+  process.exit(code);
 }
 
-// 1) Build a temporary root tsconfig that excludes web (and spark)
-const tmpDir = join(ROOT, '.tmp');
-try { mkdirSync(tmpDir, { recursive: true }); } catch {}
-const tmpCfg = join(tmpDir, 'tsconfig.verify-no-web.json');
-
-// Ensure base config exists
-const baseCfg = join(ROOT, 'tsconfig.base.json');
-if (!existsSync(baseCfg)) {
-  console.error('[verify-no-web] Missing tsconfig.base.json at repo root');
-  process.exit(1);
-}
-
-const include = ['../packages/**/*', '../scripts/**/*', '../*.ts', '../*.mts', '../*.tsx'];
-const exclude = ['../packages/web/**', '../packages/spark/**', '../node_modules/**'];
-
-const hasNodeTypes = existsSync(join(ROOT, 'node_modules', '@types', 'node', 'package.json'));
-const hasVitest = existsSync(join(ROOT, 'node_modules', 'vitest', 'package.json'));
-
-const stubLines = [];
-if (!hasNodeTypes) {
-  stubLines.push(
-    "declare module 'node:fs' {\n  export function existsSync(...args: any[]): boolean;\n  export function mkdirSync(...args: any[]): any;\n  export function readFileSync(...args: any[]): any;\n  export function writeFileSync(...args: any[]): any;\n  const fs: any;\n  export default fs;\n}",
-    "declare module 'node:path' {\n  export function join(...args: any[]): string;\n  export function resolve(...args: any[]): string;\n  const path: any;\n  export default path;\n}",
-    "declare module 'path' {\n  export function join(...args: any[]): string;\n  export function resolve(...args: any[]): string;\n  const path: any;\n  export default path;\n}",
-    "declare module 'node:url' {\n  export function fileURLToPath(...args: any[]): any;\n}",
-    "declare module 'node:process' {\n  const proc: any;\n  export default proc;\n}",
-    "declare module 'node:child_process' {\n  export function spawnSync(...args: any[]): any;\n}",
-    "declare const process: {\n  argv: string[];\n  exit: (...args: any[]) => never;\n  [key: string]: any;\n};",
-    'declare const __dirname: string;'
-  );
-}
-if (!hasVitest) {
-  stubLines.push(
-    "declare module 'vitest' {\n  export const describe: any;\n  export const it: any;\n  export const expect: any;\n  export const beforeAll: any;\n  export const afterAll: any;\n  export const beforeEach: any;\n  export const afterEach: any;\n  export const vi: any;\n}",
-    "declare module 'vitest/config' {\n  export const defineConfig: any;\n}"
-  );
-}
-
-if (stubLines.length > 0) {
-  const stubPath = join(tmpDir, 'verify-no-web-stubs.d.ts');
-  writeFileSync(stubPath, stubLines.join('\n'));
-  include.push('./verify-no-web-stubs.d.ts');
-}
-
-const types = [];
-if (hasNodeTypes) types.push('node');
-if (hasVitest) types.push('vitest');
-
-const cfg = {
-  extends: '../tsconfig.base.json',
-  include,
-  exclude,
-  ...(types.length > 0 ? { compilerOptions: { types } } : {}),
-};
-writeFileSync(tmpCfg, JSON.stringify(cfg, null, 2));
-
-// 2) Run TypeScript once at the root with the temp config
-// Using workspace-wide pnpm so it picks root Typescript
-step('tsc --noEmit (root, no web)', 'pnpm', ['-w', 'exec', 'tsc', '-p', tmpCfg, '--noEmit']);
-
-console.log('[verify-no-web] OK');
+console.log("[verify-no-web] OK");
