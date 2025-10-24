@@ -1,4 +1,36 @@
 #!/usr/bin/env sh
-node scripts/forbidden-tokens.cjs || exit 1
-pnpm run verify || exit 1
-pnpm -r test || exit 1
+set -eu
+
+# Определяем upstream (например, origin/sandbox)
+UPSTREAM="$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "")"
+
+if [ -n "$UPSTREAM" ]; then
+  CHANGED_FILES="$(git diff --name-only "$UPSTREAM"...HEAD || true)"
+else
+  # fallback: если upstream не настроен
+  CHANGED_FILES="$(git diff --name-only || true)"
+fi
+
+# если пусто, пробуем индекс (новая ветка)
+if [ -z "$CHANGED_FILES" ]; then
+  CHANGED_FILES="$(git diff --name-only --cached || true)"
+fi
+
+# Правила «только доки/медиа»
+is_docs_only=true
+for f in $CHANGED_FILES; do
+  case "$f" in
+    docs/*|docs/**|*.md|*.pdf|*.png|*.jpg|*.jpeg|*.gif|*.svg) ;;
+    *) is_docs_only=false; break ;;
+  esac
+done
+
+if [ "$is_docs_only" = "true" ]; then
+  echo "[pre-push] docs-only change detected — skipping verify/tests"
+  exit 0
+fi
+
+# Полные проверки для кода
+node scripts/forbidden-tokens.cjs
+pnpm run verify
+pnpm -r test
