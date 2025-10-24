@@ -1,23 +1,4 @@
-﻿#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
-# Collect staged changes (files to be pushed)
-CHANGED="$(git diff --name-only --cached)"
-
-# Allow pushing if only docs-free (and repo root readme/license) are staged
-if [ -n "$CHANGED" ]; then
-  NON_DOCS=$(echo "$CHANGED" | grep -vE '^(docs-free/|README\.md|LICENSE|LICENSE\.md)$' || true)
-  if [ -z "$NON_DOCS" ]; then
-    echo "[pre-push] docs-free only  skipping verify/tests/token-policy."
-    exit 0
-  fi
-fi
-
-echo "[pre-push] code changes detected  running verify/tests/token-policy"
-pnpm install --frozen-lockfile || exit 1
+#!/usr/bin/env sh
+node scripts/forbidden-tokens.cjs || exit 1
 pnpm run verify || exit 1
 pnpm -r test || exit 1
-# If your repo has a token policy script, keep it; otherwise this line can be removed.
-if npm run | grep -q "token-policy"; then pnpm run token-policy || exit 1; fi
-
-echo "[pre-push] OK"
