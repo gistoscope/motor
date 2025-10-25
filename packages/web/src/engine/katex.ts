@@ -1,4 +1,5 @@
 import { isHTMLElement } from '../util/dom';
+import { applyAnchorsToKatex } from '../view/anchor';
 
 type KatexLike = {
   render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
@@ -151,6 +152,7 @@ export async function renderWithKaTeX(
 
   try {
     katex.render(content, targetEl, { throwOnError: false });
+    applyAnchorsToKatex(targetEl, (_el, index) => `tok:${index}`);
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
     return true;
   } catch (error) {
