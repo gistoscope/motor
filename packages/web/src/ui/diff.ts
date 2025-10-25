@@ -1,3 +1,5 @@
+import { queryTokenElements } from '../util/tokenAnchors';
+
 export interface MathDiffPayload {
   added: string[];
   removed: string[];
@@ -5,13 +7,6 @@ export interface MathDiffPayload {
 }
 
 const DIFF_CLASSES = ['motor-diff-add', 'motor-diff-del', 'motor-diff-chg'] as const;
-
-function escapeAttribute(value: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(value);
-  }
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
 
 function normalizeIds(ids: Iterable<string>): string[] {
   const seen = new Set<string>();
@@ -35,8 +30,7 @@ function addClass(host: HTMLElement, ids: Iterable<string>, className: string): 
     return;
   }
   for (const id of normalized) {
-    const selector = `[data-token-id="${escapeAttribute(id)}"]`;
-    host.querySelectorAll<HTMLElement>(selector).forEach((el) => {
+    queryTokenElements(host, id).forEach((el) => {
       el.classList.add(className);
     });
   }

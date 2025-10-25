@@ -1,3 +1,5 @@
+import { queryTokenElements } from '../util/tokenAnchors';
+
 interface RectLike {
   top: number;
   left: number;
@@ -10,13 +12,6 @@ export interface GhostOverlayHandle {
   render(tokenIds: Iterable<string>): void;
   clear(): void;
   destroy(): void;
-}
-
-function escapeAttribute(value: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(value);
-  }
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function dedupeIds(ids: Iterable<string>): string[] {
@@ -32,8 +27,7 @@ function dedupeIds(ids: Iterable<string>): string[] {
 }
 
 function computeTokenRects(host: HTMLElement, tokenId: string): RectLike[] {
-  const selector = `[data-token-id="${escapeAttribute(tokenId)}"]`;
-  const nodes = host.querySelectorAll<HTMLElement>(selector);
+  const nodes = queryTokenElements(host, tokenId);
   const rects: RectLike[] = [];
   for (const node of nodes) {
     const nodeRects = Array.from(node.getClientRects());

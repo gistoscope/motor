@@ -11,6 +11,7 @@ import {
   isIdempotentClick,
   type IdempotentRelease,
 } from '../util/dom';
+import { escapeAttribute, queryTokenElements } from '../util/tokenAnchors';
 import { getRequiredElement } from './dom';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 
@@ -114,39 +115,29 @@ export function mountEnginePane(
 
   const subscriptions: Array<() => void> = [];
 
-  const escapeAttribute = (value: string): string => {
-    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-      return CSS.escape(value);
-    }
-    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  };
-
   const toggleHoverForId = (id: string, active: boolean) => {
     const escaped = escapeAttribute(id);
-    const tokenSelector = `[data-token-id="${escaped}"]`;
     const nodeSelector = `[data-id="${escaped}"]`;
     rootEl
       .querySelectorAll<HTMLElement>(nodeSelector)
       .forEach((el) => {
         el.classList.toggle('is-hovered', active);
       });
-    rootEl
-      .querySelectorAll<HTMLElement>(tokenSelector)
-      .forEach((el) => {
-        el.classList.toggle('is-hovered', active);
-        el.classList.toggle('math-token--hovered', active);
-      });
+    queryTokenElements(rootEl, id).forEach((el) => {
+      el.classList.toggle('is-hovered', active);
+      el.classList.toggle('math-token--hovered', active);
+    });
   };
 
   const toggleRelatedForId = (id: string, active: boolean) => {
     const escaped = escapeAttribute(id);
-    const selectors = [`[data-id="${escaped}"]`, `[data-token-id="${escaped}"]`];
-    selectors.forEach((selector) => {
-      rootEl
-        .querySelectorAll<HTMLElement>(selector)
-        .forEach((el) => {
-          el.classList.toggle('is-related', active);
-        });
+    rootEl
+      .querySelectorAll<HTMLElement>(`[data-id="${escaped}"]`)
+      .forEach((el) => {
+        el.classList.toggle('is-related', active);
+      });
+    queryTokenElements(rootEl, id).forEach((el) => {
+      el.classList.toggle('is-related', active);
     });
   };
 

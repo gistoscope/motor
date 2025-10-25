@@ -49,17 +49,16 @@ no additional bundling steps are required.
 - When styling downstream consumers prefer the `.is-*` selectors; the `.math-token--*` variants are
   still emitted for backward compatibility but will eventually be deprecated.
 
-## KaTeX display & token anchors
-The KaTeX renderer powers the on-screen math view when Cortex/CATX output is unavailable. Rendering
-occurs via `renderWithKaTeX()` (`packages/web/src/engine/katex.ts`), which now calls the shared
-`applyAnchorsToKatex()` helper to label every visible token. Each `.mord`, `.mbin`, `.mopen`,
-`.mclose`, `.mrel`, and `.mop` element receives:
+## KaTeX & Anchors (`\htmlId` + trust)
+When Cortex/CATX output is absent we fall back to KaTeX via `renderWithKaTeX()`
+(`packages/web/src/engine/katex.ts`). Instead of mutating the DOM after rendering we now pre-process
+the LaTeX source with `withHtmlIds()` (`packages/web/src/engine/latexIds.ts`). The helper wraps each
+visible token with `\htmlClass{gv-token}{\htmlId{gv:V1:<id>}{…}}` using the configurable
+`defaultIdProvider` (`tok:<index>` by default). KaTeX is invoked with a `trust` callback that only
+authorises `\htmlId` and `\htmlClass`, so the injected anchors are honoured without enabling
+arbitrary HTML.
 
-- `data-token-id` — required by the Bridge hover system and serialized as `tok:<index>` when no
-  engine mapping exists.
-- `data-kind="token"` and `data-id` — legacy aliases maintained for downstream overlays.
-- `id="gv:V1:<token-id>"` — a GraphViewer-compatible anchor for future deep linking.
-
-The Bridge continues to match tokens via `data-token-id` selectors, so hover effects immediately
-reflect the KaTeX anchors once the renderer finishes. This keeps the viewer responsive even before
-the richer CATX renderer loads.
+Downstream consumers locate tokens through the shared utilities in
+`packages/web/src/util/tokenAnchors.ts` — selectors cover `[data-token-id]`, `[data-id]` and the
+canonical `id="gv:V1:<token-id>"` prefix. Hover, diff and ghost overlays now rely on those helpers,
+keeping legacy `data-*` anchors working while enabling canonical IDs for deep links.

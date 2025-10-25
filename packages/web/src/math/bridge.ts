@@ -10,6 +10,13 @@ import {
   isHTMLInputElement,
   isHTMLTextAreaElement,
 } from '../util/dom';
+import {
+  isTokenElement,
+  queryAllTokenElements,
+  queryTokenElements,
+  readTokenId,
+  TOKEN_ELEMENT_SELECTOR,
+} from '../util/tokenAnchors';
 import type {
   MathBridgeHandle,
   MathBridgeOptions,
@@ -26,13 +33,6 @@ const EMPTY_DIFF: MathDiffPayload = { added: [], removed: [], changed: [] };
 
 function isIterable(value: unknown): value is Iterable<unknown> {
   return typeof value === 'object' && value !== null && Symbol.iterator in value;
-}
-
-function escapeAttribute(value: string): string {
-  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
-    return CSS.escape(value);
-  }
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function coerceToString(value: unknown): string | null {
@@ -97,13 +97,10 @@ function removeClassFromIds(
   extraClasses: string[] = [],
 ): void {
   for (const id of ids) {
-    const selector = `[data-token-id="${escapeAttribute(id)}"]`;
-    host
-      .querySelectorAll<HTMLElement>(selector)
-      .forEach((el) => {
-        el.classList.remove(className);
-        extraClasses.forEach((extra) => el.classList.remove(extra));
-      });
+    queryTokenElements(host, id).forEach((el) => {
+      el.classList.remove(className);
+      extraClasses.forEach((extra) => el.classList.remove(extra));
+    });
   }
 }
 
@@ -114,13 +111,10 @@ function addClassToIds(
   extraClasses: string[] = [],
 ): void {
   for (const id of ids) {
-    const selector = `[data-token-id="${escapeAttribute(id)}"]`;
-    host
-      .querySelectorAll<HTMLElement>(selector)
-      .forEach((el) => {
-        el.classList.add(className);
-        extraClasses.forEach((extra) => el.classList.add(extra));
-      });
+    queryTokenElements(host, id).forEach((el) => {
+      el.classList.add(className);
+      extraClasses.forEach((extra) => el.classList.add(extra));
+    });
   }
 }
 
@@ -144,10 +138,10 @@ function readTokenValue(element: HTMLElement): string {
 
 function captureTokenSnapshot(host: HTMLElement): TokenSnapshot {
   const snapshot: TokenSnapshot = new Map();
-  const elements = host.querySelectorAll<HTMLElement>('[data-token-id]');
+  const elements = queryAllTokenElements(host);
   elements.forEach((element) => {
-    const tokenId = element.dataset.tokenId;
-    if (typeof tokenId !== 'string') {
+    const tokenId = readTokenId(element);
+    if (!tokenId) {
       return;
     }
     const normalizedId = tokenId.trim();
@@ -559,7 +553,7 @@ function findTokenElement(target: EventTarget | null): HTMLElement | null {
   if (!isHTMLElement(target)) {
     return null;
   }
-  return target.closest<HTMLElement>('[data-token-id]');
+  return target.closest<HTMLElement>(TOKEN_ELEMENT_SELECTOR);
 }
 
 function getTokenIdFromEvent(target: EventTarget | null): string | null {
@@ -567,8 +561,7 @@ function getTokenIdFromEvent(target: EventTarget | null): string | null {
   if (!tokenEl) {
     return null;
   }
-  const tokenId = tokenEl.dataset.tokenId;
-  return typeof tokenId === 'string' && tokenId.length > 0 ? tokenId : null;
+  return readTokenId(tokenEl);
 }
 
 type ExtendedMathBridgeOptions = MathBridgeOptions & {

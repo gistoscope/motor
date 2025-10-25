@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { Window } from 'happy-dom';
 
 import { renderWithKaTeX } from '../src/engine/katex';
+import { TOKEN_ID_PREFIX } from '../src/util/tokenAnchors';
 
 describe('KaTeX anchors', () => {
   let domWindow: Window;
@@ -41,20 +42,22 @@ describe('KaTeX anchors', () => {
         const row = doc.createElement('span');
         row.className = 'katex-html';
 
-        const two = doc.createElement('span');
-        two.className = 'mord';
-        two.textContent = tex[0] ?? '2';
-        row.appendChild(two);
+        const pattern = /\\htmlClass\{[^}]*\}\{\\htmlId\{([^}]*)\}\{([^}]*)\}\}/g;
+        let match: RegExpExecArray | null;
+        while ((match = pattern.exec(tex)) !== null) {
+          const span = doc.createElement('span');
+          span.className = 'mord';
+          span.id = match[1] ?? '';
+          span.textContent = match[2] ?? '';
+          row.appendChild(span);
+        }
 
-        const plus = doc.createElement('span');
-        plus.className = 'mbin';
-        plus.textContent = tex[1] ?? '+';
-        row.appendChild(plus);
-
-        const three = doc.createElement('span');
-        three.className = 'mord';
-        three.textContent = tex[2] ?? '3';
-        row.appendChild(three);
+        if (!row.childElementCount) {
+          const fallback = doc.createElement('span');
+          fallback.className = 'mord';
+          fallback.textContent = tex;
+          row.appendChild(fallback);
+        }
 
         katexRoot.appendChild(row);
         element.appendChild(katexRoot);
@@ -64,7 +67,7 @@ describe('KaTeX anchors', () => {
     const success = await renderWithKaTeX(container, '2+3', '2+3');
     expect(success).toBe(true);
 
-    const tokens = container.querySelectorAll('[data-token-id]');
+    const tokens = container.querySelectorAll(`[id^="${TOKEN_ID_PREFIX}"]`);
     expect(tokens.length).toBeGreaterThanOrEqual(3);
   });
 });
