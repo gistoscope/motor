@@ -94,21 +94,33 @@ function removeClassFromIds(
   host: HTMLElement,
   ids: Iterable<string>,
   className: string,
+  extraClasses: string[] = [],
 ): void {
   for (const id of ids) {
     const selector = `[data-token-id="${escapeAttribute(id)}"]`;
     host
       .querySelectorAll<HTMLElement>(selector)
-      .forEach((el) => el.classList.remove(className));
+      .forEach((el) => {
+        el.classList.remove(className);
+        extraClasses.forEach((extra) => el.classList.remove(extra));
+      });
   }
 }
 
-function addClassToIds(host: HTMLElement, ids: Iterable<string>, className: string): void {
+function addClassToIds(
+  host: HTMLElement,
+  ids: Iterable<string>,
+  className: string,
+  extraClasses: string[] = [],
+): void {
   for (const id of ids) {
     const selector = `[data-token-id="${escapeAttribute(id)}"]`;
     host
       .querySelectorAll<HTMLElement>(selector)
-      .forEach((el) => el.classList.add(className));
+      .forEach((el) => {
+        el.classList.add(className);
+        extraClasses.forEach((extra) => el.classList.add(extra));
+      });
   }
 }
 
@@ -648,6 +660,7 @@ export function attachMathEngine(
     const tokens = dedupe(ids);
     if (tokens.length === 0) {
       if (ghostTokenIds.size > 0) {
+        removeClassFromIds(hostEl, ghostTokenIds, 'is-related');
         ghostOverlay.clear();
       }
       ghostTokenIds = new Set();
@@ -666,7 +679,9 @@ export function attachMathEngine(
         return;
       }
     }
+    removeClassFromIds(hostEl, ghostTokenIds, 'is-related');
     ghostOverlay.render(tokens);
+    addClassToIds(hostEl, next, 'is-related');
     ghostTokenIds = next;
   };
 
@@ -895,9 +910,10 @@ export function attachMathEngine(
     const ids = normalizeTokenIds(event, payload, options);
     const className = event === 'hover' ? hoverClass : selectedClass;
     const previous = event === 'hover' ? hoveredIds : selectedIds;
+    const extras = event === 'hover' ? ['is-hovered'] : ['is-selected'];
 
-    removeClassFromIds(hostEl, previous, className);
-    addClassToIds(hostEl, ids, className);
+    removeClassFromIds(hostEl, previous, className, extras);
+    addClassToIds(hostEl, ids, className, extras);
 
     const target = event === 'hover' ? hoveredIds : selectedIds;
     target.clear();
@@ -1268,8 +1284,8 @@ export function attachMathEngine(
       clearLongPress();
       deactivateSelectionMode();
       longPressActive = false;
-      removeClassFromIds(hostEl, hoveredIds, hoverClass);
-      removeClassFromIds(hostEl, selectedIds, selectedClass);
+      removeClassFromIds(hostEl, hoveredIds, hoverClass, ['is-hovered']);
+      removeClassFromIds(hostEl, selectedIds, selectedClass, ['is-selected']);
       hoveredIds = new Set();
       selectedIds = new Set();
       applyMathDiff(hostEl, EMPTY_DIFF);
@@ -1280,8 +1296,8 @@ export function attachMathEngine(
     refresh: refreshActions,
     setExpression(expr: string) {
       clearPreview();
-      removeClassFromIds(hostEl, hoveredIds, hoverClass);
-      removeClassFromIds(hostEl, selectedIds, selectedClass);
+      removeClassFromIds(hostEl, hoveredIds, hoverClass, ['is-hovered']);
+      removeClassFromIds(hostEl, selectedIds, selectedClass, ['is-selected']);
       hoveredIds = new Set();
       selectedIds = new Set();
       applyMathDiff(hostEl, EMPTY_DIFF);

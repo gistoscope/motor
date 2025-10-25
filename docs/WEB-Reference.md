@@ -81,8 +81,27 @@ globalThis.CATX = CATX;
 If no renderer is found or rendering fails, the pane displays the engine's HTML output and marks
 `data-mode="html"` on the display container; plain-text fallback marks `data-mode="tex"`.
 
-## Graph playground
+## GraspViewer
 
-The tabbed demo now exposes the engine pane alongside the original graph viewer + math playground.
-Selecting the **Graphs** tab restores the previous layout, so existing tests and automation that rely
-on `#graph-card` or `#math-playground` continue to function without changes.
+The tabbed demo now exposes the engine pane alongside **GraspViewer**, the interactive GraphJSON
+explorer backed by the Stage‑1 engine. Selecting the **Graphs** tab restores the previous layout, so
+existing tests and automation that rely on `#graph-card` or `#math-playground` continue to function
+without changes.
+
+GraspViewer surfaces DOM tokens with both the legacy `.math-token--*` classes and the new `.is-*`
+flags so that hover/preview integrations can style either generation safely. Hovering over a token or
+graph node dispatches a non-blocking preview:
+
+- `.is-hovered` marks the focused token/node.
+- `.is-related` lights up the auxiliary tokens returned by the hover bus (for example, matching
+  bracket pairs or inferred operands).
+- `.is-selected` is emitted in tandem with the historical `.math-token--selected` class.
+
+### Interaction contract
+
+- **Single-click on a bracket** (`(` or `[`) highlights the matching pair. The hover baseline will set
+  `.is-related` on the partner to keep the relationship visible without locking the selection.
+- Keyboard shortcuts from the history panel (undo/redo, scope up/down) stay unchanged.
+- Tooltips surface the top suggested actions from the current preview without blocking pointer
+  movement; the fallback native `title` attribute retains accessibility when the rich tooltip module
+  is absent.

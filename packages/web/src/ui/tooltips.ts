@@ -1,4 +1,5 @@
 import type { MathEngineAction } from '../math/types';
+import type { GVAction } from '../hover/state';
 
 export interface RuleHint {
   label: string;
@@ -93,7 +94,69 @@ function formatRuleTooltipContent(ruleId: string, fallbackLabel: string | null):
   return `${pieces[0]} — ${pieces[1]}`;
 }
 
-export function applyRuleTooltip(
+const PREVIEW_ATTR = 'tooltipPreview';
+const PREVIEW_TITLE_ATTR = 'tooltipPreviewOriginalTitle';
+const PREVIEW_ARIA_ATTR = 'tooltipPreviewOriginalAriaLabel';
+const NULL_SENTINEL = '__MOTOR_PREVIEW_TOOLTIP_NONE__';
+
+function storePreviewAttr(target: HTMLElement, key: typeof PREVIEW_TITLE_ATTR | typeof PREVIEW_ARIA_ATTR, value: string | null) {
+  if (key in target.dataset) {
+    return;
+  }
+  target.dataset[key] = value ?? NULL_SENTINEL;
+}
+
+function restorePreviewAttr(target: HTMLElement, key: typeof PREVIEW_TITLE_ATTR | typeof PREVIEW_ARIA_ATTR, apply: (value: string | null) => void) {
+  if (!(key in target.dataset)) {
+    apply(null);
+    return;
+  }
+  const stored = target.dataset[key];
+  delete target.dataset[key];
+  if (stored === NULL_SENTINEL) {
+    apply(null);
+    return;
+  }
+  apply(stored ?? null);
+}
+
+function applyPreviewTooltip(target: HTMLElement, actions: GVAction[]): void {
+  const normalized = actions
+    .map((action) => (typeof action.label === 'string' && action.label.trim() ? action.label.trim() : action.id))
+    .filter((label) => typeof label === 'string' && label.length > 0);
+
+  if (normalized.length === 0) {
+    delete target.dataset[PREVIEW_ATTR];
+    restorePreviewAttr(target, PREVIEW_TITLE_ATTR, (value) => {
+      if (value === null) {
+        target.removeAttribute('title');
+      } else {
+        target.setAttribute('title', value);
+      }
+    });
+    restorePreviewAttr(target, PREVIEW_ARIA_ATTR, (value) => {
+      if (value === null) {
+        target.removeAttribute('aria-label');
+      } else {
+        target.setAttribute('aria-label', value);
+      }
+    });
+    return;
+  }
+
+  const previewLines = normalized.slice(0, 3);
+  const remaining = normalized.length - previewLines.length;
+  const tooltip = remaining > 0 ? `${previewLines.join('\n')}\n(+${remaining} more)` : previewLines.join('\n');
+
+  storePreviewAttr(target, PREVIEW_TITLE_ATTR, target.getAttribute('title'));
+  storePreviewAttr(target, PREVIEW_ARIA_ATTR, target.getAttribute('aria-label'));
+
+  target.dataset[PREVIEW_ATTR] = tooltip;
+  target.setAttribute('title', tooltip);
+  target.setAttribute('aria-label', tooltip);
+}
+
+function applyRuleTooltipToElement(
   target: HTMLElement,
   action: Pick<MathEngineAction, 'id' | 'label'>,
 ): void {
@@ -122,6 +185,17 @@ export function applyRuleTooltip(
     target.dataset.tooltipLabel = fallback;
     delete target.dataset.tooltipDescription;
   }
+}
+
+export function applyRuleTooltip(
+  target: HTMLElement,
+  actionOrActions: Pick<MathEngineAction, 'id' | 'label'> | GVAction[],
+): void {
+  if (Array.isArray(actionOrActions)) {
+    applyPreviewTooltip(target, actionOrActions);
+    return;
+  }
+  applyRuleTooltipToElement(target, actionOrActions);
 }
 
 export function listKnownRuleIds(): string[] {
