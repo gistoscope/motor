@@ -1,6 +1,10 @@
 import { renderWithKaTeX } from '../engine/katex';
 import { attachMathEngine } from '../math/bridge';
 import type { MathBridgeHandle, MathEngine } from '../math/types';
+import { EventBus, type HoverState } from '../hover/state';
+import { attachHoverController } from '../hover/controller';
+import { previewWithTimeout } from '../hover/preview';
+import { applyRuleTooltip } from '../ui/tooltips';
 import {
   isHTMLButtonElement,
   isHTMLFormElement,
@@ -54,6 +58,8 @@ export function mountEnginePane(
     'engine pane',
   );
   const displayEl = getRequiredElement<HTMLElement>(root, '[data-role="engine-display"]', 'engine pane');
+  const rootEl =
+    displayEl.querySelector<HTMLElement>('[data-role="grasp-viewer"]') ?? displayEl;
   const statusEl = root.querySelector<HTMLElement>('[data-role="engine-status"]');
   const infoEl = root.querySelector<HTMLElement>('[data-role="engine-info"]');
   const catxContainer =
@@ -107,6 +113,125 @@ export function mountEnginePane(
   let latestExpression = options.initialExpression?.trim() || inputEl.value.trim() || '';
 
   const subscriptions: Array<() => void> = [];
+
+  const escapeAttribute = (value: string): string => {
+    if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+      return CSS.escape(value);
+    }
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  };
+
+  const toggleHoverForId = (id: string, active: boolean) => {
+    const escaped = escapeAttribute(id);
+    const tokenSelector = `[data-token-id="${escaped}"]`;
+    const nodeSelector = `[data-id="${escaped}"]`;
+    rootEl
+      .querySelectorAll<HTMLElement>(nodeSelector)
+      .forEach((el) => {
+        el.classList.toggle('is-hovered', active);
+      });
+    rootEl
+      .querySelectorAll<HTMLElement>(tokenSelector)
+      .forEach((el) => {
+        el.classList.toggle('is-hovered', active);
+        el.classList.toggle('math-token--hovered', active);
+      });
+  };
+
+  const toggleRelatedForId = (id: string, active: boolean) => {
+    const escaped = escapeAttribute(id);
+    const selectors = [`[data-id="${escaped}"]`, `[data-token-id="${escaped}"]`];
+    selectors.forEach((selector) => {
+      rootEl
+        .querySelectorAll<HTMLElement>(selector)
+        .forEach((el) => {
+          el.classList.toggle('is-related', active);
+        });
+    });
+  };
+
+  let hoveredTargetId: string | null = null;
+  let relatedIds = new Set<string>();
+
+  const clearRelated = () => {
+    for (const id of relatedIds) {
+      toggleRelatedForId(id, false);
+    }
+    relatedIds = new Set();
+  };
+
+  const applyHoverState = (state: HoverState) => {
+    if (!state || !state.target?.id) {
+      if (hoveredTargetId) {
+        toggleHoverForId(hoveredTargetId, false);
+        hoveredTargetId = null;
+      }
+      clearRelated();
+      return;
+    }
+
+    const nextId = state.target.id;
+    if (hoveredTargetId && hoveredTargetId !== nextId) {
+      toggleHoverForId(hoveredTargetId, false);
+    }
+    hoveredTargetId = nextId;
+    toggleHoverForId(nextId, true);
+
+    const nextRelated = new Set<string>();
+    if (Array.isArray(state.related)) {
+      for (const item of state.related) {
+        if (typeof item === 'string' && item.trim()) {
+          nextRelated.add(item);
+        }
+      }
+    }
+
+    for (const id of relatedIds) {
+      if (!nextRelated.has(id)) {
+        toggleRelatedForId(id, false);
+      }
+    }
+    for (const id of nextRelated) {
+      if (!relatedIds.has(id)) {
+        toggleRelatedForId(id, true);
+      }
+    }
+    relatedIds = nextRelated;
+  };
+
+  const bus = new EventBus();
+  const getLegal = () => {
+    try {
+      return typeof engine.getLegalActions === 'function' ? engine.getLegalActions() : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const detachHoverController = attachHoverController(rootEl, bus, {
+    preview: (target, timeout, signal) =>
+      previewWithTimeout(getLegal, target, timeout ?? 150, signal),
+    timeoutMs: 150,
+  });
+  subscriptions.push(detachHoverController);
+
+  const unsubscribeBus = bus.on((event) => {
+    if (event.type === 'hover') {
+      applyHoverState(event.state);
+      if (!event.state) {
+        applyRuleTooltip(rootEl, []);
+      }
+      return;
+    }
+    if (event.type === 'preview') {
+      if (event.result.ok) {
+        applyRuleTooltip(rootEl, event.result.actions);
+      } else {
+        applyRuleTooltip(rootEl, []);
+      }
+    }
+  });
+  subscriptions.push(unsubscribeBus);
 
   const setStatus = (message: string, tone: 'info' | 'error' = 'info') => {
     if (!statusEl) {
@@ -423,6 +548,8 @@ export function mountEnginePane(
       }
       bridge = null;
     }
+    applyHoverState(null);
+    applyRuleTooltip(rootEl, []);
     catxContainer.innerHTML = '';
     fallbackContainer.innerHTML = '';
   };

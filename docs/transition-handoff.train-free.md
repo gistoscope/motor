@@ -20,8 +20,9 @@
   pnpm -r test          # тесты всех пакетов
   pnpm --filter @motor/cli exec motor --demo
   pnpm --filter @motor/web dev
+  node packages/web/demo/server.mjs   # B4 demo server (http://localhost:4000)
   ```
-- **Порты:** основной dev‑сервер **Vite :5173** (второй UI‑ворк‑три :5174 при необходимости). Лёгкий demo‑роут допускается, но рекомендуем Vite.
+- **Порты:** основной dev‑сервер **Vite :5173** (второй UI‑ворк‑три :5174 при необходимости). Лёгкий B4 demo‑роут крутится на **:4000** через `node packages/web/demo/server.mjs`.
 - **Локальные пути (Windows):**
   - Активный клон: `D:/work/motor-git`
   - Golden snapshot (эталон): `D:/etalon`
@@ -45,9 +46,10 @@
    pnpm -r build
    pnpm -r test
    pnpm --filter @motor/web dev
+   node packages/web/demo/server.mjs   # GraspViewer/B4 baseline на :4000
    ```
 2. Открой браузер: `http://localhost:5173`.
-3. Для CLI‑демо: 
+3. Для CLI‑демо:
    ```powershell
    pnpm --filter @motor/cli exec motor --demo
    ```
