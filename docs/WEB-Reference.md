@@ -13,7 +13,8 @@ available in the ESM build that powers the demo.
 - `data-role="engine-input"` — a text input or `<textarea>` that captures the expression to parse.
 - `data-role="engine-display"` — a block element where rendered output is injected. The helper
   toggles two optional children when present: `data-role="engine-display-catx"` for Cortex/CATX
-  rendering and `data-role="engine-display-fallback"` for the engine's HTML/tokens.
+  rendering (and KaTeX fallback) and `data-role="engine-display-fallback"` for the engine's
+  HTML/tokens.
 - `data-role="engine-status"` *(optional)* — receives status or error messages.
 - `data-role="engine-info"` *(optional)* — displays engine metadata via `setEngineMeta()`.
 - `data-role="engine-apply"` *(optional)* — buttons wired to submit the current input. When
@@ -55,8 +56,8 @@ The helper will:
 
 - Mount the engine via `attachMathEngine` and keep the host hidden.
 - Listen to `state` events, calling `engine.export()` to refresh the display.
-- Attempt CATX rendering by resolving `globalThis.CATX.render()`; on failure it falls back to the
-  engine's HTML or a plain-text view of the expression.
+- Attempt Cortex/CATX rendering by resolving `globalThis.CATX.render()`; if unavailable the helper
+  renders via KaTeX before falling back to the engine's HTML or a plain-text view of the expression.
 - Surface status messages (success, fallback, errors) through the optional status element.
 
 The returned handle exposes:

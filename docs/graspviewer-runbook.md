@@ -48,3 +48,18 @@ no additional bundling steps are required.
   `packages/web/demo/engine.stub.js`.
 - When styling downstream consumers prefer the `.is-*` selectors; the `.math-token--*` variants are
   still emitted for backward compatibility but will eventually be deprecated.
+
+## KaTeX display & token anchors
+The KaTeX renderer powers the on-screen math view when Cortex/CATX output is unavailable. Rendering
+occurs via `renderWithKaTeX()` (`packages/web/src/engine/katex.ts`), which now calls the shared
+`applyAnchorsToKatex()` helper to label every visible token. Each `.mord`, `.mbin`, `.mopen`,
+`.mclose`, `.mrel`, and `.mop` element receives:
+
+- `data-token-id` — required by the Bridge hover system and serialized as `tok:<index>` when no
+  engine mapping exists.
+- `data-kind="token"` and `data-id` — legacy aliases maintained for downstream overlays.
+- `id="gv:V1:<token-id>"` — a GraphViewer-compatible anchor for future deep linking.
+
+The Bridge continues to match tokens via `data-token-id` selectors, so hover effects immediately
+reflect the KaTeX anchors once the renderer finishes. This keeps the viewer responsive even before
+the richer CATX renderer loads.
