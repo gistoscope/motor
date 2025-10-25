@@ -394,3 +394,10 @@
   color: #facc15;
   border-color: rgba(250, 204, 21, 0.6);
 }
+/* New neutral tokens */
+.is-hovered  { outline: var(--gv-hover-outline, 1px solid currentColor); }
+.is-related  { opacity: var(--gv-related-opacity, .8); }
+.is-selected { outline: var(--gv-selected-outline, 2px solid currentColor); }
+/* Legacy compatibility */
+.math-token--hovered  { outline: var(--gv-hover-outline, 1px solid currentColor); }
+.math-token--selected { outline: var(--gv-selected-outline, 2px solid currentColor); }
