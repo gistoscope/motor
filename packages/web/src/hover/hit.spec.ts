@@ -17,4 +17,13 @@ describe('pickTarget', () => {
     expect(t?.kind).toBe('token');
     expect(t?.id).toBe('token:7');
   });
+
+  it('supports canonical gv:V1 anchors', () => {
+    const div = document.createElement('div');
+    div.innerHTML = `<span id="gv:V1:tok:5"></span>`;
+    const el = div.firstElementChild!;
+    const t = pickTarget(el);
+    expect(t?.kind).toBe('token');
+    expect(t?.id).toBe('tok:5');
+  });
 });

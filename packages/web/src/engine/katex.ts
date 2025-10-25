@@ -1,5 +1,5 @@
 import { isHTMLElement } from '../util/dom';
-import { applyAnchorsToKatex } from '../view/anchor';
+import { withHtmlIds, defaultIdProvider } from './latexIds';
 
 type KatexLike = {
   render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
@@ -151,8 +151,11 @@ export async function renderWithKaTeX(
   }
 
   try {
-    katex.render(content, targetEl, { throwOnError: false });
-    applyAnchorsToKatex(targetEl, (_el, index) => `tok:${index}`);
+    const contentWithIds = withHtmlIds(content, defaultIdProvider);
+    katex.render(contentWithIds, targetEl, {
+      throwOnError: false,
+      trust: (context) => context?.command === '\\htmlId' || context?.command === '\\htmlClass',
+    });
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
     return true;
   } catch (error) {
