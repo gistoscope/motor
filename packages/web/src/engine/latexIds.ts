@@ -101,9 +101,6 @@ function shouldWrapCommand(command: string, nextToken: Token | undefined): boole
   if (nextToken && nextToken.kind === 'raw' && nextToken.value === '{') {
     return false;
   }
-  if (command === '\\') {
-    return false;
-  }
   return true;
 }
 
