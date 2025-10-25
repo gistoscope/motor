@@ -1,0 +1,28 @@
+name: CC Digest Aggregate
+on:
+  pull_request:
+    types: [closed]
+    branches: [ "sandbox" ]
+
+permissions:
+  contents: write
+
+jobs:
+  aggregate:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sandbox
+      - name: Aggregate CC digest
+        run: node tools/cc-digest/aggregate.mjs
+        env:
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+      - name: Commit DevLog/Milestones/index
+        run: |
+          git config user.email "cc-digest-bot@users.noreply.github.com"
+          git config user.name "cc-digest-bot"
+          git add docs/DevLog.md docs/Milestones.md docs/cc/cc-index.json || true
+          git diff --quiet --cached || git commit -m "docs(cc): aggregate #${{ github.event.pull_request.number }} @ ${{ github.event.pull_request.merge_commit_sha }}"
+          git push origin HEAD

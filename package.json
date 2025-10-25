@@ -12,7 +12,9 @@
     "log2test": "node scripts/log2test.mjs",
     "dev:web": "pnpm --filter @motor/web dev",
     "start:cli": "pnpm --filter @motor/cli exec motor --demo",
-    "prepare": "husky install"
+    "prepare": "husky install",
+    "cc:record": "node tools/cc-digest/record.mjs",
+    "cc:aggregate": "node tools/cc-digest/aggregate.mjs"
   },
   "devDependencies": {
     "@types/node": "^20.12.12",
