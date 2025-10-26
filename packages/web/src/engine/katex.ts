@@ -155,6 +155,13 @@ export async function renderWithKaTeX(
     katex.render(contentWithIds, targetEl, {
       throwOnError: false,
       trust: (context) => context?.command === '\\htmlId' || context?.command === '\\htmlClass',
+      strict: (code) => {
+        // Allow KaTeX HTML extension while keeping other strict warnings
+        if (code === 'htmlExtension') {
+          return 'ignore';
+        }
+        return 'warn';
+      },
     });
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
     return true;
