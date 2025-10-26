@@ -1,4 +1,4 @@
-import { queryTokenElements } from '../util/tokenAnchors';
+import { queryAnchors } from '../dom/anchor-helpers.js';
 
 interface RectLike {
   top: number;
@@ -27,7 +27,7 @@ function dedupeIds(ids: Iterable<string>): string[] {
 }
 
 function computeTokenRects(host: HTMLElement, tokenId: string): RectLike[] {
-  const nodes = queryTokenElements(host, tokenId);
+  const nodes = queryAnchors(host, tokenId);
   const rects: RectLike[] = [];
   for (const node of nodes) {
     const nodeRects = Array.from(node.getClientRects());
