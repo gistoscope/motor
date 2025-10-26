@@ -1,5 +1,5 @@
 import { isHTMLElement } from '../util/dom';
-import withHtmlIdsFromEngine from './latexIds.engine';
+import withHtmlIdsFromEngine from './latexIds.engine.js';
 
 type KatexLike = {
   render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;

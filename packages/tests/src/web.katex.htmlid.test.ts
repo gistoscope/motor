@@ -2,7 +2,7 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect } from 'vitest';
 
-import withHtmlIdsFromEngine from '../../web/src/engine/latexIds.engine';
+import withHtmlIdsFromEngine from '../../web/src/engine/latexIds.engine.js';
 import katex from '../../web/vendor/katex/katex.mjs';
 
 function renderToDiv(latex: string) {
