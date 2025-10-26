@@ -5,6 +5,7 @@ import { applyMathDiff, type MathDiffPayload } from '../ui/diff';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import { createToastManager } from '../ui/toast';
+import { addClassByLogicalIds, queryAnchors, removeClassByLogicalIds } from '../dom/anchor-helpers.js';
 import {
   isHTMLElement,
   isHTMLInputElement,
@@ -13,7 +14,6 @@ import {
 import {
   isTokenElement,
   queryAllTokenElements,
-  queryTokenElements,
   readTokenId,
   TOKEN_ELEMENT_SELECTOR,
 } from '../util/tokenAnchors';
@@ -96,11 +96,14 @@ function removeClassFromIds(
   className: string,
   extraClasses: string[] = [],
 ): void {
+  removeClassByLogicalIds(host, ids, className);
+  if (extraClasses.length === 0) {
+    return;
+  }
   for (const id of ids) {
-    queryTokenElements(host, id).forEach((el) => {
-      el.classList.remove(className);
-      extraClasses.forEach((extra) => el.classList.remove(extra));
-    });
+    for (const element of queryAnchors(host, id)) {
+      extraClasses.forEach((extra) => element.classList.remove(extra));
+    }
   }
 }
 
@@ -110,11 +113,14 @@ function addClassToIds(
   className: string,
   extraClasses: string[] = [],
 ): void {
+  addClassByLogicalIds(host, ids, className);
+  if (extraClasses.length === 0) {
+    return;
+  }
   for (const id of ids) {
-    queryTokenElements(host, id).forEach((el) => {
-      el.classList.add(className);
-      extraClasses.forEach((extra) => el.classList.add(extra));
-    });
+    for (const element of queryAnchors(host, id)) {
+      extraClasses.forEach((extra) => element.classList.add(extra));
+    }
   }
 }
 

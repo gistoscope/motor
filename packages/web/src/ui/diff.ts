@@ -1,4 +1,4 @@
-import { queryTokenElements } from '../util/tokenAnchors';
+import { addClassByLogicalIds, clearClassEverywhere } from '../dom/anchor-helpers.js';
 
 export interface MathDiffPayload {
   added: string[];
@@ -29,22 +29,12 @@ function addClass(host: HTMLElement, ids: Iterable<string>, className: string): 
   if (normalized.length === 0) {
     return;
   }
-  for (const id of normalized) {
-    queryTokenElements(host, id).forEach((el) => {
-      el.classList.add(className);
-    });
-  }
+  addClassByLogicalIds(host, normalized, className);
 }
 
 export function applyMathDiff(host: HTMLElement, diff: MathDiffPayload): void {
-  const selector = DIFF_CLASSES.map((className) => `.${className}`).join(', ');
-  if (selector) {
-    host.querySelectorAll<HTMLElement>(selector).forEach((el) => {
-      el.classList.remove(...DIFF_CLASSES);
-      if (el.className.trim().length === 0) {
-        el.removeAttribute('class');
-      }
-    });
+  for (const className of DIFF_CLASSES) {
+    clearClassEverywhere(host, className);
   }
 
   const { added, removed, changed } = diff;
