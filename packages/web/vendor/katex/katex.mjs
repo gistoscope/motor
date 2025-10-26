@@ -40,7 +40,7 @@ function renderToElement(tex, element, options = {}) {
 
   try {
     const fragment = ownerDocument.createDocumentFragment();
-    fragment.appendChild(parseLatex(normalized, ownerDocument));
+    fragment.appendChild(parseLatex(normalized, ownerDocument, options));
     element.appendChild(fragment);
   } catch (error) {
     if (options.throwOnError) {
@@ -51,17 +51,31 @@ function renderToElement(tex, element, options = {}) {
   }
 }
 
-function parseLatex(tex, documentRef) {
+function parseLatex(tex, documentRef, options) {
   const root = documentRef.createElement('span');
   root.className = 'katex katex-display';
   const base = documentRef.createElement('span');
   base.className = 'base';
-  base.appendChild(parseInline(tex, documentRef));
+  base.appendChild(parseInline(tex, documentRef, options));
   root.appendChild(base);
   return root;
 }
 
-function parseInline(tex, documentRef) {
+function isTrustedHtmlCommand(trustOption, command) {
+  if (trustOption === true) {
+    return true;
+  }
+  if (typeof trustOption === 'function') {
+    try {
+      return !!trustOption({ command });
+    } catch (_error) {
+      return false;
+    }
+  }
+  return false;
+}
+
+function parseInline(tex, documentRef, options) {
   const span = documentRef.createElement('span');
   span.className = 'mord';
   const parts = tokenize(tex);
@@ -88,6 +102,24 @@ function parseInline(tex, documentRef) {
       span.appendChild(frac);
       return;
     }
+    if (part.type === 'htmlId') {
+      if (!isTrustedHtmlCommand(options?.trust, '\\htmlId')) {
+        span.appendChild(documentRef.createTextNode(`\\htmlId{${part.id}}{${part.value}}`));
+        return;
+      }
+      const wrapper = documentRef.createElement('span');
+      wrapper.id = part.id;
+      const inner = parseInline(part.value, documentRef, options);
+      wrapper.className = inner.className || '';
+      while (inner.firstChild) {
+        wrapper.appendChild(inner.firstChild);
+      }
+      if (!wrapper.childNodes.length) {
+        wrapper.appendChild(documentRef.createTextNode(part.value));
+      }
+      span.appendChild(wrapper);
+      return;
+    }
   });
   return span;
 }
@@ -97,6 +129,13 @@ function tokenize(tex) {
   let index = 0;
   while (index < tex.length) {
     const char = tex[index];
+    if (tex.startsWith('\\htmlId', index)) {
+      const idGroup = readGroup(tex, index + 7);
+      const valueGroup = readGroup(tex, idGroup.nextIndex);
+      output.push({ type: 'htmlId', id: idGroup.value, value: valueGroup.value });
+      index = valueGroup.nextIndex;
+      continue;
+    }
     if (char === '^' || char === '_') {
       const { value, nextIndex } = readGroup(tex, index + 1);
       output.push({ type: char === '^' ? 'sup' : 'sub', value });
