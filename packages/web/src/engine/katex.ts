@@ -1,5 +1,5 @@
 import { isHTMLElement } from '../util/dom';
-import { withHtmlIds, defaultIdProvider } from './latexIds';
+import withHtmlIdsFromEngine from './latexIds.engine';
 
 type KatexLike = {
   render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
@@ -151,7 +151,7 @@ export async function renderWithKaTeX(
   }
 
   try {
-    const contentWithIds = withHtmlIds(content, defaultIdProvider);
+    const contentWithIds = withHtmlIdsFromEngine(content);
     katex.render(contentWithIds, targetEl, {
       throwOnError: false,
       trust: (context) => context?.command === '\\htmlId' || context?.command === '\\htmlClass',

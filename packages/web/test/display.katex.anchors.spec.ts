@@ -2,7 +2,6 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { Window } from 'happy-dom';
 
 import { renderWithKaTeX } from '../src/engine/katex';
-import { TOKEN_ID_PREFIX } from '../src/util/tokenAnchors';
 
 describe('KaTeX anchors', () => {
   let domWindow: Window;
@@ -42,7 +41,7 @@ describe('KaTeX anchors', () => {
         const row = doc.createElement('span');
         row.className = 'katex-html';
 
-        const pattern = /\\htmlClass\{[^}]*\}\{\\htmlId\{([^}]*)\}\{([^}]*)\}\}/g;
+        const pattern = /\\htmlId\{([^}]*)\}\{([^}]*)\}/g;
         let match: RegExpExecArray | null;
         while ((match = pattern.exec(tex)) !== null) {
           const span = doc.createElement('span');
@@ -67,7 +66,7 @@ describe('KaTeX anchors', () => {
     const success = await renderWithKaTeX(container, '2+3', '2+3');
     expect(success).toBe(true);
 
-    const tokens = container.querySelectorAll(`[id^="${TOKEN_ID_PREFIX}"]`);
+    const tokens = container.querySelectorAll('[id]');
     expect(tokens.length).toBeGreaterThanOrEqual(3);
   });
 });

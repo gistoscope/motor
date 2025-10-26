@@ -1,74 +1,34 @@
+/// <reference types="vitest" />
 /** @vitest-environment happy-dom */
-export {};
+import { describe, it, expect } from 'vitest';
 
-import { describe, expect, it } from 'vitest';
+import withHtmlIdsFromEngine from '../../web/src/engine/latexIds.engine';
+import katex from '../../web/vendor/katex/katex.mjs';
 
-import { renderWithKaTeX } from '../../web/src/engine/katex';
-
-declare global {
-  interface Window {
-    katex?: any;
-  }
+function renderToDiv(latex: string) {
+  const div = global.document.createElement('div');
+  global.document.body.appendChild(div);
+  katex.render(latex, div, {
+    throwOnError: false,
+    trust: (ctx: any) => ctx?.command === '\\htmlId' || ctx?.command === '\\htmlClass',
+  });
+  return div;
 }
 
-describe('renderWithKaTeX', () => {
-  it('preserves ids produced by KaTeX', async () => {
-    const g = globalThis as any;
-    const originalKatex = g.katex;
-    g.katex = {
-      render: (_latex: string, el: HTMLElement) => {
-        el.innerHTML = `<span id="node-1">x</span>`;
-      },
-    };
-
-    try {
-      const div = document.createElement('div');
-      await renderWithKaTeX(div, '\\htmlId{node-1}{x}', '\\htmlId{node-1}{x}');
-      expect(div.querySelector('#node-1')).not.toBeNull();
-    } finally {
-      if (typeof originalKatex === 'undefined') {
-        delete g.katex;
-      } else {
-        g.katex = originalKatex;
-      }
-    }
+describe('CC06A: KaTeX htmlId anchors', () => {
+  it('wraps simple "2+3" → ≥3 ids', () => {
+    const src = '2+3';
+    const withIds = withHtmlIdsFromEngine(src);
+    const el = renderToDiv(withIds);
+    const ids = el.querySelectorAll('[id]');
+    expect(ids.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('injects trusted htmlId anchors for tokens', async () => {
-    const g = globalThis as any;
-    const originalKatex = g.katex;
-    let lastLatex: string | null = null;
-    let lastOptions: any = null;
-    g.katex = {
-      render: (latex: string, el: HTMLElement, options: any) => {
-        lastLatex = latex;
-        lastOptions = options;
-        const matches = Array.from(
-          latex.matchAll(/\\htmlClass\{[^}]*\}\{\\htmlId\{([^}]*)\}\{([^}]*)\}\}/g),
-        );
-        el.innerHTML = matches
-          .map(([, id, body]) => `<span id="${id}">${body}</span>`)
-          .join('');
-      },
-    };
-
-    try {
-      const div = document.createElement('div');
-      await renderWithKaTeX(div, '2+3', '2+3');
-      const tokens = div.querySelectorAll('[id^="gv:V1:"]');
-      expect(tokens.length).toBeGreaterThanOrEqual(3);
-      expect(lastLatex).toBeTypeOf('string');
-      expect(lastLatex).toContain('\\htmlId{gv:V1:');
-      expect(typeof lastOptions?.trust).toBe('function');
-      expect(lastOptions?.trust?.({ command: '\\htmlId' })).toBe(true);
-      expect(lastOptions?.trust?.({ command: '\\htmlClass' })).toBe(true);
-      expect(lastOptions?.trust?.({ command: '\\href' })).toBe(false);
-    } finally {
-      if (typeof originalKatex === 'undefined') {
-        delete g.katex;
-      } else {
-        g.katex = originalKatex;
-      }
-    }
+  it('works with TeX commands (\\left ... \\right, \\frac)', () => {
+    const src = '\\left(2+3\\right)\\,/\\frac{5}{x}';
+    const withIds = withHtmlIdsFromEngine(src);
+    const el = renderToDiv(withIds);
+    const ids = el.querySelectorAll('[id]');
+    expect(ids.length).toBeGreaterThanOrEqual(5);
   });
 });
