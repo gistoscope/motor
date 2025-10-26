@@ -1,5 +1,5 @@
 import { isHTMLElement } from '../util/dom';
-import { withHtmlIds, defaultIdProvider } from './latexIds';
+import { withHtmlIds } from './latexIds';
 
 type KatexLike = {
   render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
@@ -151,10 +151,10 @@ export async function renderWithKaTeX(
   }
 
   try {
-    const contentWithIds = withHtmlIds(content, defaultIdProvider);
+    const contentWithIds = withHtmlIds(content);
     katex.render(contentWithIds, targetEl, {
       throwOnError: false,
-      trust: (context) => context?.command === '\\htmlId' || context?.command === '\\htmlClass',
+      trust: (ctx) => ctx?.command === '\\htmlId' || ctx?.command === '\\htmlClass',
     });
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
     return true;

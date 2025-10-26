@@ -53,10 +53,18 @@ describe('renderWithKaTeX', () => {
     };
 
     try {
-      const div = document.createElement('div');
-      await renderWithKaTeX(div, '2+3', '2+3');
-      const tokens = div.querySelectorAll('[id^="gv:V1:"]');
-      expect(tokens.length).toBeGreaterThanOrEqual(3);
+      const renderLatex = async (latex: string) => {
+        const div = document.createElement('div');
+        await renderWithKaTeX(div, latex, latex);
+        return div.querySelectorAll('[id^="gv:V1:"]');
+      };
+
+      const plusTokens = await renderLatex('2+3');
+      expect(plusTokens.length).toBeGreaterThanOrEqual(3);
+
+      const parenTokens = await renderLatex('\\left(2+3\\right)');
+      expect(parenTokens.length).toBeGreaterThanOrEqual(3);
+
       expect(lastLatex).toBeTypeOf('string');
       expect(lastLatex).toContain('\\htmlId{gv:V1:');
       expect(typeof lastOptions?.trust).toBe('function');
