@@ -1,4 +1,15 @@
+import installHoverPainter from '../src/ui/hover.painter.js';
+
 window.MOTOR_DISABLE_WORKERS = true;
+
+let __uninstallHover = null;
+function enableHover() {
+  __uninstallHover?.();
+  __uninstallHover = installHoverPainter({
+    getRoot: () =>
+      document.querySelector('.katex .katex-html') || document.querySelector('.katex-html'),
+  });
+}
 
 async function importWithTsFallback(specifier) {
   try {
@@ -728,17 +739,21 @@ function createEnginePane(engine, meta) {
     initialExpression,
     onExpressionChange: (expression) => {
       samplesHandle?.setActiveExpression(expression);
+      enableHover();
     },
     onInputChange: (value) => {
       samplesHandle?.setActiveExpression(value);
     },
   });
 
+  enableHover();
+
   paneHandle.setEngineMeta(meta ?? null);
 
   if (samplesContainer) {
     samplesHandle = createSampleControls(samplesContainer, (sample) => {
       paneHandle.setExpression(sample.expression);
+      enableHover();
     });
     if (initialExpression) {
       samplesHandle.setActiveExpression(initialExpression);
@@ -774,16 +789,20 @@ function createMathPlayground(engine, meta) {
     initialExpression,
     onExpressionChange: (expression) => {
       samplesHandle?.setActiveExpression(expression);
+      enableHover();
     },
     onInputChange: (value) => {
       samplesHandle?.setActiveExpression(value);
     },
   });
 
+  enableHover();
+
   playgroundHandle.setEngineMeta(meta ?? null);
 
   samplesHandle = createSampleControls(samplesContainer, (sample) => {
     playgroundHandle.loadExpression(sample.expression);
+    enableHover();
   });
 
   if (initialExpression) {
