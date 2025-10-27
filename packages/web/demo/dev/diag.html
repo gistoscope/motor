@@ -31,36 +31,60 @@
   const play = document.getElementById('play');
   play.addEventListener('load', async () => {
     const w = play.contentWindow, d = w.document;
+
+    const waitFrame = () => new Promise((resolve) => w.requestAnimationFrame(resolve));
+    const findRoot = () => d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
+
     try {
+      // --- Wait for KaTeX render ---
+      let root = findRoot();
+      let attempts = 0;
+      while (!root && attempts < 120) { // ~2s @ 60fps
+        await waitFrame();
+        root = findRoot();
+        attempts += 1;
+      }
+
+      if (!root) {
+        $('a_anchors').innerHTML = badge(false, 'FAIL (anchors not found yet — reload w/ cache disabled)');
+        $('a_hover').innerHTML = badge(false, 'FAIL (tokens unavailable — anchors missing)');
+        return;
+      }
+
+      // Inject dev CSS for hover highlighting inside iframe
+      const style = d.createElement('style');
+      style.textContent = '.math-token--hovered { outline: 3px solid magenta !important; border-radius: 4px; }';
+      d.head.appendChild(style);
+
       // --- Anchors test ---
-      const root = d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
-      const ids = root ? [...root.querySelectorAll('[id]')] : [];
-      const okAnchors = !!root && ids.length >= 3;
-      $('a_anchors').innerHTML = badge(okAnchors, okAnchors ? `OK (idCount=${ids.length})` : `FAIL (idCount=${ids.length})`);
+      const ids = [...root.querySelectorAll('[id]')];
+      const okAnchors = ids.length >= 3;
+      $('a_anchors').innerHTML = badge(okAnchors, okAnchors ? `OK (idCount=${ids.length})` : `FAIL (idCount=${ids.length} — need ≥3)`);
 
       // --- Hover test ---
-      // Возьмём центральный токен (обычно "+")
       const target = ids[1] || ids[0];
-      let okHover = false;
-      if (target) {
-        // Синтетически "наведём" указатель на токен (событие в том же документе)
-        const r = target.getBoundingClientRect();
-        const evt = new w.PointerEvent('pointermove', { bubbles:true, clientX: r.left + r.width/2, clientY: r.top + r.height/2 });
-        target.dispatchEvent(evt);
-
-        // Дадим кадр на отработку
-        await new Promise(rf => w.requestAnimationFrame(rf));
-
-        const hovered = root ? [...root.querySelectorAll('.math-token--hovered')] : [];
-        okHover = hovered.length >= 1;
-        $('a_hover').innerHTML = badge(okHover, okHover ? `OK (${hovered.map(n=>n.id).join(',')})` : 'FAIL (no class set)');
-      } else {
-        $('a_hover').innerHTML = badge(false, 'FAIL (no tokens found)');
+      if (!target) {
+        $('a_hover').innerHTML = badge(false, 'FAIL (no tokens found — inspect KaTeX output)');
+        return;
       }
+
+      const rect = target.getBoundingClientRect();
+      const pointer = new w.PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2,
+      });
+      target.dispatchEvent(pointer);
+
+      await waitFrame();
+
+      const hovered = [...root.querySelectorAll('.math-token--hovered')];
+      const okHover = hovered.length >= 1;
+      $('a_hover').innerHTML = badge(okHover, okHover ? `OK (${hovered.map((n) => n.id).join(',')})` : 'FAIL (hover class not applied — check pointer listener)');
     } catch (e) {
       console.error('diag error:', e);
-      $('a_anchors').innerHTML = badge(false, 'ERROR');
-      $('a_hover').innerHTML = badge(false, 'ERROR');
+      $('a_anchors').innerHTML = badge(false, 'ERROR (see console)');
+      $('a_hover').innerHTML = badge(false, 'ERROR (see console)');
     }
   });
 </script>
