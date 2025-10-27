@@ -60,3 +60,5 @@ export function addClassByIds(root, ids, cls) {
   }
   return seen.size;
 }
+
+export const addClassByLogicalIds = addClassByIds;
