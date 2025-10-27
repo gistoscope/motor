@@ -9,8 +9,6 @@
  */
 export function installHoverPainter(opts = {}) {
   const d = document;
-  let raf = 0;
-  let lastId = null;
 
   const rootOf = () =>
     (opts.getRoot && opts.getRoot()) ||
@@ -23,7 +21,7 @@ export function installHoverPainter(opts = {}) {
       .forEach((node) => node.classList.remove('math-token--hovered'));
   };
 
-  const paint = (id) => {
+  const paintAll = (id) => {
     const root = rootOf();
     if (!root) return;
     clear(root);
@@ -34,51 +32,77 @@ export function installHoverPainter(opts = {}) {
     if (opts.devLog) console.debug('[hover.paint]', id);
   };
 
-  const pickIdAtPoint = (x, y) => {
+  const takeTokIdFromPath = (event) => {
     const root = rootOf();
     if (!root) return null;
-    const stack = d.elementsFromPoint(x, y);
-    for (const el of stack) {
+    const rawPath =
+      typeof event.composedPath === 'function'
+        ? event.composedPath()
+        : [];
+    const path =
+      rawPath && rawPath.length > 0
+        ? rawPath
+        : (() => {
+            const target = event.target;
+            const acc = [];
+            if (!(target instanceof Element)) return acc;
+            for (let el = target; el; el = el.parentElement) {
+              acc.push(el);
+            }
+            return acc;
+          })();
+    for (const el of path) {
       if (!(el instanceof Element)) continue;
       if (!root.contains(el)) continue;
-      const hit = el.closest('[id^="tok:"]');
-      if (hit && root.contains(hit)) return (/** @type {HTMLElement} */ (hit)).id || null;
+      const id = /** @type {HTMLElement} */ (el).id || '';
+      if (id.startsWith('tok:')) {
+        return id;
+      }
     }
     return null;
   };
 
-  const paintAsync = () => {
-    raf = 0;
-    paint(lastId);
+  let currentId = null;
+
+  const onOver = (event) => {
+    const nextId = takeTokIdFromPath(event);
+    if (nextId === currentId) {
+      return;
+    }
+    currentId = nextId;
+    paintAll(currentId);
   };
 
-  const onMove = (e) => {
-    const id = pickIdAtPoint(e.clientX, e.clientY);
-    if (id === lastId) return;
-    lastId = id;
-    if (!raf) raf = requestAnimationFrame(paintAsync);
+  const onOut = (event) => {
+    const root = rootOf();
+    if (!root) return;
+    const rel = event.relatedTarget instanceof Element ? event.relatedTarget : null;
+    if (!rel || !root.contains(rel)) {
+      currentId = null;
+      clear(root);
+    }
   };
 
-  const onLeave = () => {
-    lastId = null;
-    paint(null);
+  const bind = () => {
+    const root = rootOf();
+    if (!root) return false;
+    root.addEventListener('mouseover', onOver, { capture: true, passive: true });
+    root.addEventListener('mouseout', onOut, { capture: true, passive: true });
+    return true;
   };
 
-  d.addEventListener('pointermove', onMove, { capture: true, passive: true });
-  d.addEventListener('pointerleave', onLeave, { capture: true, passive: true });
-
+  const ok = bind();
   if (typeof window !== 'undefined') {
-    window.__hoverPainterReady = true;
+    window.__hoverPainterReady = ok;
   }
 
   return () => {
-    if (raf) {
-      cancelAnimationFrame(raf);
-      raf = 0;
+    const root = rootOf();
+    if (root) {
+      root.removeEventListener('mouseover', onOver, true);
+      root.removeEventListener('mouseout', onOut, true);
+      clear(root);
     }
-    d.removeEventListener('pointermove', onMove, true);
-    d.removeEventListener('pointerleave', onLeave, true);
-    paint(null);
     if (typeof window !== 'undefined') {
       window.__hoverPainterReady = false;
     }
