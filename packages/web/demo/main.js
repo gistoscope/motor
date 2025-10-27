@@ -1,14 +1,22 @@
 import installHoverPainter from '../src/ui/hover.painter.js';
 
 window.MOTOR_DISABLE_WORKERS = true;
+window.__hoverPainterReady = false;
 
 let __uninstallHover = null;
 function enableHover() {
   __uninstallHover?.();
-  __uninstallHover = installHoverPainter({
-    getRoot: () =>
-      document.querySelector('.katex .katex-html') || document.querySelector('.katex-html'),
-  });
+  try {
+    __uninstallHover = installHoverPainter({
+      getRoot: () =>
+        document.querySelector('.katex .katex-html') || document.querySelector('.katex-html'),
+    });
+    window.__hoverPainterReady = true;
+  } catch (error) {
+    console.error('hover painter init failed', error);
+    __uninstallHover = null;
+    window.__hoverPainterReady = false;
+  }
 }
 
 async function importWithTsFallback(specifier) {
