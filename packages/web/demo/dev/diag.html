@@ -13,6 +13,7 @@
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   iframe { width: 100%; height: 280px; border: 1px solid #e5e7eb; border-radius: 8px; }
   .note { color:#4b5563; font-size:12px; }
+  .math-token--hovered { outline: 3px solid magenta !important; border-radius: 4px; }
 </style>
 <h1>Motor — Dev Diagnostics</h1>
 <div class="grid" id="grid">
@@ -38,12 +39,7 @@
       $('a_anchors').innerHTML = badge(okAnchors, okAnchors ? `OK (idCount=${ids.length})` : `FAIL (idCount=${ids.length})`);
 
       // --- Hover test ---
-      // 1) Добавим стиль, чтобы было видно глазами (на случай отсутствия CSS)
-      const style = d.createElement('style');
-      style.textContent = `.math-token--hovered{outline:3px solid magenta!important;border-radius:4px}`;
-      d.head.appendChild(style);
-
-      // 2) Возьмём центральный токен (обычно "+")
+      // Возьмём центральный токен (обычно "+")
       const target = ids[1] || ids[0];
       let okHover = false;
       if (target) {
