@@ -1,4 +1,4 @@
-import { addClassByLogicalIds, clearClassEverywhere } from '../dom/anchor-helpers.js';
+import { addClassByIds, clearClassEverywhere } from '../dom/anchor-helpers.js';
 
 export interface MathDiffPayload {
   added: string[];
@@ -29,7 +29,7 @@ function addClass(host: HTMLElement, ids: Iterable<string>, className: string): 
   if (normalized.length === 0) {
     return;
   }
-  addClassByLogicalIds(host, normalized, className);
+  addClassByIds(host, normalized, className);
 }
 
 export function applyMathDiff(host: HTMLElement, diff: MathDiffPayload): void {

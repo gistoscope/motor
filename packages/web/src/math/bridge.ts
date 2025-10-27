@@ -5,7 +5,7 @@ import { applyMathDiff, type MathDiffPayload } from '../ui/diff';
 import { applyRuleTooltip } from '../ui/tooltips';
 import { createWarningsPanel } from '../ui/warnings';
 import { createToastManager } from '../ui/toast';
-import { addClassByLogicalIds, queryAnchors, removeClassByLogicalIds } from '../dom/anchor-helpers.js';
+import { addClassByIds, queryAnchors } from '../dom/anchor-helpers.js';
 import {
   isHTMLElement,
   isHTMLInputElement,
@@ -90,36 +90,43 @@ function extractTokenIdsFromPayload(payload: unknown): string[] {
   return [];
 }
 
-function removeClassFromIds(
-  host: HTMLElement,
-  ids: Iterable<string>,
-  className: string,
-  extraClasses: string[] = [],
-): void {
-  removeClassByLogicalIds(host, ids, className);
-  if (extraClasses.length === 0) {
-    return;
-  }
-  for (const id of ids) {
-    for (const element of queryAnchors(host, id)) {
-      extraClasses.forEach((extra) => element.classList.remove(extra));
-    }
-  }
-}
-
 function addClassToIds(
   host: HTMLElement,
   ids: Iterable<string>,
   className: string,
   extraClasses: string[] = [],
 ): void {
-  addClassByLogicalIds(host, ids, className);
+  const touched = new Set<HTMLElement>();
+  addClassByIds(host, ids, className);
   if (extraClasses.length === 0) {
     return;
   }
-  for (const id of ids) {
+  for (const id of ids ?? []) {
     for (const element of queryAnchors(host, id)) {
+      if (touched.has(element)) {
+        continue;
+      }
+      touched.add(element);
       extraClasses.forEach((extra) => element.classList.add(extra));
+    }
+  }
+}
+
+function removeClassFromIds(
+  host: HTMLElement,
+  ids: Iterable<string>,
+  className: string,
+  extraClasses: string[] = [],
+): void {
+  const touched = new Set<HTMLElement>();
+  for (const id of ids ?? []) {
+    for (const element of queryAnchors(host, id)) {
+      if (touched.has(element)) {
+        continue;
+      }
+      touched.add(element);
+      element.classList.remove(className);
+      extraClasses.forEach((extra) => element.classList.remove(extra));
     }
   }
 }
