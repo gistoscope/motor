@@ -69,12 +69,13 @@
       }
 
       const rect = target.getBoundingClientRect();
-      const pointer = new w.PointerEvent('pointermove', {
+      const hoverEvent = new w.MouseEvent('mouseover', {
         bubbles: true,
+        composed: true,
         clientX: rect.left + rect.width / 2,
         clientY: rect.top + rect.height / 2,
       });
-      target.dispatchEvent(pointer);
+      target.dispatchEvent(hoverEvent);
 
       await waitFrame();
 
