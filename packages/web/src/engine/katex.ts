@@ -1,8 +1,16 @@
 import { isHTMLElement } from '../util/dom';
 import withHtmlIdsFromEngine from './latexIds.engine.js';
 
+type KatexStrictFn = (code: string, message?: string, token?: string) => 'warn' | 'ignore' | 'error';
+
+type KatexRenderOptions = {
+  throwOnError?: boolean;
+  trust?: boolean | ((context: unknown) => boolean);
+  strict?: 'warn' | 'ignore' | 'error' | KatexStrictFn;
+};
+
 type KatexLike = {
-  render: (tex: string, element: HTMLElement, options?: { throwOnError?: boolean }) => void;
+  render: (tex: string, element: HTMLElement, options?: KatexRenderOptions) => void;
 };
 
 const KATEX_READY_EVENT = 'katex:ready';
@@ -154,7 +162,7 @@ export async function renderWithKaTeX(
     const contentWithIds = withHtmlIdsFromEngine(content);
     katex.render(contentWithIds, targetEl, {
       throwOnError: false,
-      trust: (context) => context?.command === '\\htmlId' || context?.command === '\\htmlClass',
+      trust: true,
       strict: (code) => (code === 'htmlExtension' ? 'ignore' : 'warn'),
     });
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
@@ -166,3 +174,5 @@ export async function renderWithKaTeX(
     return false;
   }
 }
+
+export { withHtmlIdsFromEngine as withHtmlIds };
