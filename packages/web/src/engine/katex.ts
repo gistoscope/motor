@@ -160,11 +160,18 @@ export async function renderWithKaTeX(
 
   try {
     const contentWithIds = withHtmlIdsFromEngine(content);
-    katex.render(contentWithIds, targetEl, {
+    const renderOptions = {
       throwOnError: false,
       trust: true,
-      strict: (code) => (code === 'htmlExtension' ? 'ignore' : 'warn'),
-    });
+      strict: (code: string) => (code === 'htmlExtension' ? 'ignore' : 'warn'),
+    } satisfies KatexRenderOptions;
+    if (typeof location !== 'undefined' && location.pathname.includes('/dev/diag')) {
+      console.debug('[renderWithKaTeX]', {
+        hasHtmlId: contentWithIds.includes('\\htmlId{'),
+        trust: renderOptions.trust ?? true,
+      });
+    }
+    katex.render(contentWithIds, targetEl, renderOptions);
     updateBadge(badgeEl, 'KaTeX: loaded', 'loaded');
     return true;
   } catch (error) {
