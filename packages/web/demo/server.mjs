@@ -13,6 +13,7 @@ const SRC_ROOT = join(WEB_ROOT, 'src');
 const PACKAGES_ROOT = join(REPO_ROOT, 'packages');
 const NODE_MODULES_ROOT = join(REPO_ROOT, 'node_modules');
 const PORT = 4000;
+const DEV_DIAG_PATH = join(DEMO_ROOT, 'dev', 'diag.html');
 
 const MIME_TYPES = new Map([
   ['.html', 'text/html; charset=utf-8'],
@@ -267,6 +268,15 @@ createServer(async (req, res) => {
 
     if (pathname === '/') {
       pathname = '/index.html';
+    }
+
+    if (pathname === '/dev/diag' || pathname === '/dev/diag/') {
+      if (!existsSync(DEV_DIAG_PATH)) {
+        notFound(res);
+        return;
+      }
+      await serveStatic(res, DEV_DIAG_PATH);
+      return;
     }
 
     if (pathname.startsWith('/__packages/')) {

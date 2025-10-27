@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8"/>
+<title>Motor Dev Diag</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 20px; }
+  h1 { margin: 0 0 12px; }
+  .grid { display: grid; grid-template-columns: 220px 1fr; gap: 8px 16px; align-items: center; }
+  .badge { display:inline-block; padding: 2px 8px; border-radius: 999px; font-weight:600; }
+  .ok { background:#16a34a22; color:#166534; border:1px solid #16a34a55; }
+  .warn { background:#f59e0b22; color:#92400e; border:1px solid #f59e0b55; }
+  .err { background:#dc262622; color:#7f1d1d; border:1px solid #dc262655; }
+  .muted { color:#6b7280; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  iframe { width: 100%; height: 280px; border: 1px solid #e5e7eb; border-radius: 8px; }
+  .note { color:#4b5563; font-size:12px; }
+</style>
+<h1>Motor — Dev Diagnostics</h1>
+<div class="grid" id="grid">
+  <div>Anchors (KaTeX ids)</div><div id="a_anchors" class="mono">…</div>
+  <div>Hover (.math-token--hovered)</div><div id="a_hover" class="mono">…</div>
+  <div>Click (token select)</div><div id="a_click" class="mono muted">PENDING (after CC08)</div>
+  <div>Brackets (pair select)</div><div id="a_brackets" class="mono muted">PENDING (after CC08)</div>
+</div>
+<p class="note">Страница открывает Playground снизу и запускает авто-проверки. Если что-то красное — смотри подробности в консоли.</p>
+<iframe id="play" src="/?expr=2%2B3#graphs"></iframe>
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  const badge = (ok, msg) => `<span class="badge ${ok===true?'ok':ok===false?'err':'warn'}">${msg}</span>`;
+
+  const play = document.getElementById('play');
+  play.addEventListener('load', async () => {
+    const w = play.contentWindow, d = w.document;
+    try {
+      // --- Anchors test ---
+      const root = d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
+      const ids = root ? [...root.querySelectorAll('[id]')] : [];
+      const okAnchors = !!root && ids.length >= 3;
+      $('a_anchors').innerHTML = badge(okAnchors, okAnchors ? `OK (idCount=${ids.length})` : `FAIL (idCount=${ids.length})`);
+
+      // --- Hover test ---
+      // 1) Добавим стиль, чтобы было видно глазами (на случай отсутствия CSS)
+      const style = d.createElement('style');
+      style.textContent = `.math-token--hovered{outline:3px solid magenta!important;border-radius:4px}`;
+      d.head.appendChild(style);
+
+      // 2) Возьмём центральный токен (обычно "+")
+      const target = ids[1] || ids[0];
+      let okHover = false;
+      if (target) {
+        // Синтетически "наведём" указатель на токен (событие в том же документе)
+        const r = target.getBoundingClientRect();
+        const evt = new w.PointerEvent('pointermove', { bubbles:true, clientX: r.left + r.width/2, clientY: r.top + r.height/2 });
+        target.dispatchEvent(evt);
+
+        // Дадим кадр на отработку
+        await new Promise(rf => w.requestAnimationFrame(rf));
+
+        const hovered = root ? [...root.querySelectorAll('.math-token--hovered')] : [];
+        okHover = hovered.length >= 1;
+        $('a_hover').innerHTML = badge(okHover, okHover ? `OK (${hovered.map(n=>n.id).join(',')})` : 'FAIL (no class set)');
+      } else {
+        $('a_hover').innerHTML = badge(false, 'FAIL (no tokens found)');
+      }
+    } catch (e) {
+      console.error('diag error:', e);
+      $('a_anchors').innerHTML = badge(false, 'ERROR');
+      $('a_hover').innerHTML = badge(false, 'ERROR');
+    }
+  });
+</script>

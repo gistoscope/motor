@@ -11,6 +11,7 @@
     "test": "pnpm -r test",
     "log2test": "node scripts/log2test.mjs",
     "dev:web": "pnpm --filter @motor/web dev",
+    "diag": "node packages/web/demo/server.mjs",
     "start:cli": "pnpm --filter @motor/cli exec motor --demo",
     "prepare": "husky install",
     "cc:record": "node tools/cc-digest/record.mjs",
