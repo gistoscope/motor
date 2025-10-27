@@ -10,6 +10,7 @@ function enableHover() {
     __uninstallHover = installHoverPainter({
       getRoot: () =>
         document.querySelector('.katex .katex-html') || document.querySelector('.katex-html'),
+      devLog: false,
     });
     window.__hoverPainterReady = true;
   } catch (error) {
