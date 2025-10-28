@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createPlaygroundDisplay } from '../../web/src/ui/playgroundDisplay';
-import { selection } from '../../web/src/ui/selection';
+import { getSelection, clearSelection } from '../../web/src/ui/selection';
 
 describe('playground display selection', () => {
   let root: HTMLElement;
@@ -24,10 +24,10 @@ describe('playground display selection', () => {
   });
 
   afterEach(() => {
+    clearSelection(document);
     document.body.innerHTML = '';
     delete (window as typeof window & { katex?: unknown }).katex;
     delete (window as typeof window & { __gvClickReady?: boolean }).__gvClickReady;
-    selection.current = null;
   });
 
   const dispatchClick = (target: Element, path: Element[]) => {
@@ -39,7 +39,10 @@ describe('playground display selection', () => {
     target.dispatchEvent(event);
   };
 
-  it('selects the visible leaf and clears on escape', async () => {
+  const selectedCount = (context: ParentNode): number =>
+    context.querySelectorAll('.math-token--selected').length;
+
+  it('highlights a single visible leaf and clears on escape', async () => {
     const display = createPlaygroundDisplay({
       root,
       catxContainer,
@@ -57,11 +60,18 @@ describe('playground display selection', () => {
               <span id="tok:first" class="math-token">
                 <span class="strut"></span>
                 <span class="base">
-                  <span class="mord" data-testid="visible-leaf">2</span>
+                  <span class="mord" data-testid="leaf-2">2</span>
                 </span>
               </span>
               <span id="tok:plus" class="math-token">
-                <span class="base" data-testid="plus-leaf">+</span>
+                <span class="base">
+                  <span class="mord" data-testid="leaf-plus">+</span>
+                </span>
+              </span>
+              <span id="tok:second" class="math-token">
+                <span class="base">
+                  <span class="mord" data-testid="leaf-3">3</span>
+                </span>
               </span>
             </span>
           </span>
@@ -69,25 +79,39 @@ describe('playground display selection', () => {
       },
     };
 
-    await display.render({ tex: '2+3', plain: '2+3', ast: {} });
+    await display.render({ tex: '(2+3)', plain: '(2+3)', ast: {} });
 
     const katexRoot = catxContainer.querySelector<HTMLElement>('.katex-html');
     expect(katexRoot).toBeTruthy();
-    const token = katexRoot?.querySelector<HTMLElement>('[id="tok:first"]');
-    expect(token).toBeTruthy();
-    const leaf = katexRoot?.querySelector<HTMLElement>('[data-testid="visible-leaf"]');
-    expect(leaf).toBeTruthy();
 
-    dispatchClick(leaf!, [leaf!, leaf!.parentElement!, token!, katexRoot!]);
+    const firstToken = katexRoot?.querySelector<HTMLElement>('[id="tok:first"]');
+    const firstLeaf = katexRoot?.querySelector<HTMLElement>('[data-testid="leaf-2"]');
+    const plusToken = katexRoot?.querySelector<HTMLElement>('[id="tok:plus"]');
+    const plusLeaf = katexRoot?.querySelector<HTMLElement>('[data-testid="leaf-plus"]');
+    expect(firstToken).toBeTruthy();
+    expect(firstLeaf).toBeTruthy();
+    expect(plusToken).toBeTruthy();
+    expect(plusLeaf).toBeTruthy();
 
-    expect(leaf?.classList.contains('math-token--selected')).toBe(true);
+    dispatchClick(firstLeaf!, [firstLeaf!, firstLeaf!.parentElement!, firstToken!, katexRoot!]);
+
+    expect(selectedCount(katexRoot!)).toBe(1);
+    expect(firstLeaf?.classList.contains('math-token--selected')).toBe(true);
+    expect(getSelection()).toEqual({ id: firstLeaf!.id || 'tok:first' });
     expect((window as typeof window & { __gvClickReady?: boolean }).__gvClickReady).toBe(true);
 
     const escapeEvent = new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
-    root.dispatchEvent(escapeEvent);
+    document.dispatchEvent(escapeEvent);
 
-    expect(leaf?.classList.contains('math-token--selected')).toBe(false);
-    expect(selection.current).toBeNull();
+    expect(selectedCount(katexRoot!)).toBe(0);
+    expect(getSelection()).toBeNull();
+
+    dispatchClick(plusLeaf!, [plusLeaf!, plusLeaf!.parentElement!, plusToken!, katexRoot!]);
+
+    expect(selectedCount(katexRoot!)).toBe(1);
+    const selectedNode = katexRoot!.querySelector<HTMLElement>('.math-token--selected');
+    expect(selectedNode?.textContent?.trim()).toBe('+');
+    expect((window as typeof window & { __gvClickReady?: boolean }).__gvClickReady).toBe(true);
 
     display.destroy();
   });

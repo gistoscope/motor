@@ -1,7 +1,7 @@
 import { renderWithKaTeX } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 import installHoverPainter from './hover.painter.js';
-import { clear as clearSelection, select } from './selection';
+import { clearSelection, selectByTokId } from './selection';
 
 function renderTokenFallback(container: HTMLElement, expression: string): void {
   container.textContent = '';
@@ -69,6 +69,12 @@ export function createPlaygroundDisplay({
   let lastPreview: string | null = null;
   let uninstallHover: (() => void) | null = null;
   let uninstallSelection: (() => void) | null = null;
+  const onDocumentKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      clearSelection(ownerDocument);
+    }
+  };
+  ownerDocument.addEventListener('keydown', onDocumentKeyDown);
 
   const setHoverPainterReady = (ready: boolean) => {
     (ownerWindow as typeof ownerWindow & { __hoverPainterReady?: boolean }).__hoverPainterReady = ready;
@@ -113,7 +119,7 @@ export function createPlaygroundDisplay({
       uninstallSelection();
       uninstallSelection = null;
     }
-    clearSelection();
+    clearSelection(ownerDocument);
     catxContainer.dataset.state = 'idle';
     catxContainer.innerHTML = '';
     fallbackContainer.dataset.mode = 'fallback';
@@ -164,7 +170,10 @@ export function createPlaygroundDisplay({
       if (!tokId) {
         return;
       }
-      select(tokId);
+      const didSelect = selectByTokId(tokId, ownerDocument);
+      if (didSelect) {
+        (ownerWindow as typeof ownerWindow & { __gvClickReady?: boolean }).__gvClickReady = true;
+      }
     };
     root.addEventListener('click', onClick);
     uninstallSelection = () => {
@@ -267,14 +276,6 @@ export function createPlaygroundDisplay({
 
   ownerDocument.addEventListener('katex:ready', handleKatexReady);
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      clearSelection();
-    }
-  };
-
-  root.addEventListener('keydown', onKeyDown);
-
   const destroy = () => {
     if (destroyed) {
       return;
@@ -286,8 +287,8 @@ export function createPlaygroundDisplay({
       uninstallSelection();
       uninstallSelection = null;
     }
-    clearSelection();
-    root.removeEventListener('keydown', onKeyDown);
+    clearSelection(ownerDocument);
+    ownerDocument.removeEventListener('keydown', onDocumentKeyDown);
   };
 
   return { render, preview, destroy };
