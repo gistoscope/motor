@@ -1,3 +1,8 @@
+/**
+ * Dev-only ICU hook for diagnostics.
+ * ICU-04: Bracket pairing (click any bracket → highlight its pair).
+ * Also preserves ICU-03 baseline (hover/click).
+ */
 (function(){
   const play = document.getElementById('play');
   if (!play) return;
@@ -5,13 +10,15 @@
   const badge = (ok, msg) => `<span class="badge ${ok===true?'ok':ok===false?'err':'warn'}">${msg}</span>`;
   const $ = (id) => document.getElementById(id);
 
+  const OPEN = new Set(['(', '[', '{']);
+  const CLOSE = new Set([')', ']', '}']);
+  const MATCH = { ')': '(', ']': '[', '}': '{' };
+  const MATCH_OPEN_TO_CLOSE = { '(':')', '[':']', '{':'}' };
+
   function pickVisibleLeaf(el){
-    // Prefer deepest span with size; fallback to element itself
     if (!el) return null;
     let node = el;
-    // descend to leafs with content
     while (node && node.firstElementChild) node = node.firstElementChild;
-    // climb until visible box
     while (node && node instanceof HTMLElement) {
       const r = node.getBoundingClientRect();
       if (r && r.width > 0 && r.height > 0) return node;
@@ -19,65 +26,100 @@
     }
     return el;
   }
-
-  function clearClasses(d, cls){
-    d.querySelectorAll('.'+cls).forEach(n => n.classList.remove(cls));
-  }
+  const isTok = (n) => n && n.id && typeof n.id === 'string' && n.id.startsWith('tok:');
+  const tokText = (tok) => {
+    if (!tok || !(tok instanceof HTMLElement)) return '';
+    const leaf = pickVisibleLeaf(tok);
+    return (leaf?.textContent || tok.textContent || '').trim();
+  };
+  const clear = (d, cls) => d.querySelectorAll('.'+cls).forEach(n => n.classList.remove(cls));
 
   play.addEventListener('load', () => {
     const w = play.contentWindow;
     const d = w?.document;
-    if (!w || !d) {
-      const row = document.getElementById('icu_row');
-      if (row) row.innerHTML = badge(false, 'FAIL (iframe not ready)');
-      return;
-    }
+    if (!w || !d) { $('icu_brackets_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)'); return; }
+
     if (!w.__icu) {
       w.__icu = { hoverReady:false, clickReady:false, bracketsReady:false, dragReady:false, multiReady:false, selection:{regions:[],focusIndex:null} };
     }
 
     const root = d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
-    if (!root) { $('icu_status').innerHTML = badge(false, 'FAIL (no KaTeX root)'); return; }
+    if (!root) { $('icu_brackets_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)'); return; }
 
-    const onPointerMove = (ev) => {
+    // Build token list and compute bracket pairs (indices in stream)
+    const toks = [...root.querySelectorAll('[id^="tok:"]')].filter(el => el instanceof HTMLElement);
+    const idx = new Map(toks.map((el,i)=>[el.id, i]));
+    const stack = { '(':[], '[':[], '{':[] };
+    const pairById = new Map(); // id -> {openId, closeId, openIndex, closeIndex, level}
+    let levels = 0;
+
+    for (let i=0;i<toks.length;i++){
+      const el = toks[i];
+      const t = tokText(el);
+      const ch = t[0];
+      if (OPEN.has(ch)) {
+        stack[ch].push({ id: el.id, i, level: levels++ });
+      } else if (CLOSE.has(ch)) {
+        const openCh = MATCH[ch];
+        const rec = stack[openCh]?.pop?.();
+        if (rec) {
+          const pair = { openId: rec.id, closeId: el.id, openIndex: rec.i, closeIndex: i, level: rec.level };
+          pairById.set(rec.id, pair);
+          pairById.set(el.id, pair);
+        }
+      }
+    }
+
+    function render() {
+      const ok = w.__icu.bracketsReady === true;
+      $('icu_brackets_status')?.innerHTML = badge(ok ? true : null, ok ? 'OK (pair highlighted)' : 'PENDING (click a bracket)');
+      const okBase = (w.__icu.hoverReady && w.__icu.clickReady);
+      $('icu_status')?.innerHTML = badge(okBase ? true : null, okBase ? 'OK (hover+click baseline)' : 'PENDING (move & click)');
+    }
+
+    function onPointerMove(ev){
       const path = ev.composedPath?.() ?? [];
-      const tok = path.find(n => n && n.id && typeof n.id === 'string' && n.id.startsWith('tok:'));
-      const leaf = pickVisibleLeaf(tok||path.find(n => n instanceof HTMLElement));
-      clearClasses(d, 'icu-hovered');
+      const tok = path.find(isTok);
+      const leaf = pickVisibleLeaf(tok || path.find(n => n instanceof HTMLElement));
+      clear(d, 'icu-hovered');
       if (leaf && leaf instanceof HTMLElement) leaf.classList.add('icu-hovered');
       w.__icu.hoverReady = true;
       render();
-    };
+    }
 
-    const onClickCapture = (ev) => {
+    function onClickCapture(ev){
       const path = ev.composedPath?.() ?? [];
-      const tok = path.find(n => n && n.id && typeof n.id === 'string' && n.id.startsWith('tok:'));
-      const leaf = pickVisibleLeaf(tok||path.find(n => n instanceof HTMLElement));
-
-      clearClasses(d, 'icu-selected');
-      if (tok && tok instanceof HTMLElement) tok.classList.add('icu-selected');
-      if (leaf && leaf instanceof HTMLElement) leaf.classList.add('icu-selected');
-
+      const tok = path.find(isTok);
+      clear(d, 'icu-selected');
+      clear(d, 'icu-bracket');
+      if (tok && tok instanceof HTMLElement) {
+        tok.classList.add('icu-selected');
+        const t = tokText(tok)[0];
+        if (OPEN.has(t) || CLOSE.has(t)) {
+          const pair = pairById.get(tok.id);
+          if (pair) {
+            const openEl = d.getElementById(pair.openId);
+            const closeEl = d.getElementById(pair.closeId);
+            openEl?.classList.add('icu-bracket');
+            closeEl?.classList.add('icu-bracket');
+            w.__icu.bracketsReady = true;
+          }
+        }
+      }
       w.__icu.clickReady = true;
       render();
-    };
+    }
 
-    const onKeydown = (ev) => {
+    function onKeydown(ev){
       if (ev.key === 'Escape') {
-        clearClasses(d, 'icu-selected');
-        clearClasses(d, 'icu-hovered');
+        clear(d, 'icu-selected'); clear(d,'icu-hovered'); clear(d,'icu-bracket');
         render();
       }
-    };
+    }
 
     d.addEventListener('pointermove', onPointerMove, true);
     d.addEventListener('click', onClickCapture, true);
     d.addEventListener('keydown', onKeydown, true);
-
-    function render(){
-      const ok = (w.__icu.hoverReady && w.__icu.clickReady);
-      $('icu_status').innerHTML = badge(ok ? true : null, ok ? 'OK (hover+click baseline)' : 'PENDING (move & click)');
-    }
 
     render();
   });
