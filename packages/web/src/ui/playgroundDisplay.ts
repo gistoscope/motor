@@ -1,5 +1,6 @@
 import { renderWithKaTeX } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
+import installHoverPainter from './hover.painter.js';
 
 function renderTokenFallback(container: HTMLElement, expression: string): void {
   container.textContent = '';
@@ -65,6 +66,32 @@ export function createPlaygroundDisplay({
   let catxRenderer: CatxRenderer | null = null;
   let lastPayload: PlaygroundDisplayRenderPayload | null = null;
   let lastPreview: string | null = null;
+  let uninstallHover: (() => void) | null = null;
+
+  const setHoverPainterReady = (ready: boolean) => {
+    (ownerWindow as typeof ownerWindow & { __hoverPainterReady?: boolean }).__hoverPainterReady = ready;
+  };
+
+  const teardownHoverPainter = () => {
+    if (uninstallHover) {
+      uninstallHover();
+      uninstallHover = null;
+    }
+    setHoverPainterReady(false);
+  };
+
+  const mountHoverPainter = () => {
+    const getRoot = () =>
+      catxContainer.querySelector<HTMLElement>('.katex .katex-html') ??
+      catxContainer.querySelector<HTMLElement>('.katex-html');
+    const root = getRoot();
+    teardownHoverPainter();
+    uninstallHover = installHoverPainter({
+      getRoot,
+      devLog: false,
+    });
+    setHoverPainterReady(Boolean(root));
+  };
 
   const ensureCatxRenderer = (): CatxRenderer | null => {
     if (!catxRenderer) {
@@ -79,6 +106,7 @@ export function createPlaygroundDisplay({
   };
 
   const resetContainers = () => {
+    teardownHoverPainter();
     catxContainer.dataset.state = 'idle';
     catxContainer.innerHTML = '';
     fallbackContainer.dataset.mode = 'fallback';
@@ -131,6 +159,7 @@ export function createPlaygroundDisplay({
     if (katexSuccess && (catxContainer.childElementCount > 0 || catxContainer.textContent?.trim())) {
       catxContainer.dataset.state = 'ready';
       fallbackContainer.dataset.mode = htmlOutput ? 'shadow' : 'fallback';
+      mountHoverPainter();
       return;
     }
 
@@ -155,6 +184,7 @@ export function createPlaygroundDisplay({
     if (success && (catxContainer.childElementCount > 0 || catxContainer.textContent?.trim())) {
       catxContainer.dataset.state = 'ready';
       fallbackContainer.dataset.mode = 'shadow';
+      mountHoverPainter();
       return;
     }
 
@@ -182,6 +212,7 @@ export function createPlaygroundDisplay({
     }
     destroyed = true;
     ownerDocument.removeEventListener('katex:ready', handleKatexReady);
+    teardownHoverPainter();
   };
 
   return { render, preview, destroy };
