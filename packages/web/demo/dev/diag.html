@@ -19,7 +19,7 @@
 <div class="grid" id="grid">
   <div>Anchors (KaTeX ids)</div><div id="a_anchors" class="mono">…</div>
   <div>Hover (.math-token--hovered)</div><div id="a_hover" class="mono">…</div>
-  <div>Click (token select)</div><div id="a_click" class="mono muted">PENDING (after CC08)</div>
+  <div>Click (token select)</div><div id="a_click" class="mono muted">PENDING (awaiting click)</div>
   <div>Brackets (pair select)</div><div id="a_brackets" class="mono muted">PENDING (after CC08)</div>
 </div>
 <p class="note">Страница открывает Playground снизу и запускает авто-проверки. Если что-то красное — смотри подробности в консоли.</p>
@@ -30,7 +30,15 @@
 
   const play = document.getElementById('play');
   play.addEventListener('load', async () => {
-    const w = play.contentWindow, d = w.document;
+    const w = play.contentWindow;
+    if (!w) {
+      $('a_click').innerHTML = badge(false, 'FAIL (iframe not ready)');
+      return;
+    }
+
+    const d = w.document;
+
+    w.__gvClickReady = false;
 
     const waitFrame = () => new Promise((resolve) => w.requestAnimationFrame(resolve));
     const findRoot = () => d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
@@ -82,10 +90,29 @@
       const hovered = [...root.querySelectorAll('.math-token--hovered')];
       const okHover = hovered.length >= 1;
       $('a_hover').innerHTML = badge(okHover, okHover ? `OK (${hovered.map((n) => n.id).join(',')})` : 'FAIL (hover class not applied — check pointer listener)');
+
+      const clickEvent = new w.MouseEvent('click', { bubbles: true, composed: true });
+      Object.defineProperty(clickEvent, 'composedPath', {
+        configurable: true,
+        value: () => [target, root],
+      });
+      target.dispatchEvent(clickEvent);
+
+      await waitFrame();
+
+      const selected = root.querySelector('.math-token--selected');
+      const clickReady = Boolean(selected && w.__gvClickReady);
+      $('a_click').innerHTML = badge(
+        clickReady,
+        clickReady
+          ? `OK (${selected instanceof HTMLElement ? selected.textContent?.trim() || selected.id : 'selected'})`
+          : 'FAIL (click did not trigger selection — inspect listeners)',
+      );
     } catch (e) {
       console.error('diag error:', e);
       $('a_anchors').innerHTML = badge(false, 'ERROR (see console)');
       $('a_hover').innerHTML = badge(false, 'ERROR (see console)');
+      $('a_click').innerHTML = badge(false, 'ERROR (see console)');
     }
   });
 </script>

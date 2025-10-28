@@ -1,6 +1,7 @@
 import { renderWithKaTeX } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 import installHoverPainter from './hover.painter.js';
+import { clear as clearSelection, select } from './selection';
 
 function renderTokenFallback(container: HTMLElement, expression: string): void {
   container.textContent = '';
@@ -67,6 +68,7 @@ export function createPlaygroundDisplay({
   let lastPayload: PlaygroundDisplayRenderPayload | null = null;
   let lastPreview: string | null = null;
   let uninstallHover: (() => void) | null = null;
+  let uninstallSelection: (() => void) | null = null;
 
   const setHoverPainterReady = (ready: boolean) => {
     (ownerWindow as typeof ownerWindow & { __hoverPainterReady?: boolean }).__hoverPainterReady = ready;
@@ -107,10 +109,67 @@ export function createPlaygroundDisplay({
 
   const resetContainers = () => {
     teardownHoverPainter();
+    if (uninstallSelection) {
+      uninstallSelection();
+      uninstallSelection = null;
+    }
+    clearSelection();
     catxContainer.dataset.state = 'idle';
     catxContainer.innerHTML = '';
     fallbackContainer.dataset.mode = 'fallback';
     fallbackHtml.innerHTML = '';
+  };
+
+  const takeTokIdFromPath = (event: Event, root: Element): string | null => {
+    const rawPath =
+      typeof (event as { composedPath?: () => EventTarget[] }).composedPath === 'function'
+        ? (event as { composedPath: () => EventTarget[] }).composedPath()
+        : [];
+    const fallbackPath = () => {
+      const target = event.target;
+      const acc: EventTarget[] = [];
+      if (target instanceof Element) {
+        for (let el: Element | null = target; el; el = el.parentElement) {
+          acc.push(el);
+        }
+      }
+      return acc;
+    };
+    const path = rawPath && rawPath.length > 0 ? rawPath : fallbackPath();
+    for (const el of path) {
+      if (!(el instanceof Element)) continue;
+      if (!root.contains(el)) continue;
+      const id = (el as HTMLElement).id || '';
+      if (id.startsWith('tok:')) {
+        return id;
+      }
+    }
+    return null;
+  };
+
+  const mountSelectionHandlers = () => {
+    const getRoot = () =>
+      catxContainer.querySelector<HTMLElement>('.katex .katex-html') ??
+      catxContainer.querySelector<HTMLElement>('.katex-html');
+    const root = getRoot();
+    if (uninstallSelection) {
+      uninstallSelection();
+      uninstallSelection = null;
+    }
+    if (!root) {
+      return;
+    }
+    const onClick = (event: MouseEvent) => {
+      const tokId = takeTokIdFromPath(event, root);
+      if (!tokId) {
+        return;
+      }
+      select(tokId);
+    };
+    root.addEventListener('click', onClick);
+    uninstallSelection = () => {
+      root.removeEventListener('click', onClick);
+    };
   };
 
   const applyFallback = (expression: string, htmlOutput: string | undefined) => {
@@ -160,6 +219,7 @@ export function createPlaygroundDisplay({
       catxContainer.dataset.state = 'ready';
       fallbackContainer.dataset.mode = htmlOutput ? 'shadow' : 'fallback';
       mountHoverPainter();
+      mountSelectionHandlers();
       return;
     }
 
@@ -185,6 +245,7 @@ export function createPlaygroundDisplay({
       catxContainer.dataset.state = 'ready';
       fallbackContainer.dataset.mode = 'shadow';
       mountHoverPainter();
+      mountSelectionHandlers();
       return;
     }
 
@@ -206,6 +267,14 @@ export function createPlaygroundDisplay({
 
   ownerDocument.addEventListener('katex:ready', handleKatexReady);
 
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      clearSelection();
+    }
+  };
+
+  root.addEventListener('keydown', onKeyDown);
+
   const destroy = () => {
     if (destroyed) {
       return;
@@ -213,6 +282,12 @@ export function createPlaygroundDisplay({
     destroyed = true;
     ownerDocument.removeEventListener('katex:ready', handleKatexReady);
     teardownHoverPainter();
+    if (uninstallSelection) {
+      uninstallSelection();
+      uninstallSelection = null;
+    }
+    clearSelection();
+    root.removeEventListener('keydown', onKeyDown);
   };
 
   return { render, preview, destroy };
