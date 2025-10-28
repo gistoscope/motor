@@ -19,7 +19,7 @@
 <div class="grid" id="grid">
   <div>Anchors (KaTeX ids)</div><div id="a_anchors" class="mono">…</div>
   <div>Hover (.math-token--hovered)</div><div id="a_hover" class="mono">…</div>
-  <div>Click (token select)</div><div id="a_click" class="mono muted">PENDING (awaiting click)</div>
+  <div>Click</div><div id="a_click" class="mono muted">Click = WAIT</div>
   <div>Brackets (pair select)</div><div id="a_brackets" class="mono muted">PENDING (after CC08)</div>
 </div>
 <p class="note">Страница открывает Playground снизу и запускает авто-проверки. Если что-то красное — смотри подробности в консоли.</p>
@@ -32,13 +32,14 @@
   play.addEventListener('load', async () => {
     const w = play.contentWindow;
     if (!w) {
-      $('a_click').innerHTML = badge(false, 'FAIL (iframe not ready)');
+      $('a_click').innerHTML = badge(false, 'Click = FAIL (iframe not ready)');
       return;
     }
 
     const d = w.document;
 
     w.__gvClickReady = false;
+    $('a_click').innerHTML = badge(null, 'Click = WAIT');
 
     const waitFrame = () => new Promise((resolve) => w.requestAnimationFrame(resolve));
     const findRoot = () => d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
@@ -56,6 +57,7 @@
       if (!root) {
         $('a_anchors').innerHTML = badge(false, 'FAIL (anchors not found yet — reload w/ cache disabled)');
         $('a_hover').innerHTML = badge(false, 'FAIL (tokens unavailable — anchors missing)');
+        $('a_click').innerHTML = badge(false, 'Click = FAIL (tokens unavailable)');
         return;
       }
 
@@ -103,16 +105,16 @@
       const selected = root.querySelector('.math-token--selected');
       const clickReady = Boolean(selected && w.__gvClickReady);
       $('a_click').innerHTML = badge(
-        clickReady,
+        clickReady ? true : false,
         clickReady
-          ? `OK (${selected instanceof HTMLElement ? selected.textContent?.trim() || selected.id : 'selected'})`
-          : 'FAIL (click did not trigger selection — inspect listeners)',
+          ? 'Click = OK'
+          : 'Click = FAIL (selection not applied)'
       );
     } catch (e) {
       console.error('diag error:', e);
       $('a_anchors').innerHTML = badge(false, 'ERROR (see console)');
       $('a_hover').innerHTML = badge(false, 'ERROR (see console)');
-      $('a_click').innerHTML = badge(false, 'ERROR (see console)');
+      $('a_click').innerHTML = badge(false, 'Click = ERROR (see console)');
     }
   });
 </script>
