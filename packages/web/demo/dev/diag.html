@@ -14,12 +14,20 @@
   iframe { width: 100%; height: 280px; border: 1px solid #e5e7eb; border-radius: 8px; }
   .note { color:#4b5563; font-size:12px; }
   .math-token--hovered { outline: 3px solid magenta !important; border-radius: 4px; outline-offset: 2px; }
+  .lamp { display:inline-flex; align-items:center; gap:6px; font-weight:600; color:#6b7280; }
+  .lamp::before { content:''; width:10px; height:10px; border-radius:999px; background:#d1d5db; box-shadow:0 0 0 1px rgba(148,163,184,0.7) inset; }
+  .lamp[data-state='on'] { color:#166534; }
+  .lamp[data-state='on']::before { background:#16a34a; box-shadow:0 0 0 1px rgba(34,197,94,0.5) inset; }
 </style>
 <h1>Motor — Dev Diagnostics</h1>
 <div class="grid" id="grid">
   <div>Anchors (KaTeX ids)</div><div id="a_anchors" class="mono">…</div>
   <div>Hover (.math-token--hovered)</div><div id="a_hover" class="mono">…</div>
-  <div>Click (token select)</div><div id="a_click" class="mono muted">PENDING (awaiting click)</div>
+  <div>Click (token select)</div>
+  <div>
+    <div id="a_click" class="mono muted">PENDING (awaiting click)</div>
+    <div><span id="lamp_click" class="lamp" data-state="off">Click: OK</span></div>
+  </div>
   <div>Brackets (pair select)</div><div id="a_brackets" class="mono muted">PENDING (after CC08)</div>
 </div>
 <p class="note">Страница открывает Playground снизу и запускает авто-проверки. Если что-то красное — смотри подробности в консоли.</p>
@@ -42,6 +50,13 @@
 
     const waitFrame = () => new Promise((resolve) => w.requestAnimationFrame(resolve));
     const findRoot = () => d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
+
+    const lamp = document.getElementById('lamp_click');
+    const setLamp = (ready) => {
+      if (!lamp) return;
+      lamp.dataset.state = ready ? 'on' : 'off';
+    };
+    setLamp(false);
 
     try {
       // --- Wait for KaTeX render ---
@@ -102,6 +117,7 @@
 
       const selected = root.querySelector('.math-token--selected');
       const clickReady = Boolean(selected && w.__gvClickReady);
+      setLamp(clickReady);
       $('a_click').innerHTML = badge(
         clickReady,
         clickReady
@@ -113,6 +129,7 @@
       $('a_anchors').innerHTML = badge(false, 'ERROR (see console)');
       $('a_hover').innerHTML = badge(false, 'ERROR (see console)');
       $('a_click').innerHTML = badge(false, 'ERROR (see console)');
+      setLamp(false);
     }
   });
 </script>

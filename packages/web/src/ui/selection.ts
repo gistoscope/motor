@@ -1,22 +1,8 @@
-export interface Selection {
-  current: string | null;
-}
+export type Selected = { id: string } | null;
 
-interface ClickReadyWindow extends Window {
-  __gvClickReady?: boolean;
-}
+let currentSelection: Selected = null;
 
-const HIGHLIGHT_CLASSES = ['math-token--selected', 'is-selected'] as const;
-
-const defaultDocument = typeof document !== 'undefined' ? document : null;
-
-let selectedLeaf: Element | null = null;
-
-const selectionState: Selection = {
-  current: null,
-};
-
-const textContentHasVisibleGlyph = (element: Element): boolean => {
+const hasVisibleGlyph = (element: Element): boolean => {
   for (const node of Array.from(element.childNodes)) {
     if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
       return true;
@@ -36,102 +22,65 @@ const isIgnorableLeaf = (element: Element): boolean => {
   return ariaHidden === 'true';
 };
 
-const resolveVisibleLeaf = (element: Element): Element => {
-  const stack: Element[] = [element];
-  let lastFallback = element;
+const resolveVisibleLeaf = (element: Element): HTMLElement | null => {
+  const queue: Element[] = [element];
+  let fallback: Element | null = element;
 
-  while (stack.length) {
-    const current = stack.shift()!;
-    if (!isIgnorableLeaf(current) && textContentHasVisibleGlyph(current)) {
-      return current;
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    if (!isIgnorableLeaf(current) && hasVisibleGlyph(current)) {
+      return current as HTMLElement;
     }
+
     const children = Array.from(current.children) as Element[];
-    if (!children.length && !isIgnorableLeaf(current)) {
-      return current;
-    }
     if (children.length === 0) {
-      lastFallback = current;
+      if (!isIgnorableLeaf(current)) {
+        return current as HTMLElement;
+      }
       continue;
     }
+
     for (const child of children) {
       if (!isIgnorableLeaf(child)) {
-        stack.push(child);
+        queue.push(child);
       }
     }
-    for (const child of children) {
-      stack.push(child);
-    }
-    lastFallback = current;
+
+    fallback = current;
   }
 
-  return lastFallback;
+  return fallback instanceof HTMLElement ? fallback : null;
 };
 
-const removeHighlight = () => {
-  if (!selectedLeaf) {
-    return;
+export function clearSelection(doc: Document): void {
+  currentSelection = null;
+  const targets = Array.from(doc.querySelectorAll('.math-token--selected'));
+  for (const el of targets) {
+    el.classList.remove('math-token--selected');
   }
-  for (const cls of HIGHLIGHT_CLASSES) {
-    selectedLeaf.classList.remove(cls);
-  }
-  selectedLeaf = null;
-};
+}
 
-const applyHighlight = (leaf: Element) => {
-  if (selectedLeaf === leaf) {
-    for (const cls of HIGHLIGHT_CLASSES) {
-      if (!leaf.classList.contains(cls)) {
-        leaf.classList.add(cls);
-      }
-    }
-    return;
-  }
-  removeHighlight();
-  selectedLeaf = leaf;
-  for (const cls of HIGHLIGHT_CLASSES) {
-    leaf.classList.add(cls);
-  }
-};
-
-export const selection: Selection = selectionState;
-
-export function select(tokId: string): void {
-  if (!tokId || !defaultDocument) {
-    return;
+export function selectByTokId(tokId: string, doc: Document): boolean {
+  if (!tokId) {
+    return false;
   }
 
-  const anchor = defaultDocument.getElementById(tokId);
+  const anchor = doc.getElementById(tokId);
   if (!anchor) {
-    clear();
-    return;
+    return false;
   }
 
   const leaf = resolveVisibleLeaf(anchor);
-  selectionState.current = tokId;
-  applyHighlight(leaf);
-
-  const docView = anchor.ownerDocument?.defaultView;
-  if (docView) {
-    (docView as ClickReadyWindow).__gvClickReady = true;
-  } else if (typeof window !== 'undefined') {
-    (window as ClickReadyWindow).__gvClickReady = true;
-  }
-}
-
-export function clear(): void {
-  selectionState.current = null;
-  removeHighlight();
-}
-
-export function isSelected(node: Element): boolean {
-  if (!selectionState.current) {
+  if (!leaf) {
     return false;
   }
-  if (node === selectedLeaf) {
-    return true;
-  }
-  if (node instanceof HTMLElement && node.id && node.id === selectionState.current) {
-    return true;
-  }
-  return false;
+
+  clearSelection(doc);
+  leaf.classList.add('math-token--selected');
+  currentSelection = { id: leaf.id || tokId };
+  return true;
+}
+
+export function getSelection(): Selected {
+  return currentSelection;
 }
