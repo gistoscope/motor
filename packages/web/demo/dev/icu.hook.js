@@ -1,7 +1,7 @@
 /**
  * Dev-only ICU hook for diagnostics.
- * ICU-04: Bracket pairing (click any bracket → highlight its pair).
- * Also preserves ICU-03 baseline (hover/click).
+ * ICU-05: Navigator (dblclick → promote to nearest bracket group).
+ * Includes ICU-04 bracket pairing + ICU-03 baseline.
  */
 (function(){
   const play = document.getElementById('play');
@@ -13,7 +13,6 @@
   const OPEN = new Set(['(', '[', '{']);
   const CLOSE = new Set([')', ']', '}']);
   const MATCH = { ')': '(', ']': '[', '}': '{' };
-  const MATCH_OPEN_TO_CLOSE = { '(':')', '[':']', '{':'}' };
 
   function pickVisibleLeaf(el){
     if (!el) return null;
@@ -37,44 +36,57 @@
   play.addEventListener('load', () => {
     const w = play.contentWindow;
     const d = w?.document;
-    if (!w || !d) { $('icu_brackets_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)'); return; }
+    if (!w || !d) { $('icu_nav_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)'); return; }
 
     if (!w.__icu) {
       w.__icu = { hoverReady:false, clickReady:false, bracketsReady:false, dragReady:false, multiReady:false, selection:{regions:[],focusIndex:null} };
     }
+    w.__icu.navReady ??= false;
 
     const root = d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
-    if (!root) { $('icu_brackets_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)'); return; }
+    if (!root) { $('icu_nav_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)'); return; }
 
-    // Build token list and compute bracket pairs (indices in stream)
+    // Build token list and pairs
     const toks = [...root.querySelectorAll('[id^="tok:"]')].filter(el => el instanceof HTMLElement);
     const idx = new Map(toks.map((el,i)=>[el.id, i]));
     const stack = { '(':[], '[':[], '{':[] };
-    const pairById = new Map(); // id -> {openId, closeId, openIndex, closeIndex, level}
-    let levels = 0;
+    const pairs = [];
+    const pairById = new Map();
 
     for (let i=0;i<toks.length;i++){
       const el = toks[i];
-      const t = tokText(el);
-      const ch = t[0];
+      const ch = tokText(el)[0];
       if (OPEN.has(ch)) {
-        stack[ch].push({ id: el.id, i, level: levels++ });
+        stack[ch].push({ id: el.id, i });
       } else if (CLOSE.has(ch)) {
         const openCh = MATCH[ch];
         const rec = stack[openCh]?.pop?.();
         if (rec) {
-          const pair = { openId: rec.id, closeId: el.id, openIndex: rec.i, closeIndex: i, level: rec.level };
-          pairById.set(rec.id, pair);
-          pairById.set(el.id, pair);
+          const pair = { openId: rec.id, closeId: el.id, openIndex: rec.i, closeIndex: i, level: stack[openCh].length };
+          pairs.push(pair);
+          pairById.set(rec.id, pair); pairById.set(el.id, pair);
         }
       }
     }
 
+    const smallestEnclosingPair = (tokId) => {
+      const i = idx.get(tokId);
+      if (i == null) return null;
+      let best = null, bestSpan = Infinity;
+      for (const p of pairs) {
+        if (p.openIndex < i && i < p.closeIndex) {
+          const span = p.closeIndex - p.openIndex;
+          if (span < bestSpan) { best = p; bestSpan = span; }
+        }
+      }
+      return best;
+    };
+
     function render() {
-      const ok = w.__icu.bracketsReady === true;
-      $('icu_brackets_status')?.innerHTML = badge(ok ? true : null, ok ? 'OK (pair highlighted)' : 'PENDING (click a bracket)');
       const okBase = (w.__icu.hoverReady && w.__icu.clickReady);
       $('icu_status')?.innerHTML = badge(okBase ? true : null, okBase ? 'OK (hover+click baseline)' : 'PENDING (move & click)');
+      $('icu_brackets_status')?.innerHTML = badge(w.__icu.bracketsReady ? true : null, w.__icu.bracketsReady ? 'OK (pair highlighted)' : 'PENDING (click a bracket)');
+      $('icu_nav_status')?.innerHTML = badge(w.__icu.navReady ? true : null, w.__icu.navReady ? 'OK (dblclick promote)' : 'PENDING (double-click a token)');
     }
 
     function onPointerMove(ev){
@@ -90,18 +102,15 @@
     function onClickCapture(ev){
       const path = ev.composedPath?.() ?? [];
       const tok = path.find(isTok);
-      clear(d, 'icu-selected');
-      clear(d, 'icu-bracket');
+      clear(d, 'icu-selected'); clear(d,'icu-bracket'); clear(d, 'icu-selected-alt1');
       if (tok && tok instanceof HTMLElement) {
         tok.classList.add('icu-selected');
-        const t = tokText(tok)[0];
-        if (OPEN.has(t) || CLOSE.has(t)) {
+        const ch = tokText(tok)[0];
+        if (OPEN.has(ch) || CLOSE.has(ch)) {
           const pair = pairById.get(tok.id);
           if (pair) {
-            const openEl = d.getElementById(pair.openId);
-            const closeEl = d.getElementById(pair.closeId);
-            openEl?.classList.add('icu-bracket');
-            closeEl?.classList.add('icu-bracket');
+            d.getElementById(pair.openId)?.classList.add('icu-bracket');
+            d.getElementById(pair.closeId)?.classList.add('icu-bracket');
             w.__icu.bracketsReady = true;
           }
         }
@@ -110,15 +119,37 @@
       render();
     }
 
+    function onDblClick(ev){
+      const path = ev.composedPath?.() ?? [];
+      const tok = path.find(isTok);
+      if (!tok || !(tok instanceof HTMLElement)) return;
+
+      // Promote to smallest enclosing bracket content
+      const p = smallestEnclosingPair(tok.id);
+      clear(d, 'icu-selected-alt1');
+      if (p) {
+        for (let i = p.openIndex+1; i < p.closeIndex; i++) {
+          toks[i].classList.add('icu-selected-alt1');
+        }
+        w.__icu.navReady = true;
+      } else {
+        // Fallback: promote current token only (no brackets context)
+        tok.classList.add('icu-selected-alt1');
+        w.__icu.navReady = true;
+      }
+      render();
+    }
+
     function onKeydown(ev){
       if (ev.key === 'Escape') {
-        clear(d, 'icu-selected'); clear(d,'icu-hovered'); clear(d,'icu-bracket');
+        clear(d, 'icu-selected'); clear(d,'icu-hovered'); clear(d,'icu-bracket'); clear(d, 'icu-selected-alt1');
         render();
       }
     }
 
     d.addEventListener('pointermove', onPointerMove, true);
     d.addEventListener('click', onClickCapture, true);
+    d.addEventListener('dblclick', onDblClick, true);
     d.addEventListener('keydown', onKeydown, true);
 
     render();
