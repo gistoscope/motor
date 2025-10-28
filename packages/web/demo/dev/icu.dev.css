@@ -1,3 +1,4 @@
 .icu-hovered { outline: 3px solid magenta !important; outline-offset: 2px; border-radius: 4px; }
 .icu-selected { background: rgba(128,0,255,0.15) !important; border-radius: 4px; box-shadow: 0 0 0 2px rgba(128,0,255,0.25) inset; }
 .icu-bracket { box-shadow: 0 0 0 2px rgba(0,128,255,0.35) inset; border-radius: 4px; }
+.icu-selected-alt1 { background: rgba(0,128,255,0.14) !important; border-radius: 4px; box-shadow: 0 0 0 2px rgba(0,128,255,0.20) inset; }
