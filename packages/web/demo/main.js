@@ -1,4 +1,4 @@
-import installHoverPainter from '../src/ui/hover.painter.js';
+import installHoverPainter from './ui/hover.painter.js';
 
 window.MOTOR_DISABLE_WORKERS = true;
 window.__hoverPainterReady = false;
@@ -20,35 +20,18 @@ function enableHover() {
   }
 }
 
-async function importWithTsFallback(specifier) {
-  try {
-    return await import(specifier);
-  } catch (error) {
-    if (
-      typeof specifier === 'string' &&
-      specifier.endsWith('.js') &&
-      error instanceof Error &&
-      /Cannot find module/iu.test(error.message ?? '')
-    ) {
-      const fallbackSpecifier = specifier.replace(/\.js$/u, '.ts');
-      return import(fallbackSpecifier);
-    }
-    throw error;
-  }
-}
-
 const {
   createViewer,
   initMath,
   fromRealEngine,
   mountPlayground,
   mountEnginePane,
-} = await importWithTsFallback('../src/index.js');
+} = await import('./index.js');
 const {
   decodeViewerStateFromSearch,
   encodeViewerStateToUrl,
   DEFAULT_VIEWER_URL_STATE,
-} = await importWithTsFallback('../src/util/state-url.js');
+} = await import('./util/state-url.js');
 
 const GRAPH_EXAMPLES = [
   {
