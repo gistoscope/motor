@@ -1,7 +1,7 @@
 import { renderWithKaTeX } from '../engine/katex';
 import { findCatxRenderer, renderCatx, type CatxRenderer } from './catx';
 import installHoverPainter from './hover.painter.js';
-import { nearestTokFromComposedPath } from './dom.helpers';
+import { nearestTokFromComposedPath } from '../../demo/ui/dom.helpers.js';
 import { clear as clearSelection, select } from './selection';
 
 function renderTokenFallback(container: HTMLElement, expression: string): void {
