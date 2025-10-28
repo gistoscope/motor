@@ -257,8 +257,10 @@
 }
 
 .math-token--selected {
-  background: rgba(59, 130, 246, 0.15);
-  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.18);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+  outline: 2px solid rgba(37, 99, 235, 0.6);
+  outline-offset: 1px;
 }
 
 [data-selection-mode='multi'] .math-token--selected {
@@ -401,4 +403,7 @@
 .is-selected { outline: var(--gv-selected-outline, 2px solid currentColor); }
 /* Legacy compatibility */
 .math-token--hovered  { outline: var(--gv-hover-outline, 1px solid currentColor); }
-.math-token--selected { outline: var(--gv-selected-outline, 2px solid currentColor); }
+.math-token--selected {
+  outline: var(--gv-selected-outline, 2px solid currentColor);
+  outline-offset: var(--gv-selected-outline-offset, 1px);
+}
