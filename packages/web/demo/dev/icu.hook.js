@@ -6,13 +6,19 @@
  * ICU-08 adds keyboard navigation (structure, siblings, tokens).
  * ICU-09 introduces SelectionState + __icuDebug inspector/simulator.
  */
-(function(){
+(function () {
   const play = document.getElementById('play');
   if (!play) return;
 
   const diagDoc = document;
-  const badge = (ok, msg) => `<span class="badge ${ok===true?'ok':ok===false?'err':'warn'}">${msg}</span>`;
+  const badge = (ok, msg) => `<span class="badge ${ok === true ? 'ok' : ok === false ? 'err' : 'warn'}">${msg}</span>`;
   const $ = (id) => diagDoc.getElementById(id);
+
+  // SAFE helper: never assign with optional chaining on LHS
+  const setHTML = (id, html) => {
+    const el = diagDoc.getElementById(id);
+    if (el) el.innerHTML = html;
+  };
 
   const OPEN = new Set(['(', '[', '{']);
   const CLOSE = new Set([')', ']', '}']);
@@ -29,7 +35,7 @@
   };
   const CHANNEL_ORDER = ['primary', 'alt', 'focus', 'bracket', 'preview'];
 
-  function pickVisibleLeaf(el){
+  function pickVisibleLeaf(el) {
     if (!el || el.nodeType !== Node.ELEMENT_NODE) return null;
     let node = el;
     while (node && node.firstElementChild) node = node.firstElementChild;
@@ -51,14 +57,13 @@
   const SELECTED_CLASS = 'math-token--selected';
 
   const clear = (d, cls) =>
-    d
-      .querySelectorAll('.' + cls)
-      .forEach((n) => {
-        n.classList.remove(cls);
-        if (cls === 'icu-selected') {
-          n.classList.remove(SELECTED_CLASS);
-        }
-      });
+    d.querySelectorAll('.' + cls).forEach((n) => {
+      n.classList.remove(cls);
+      if (cls === 'icu-selected') {
+        n.classList.remove(SELECTED_CLASS);
+      }
+    });
+
   const addMany = (els, cls) =>
     els.forEach((el) => {
       el.classList.add(cls);
@@ -102,7 +107,7 @@
     };
   })();
 
-  function setBhButtonStyle(btn, active){
+  function setBhButtonStyle(btn, active) {
     btn.style.margin = '2px 8px 2px 0';
     btn.style.padding = '2px 10px';
     btn.style.borderRadius = '6px';
@@ -113,12 +118,12 @@
     btn.style.font = '600 12px/1.4 system-ui, sans-serif';
   }
 
-  function installDebugAPI(w, ctx){
+  function installDebugAPI(w, ctx) {
     const state = ctx.debugState;
     const api = {
       state,
       inspect: {
-        token(id){
+        token(id) {
           if (!id) return null;
           const token = ctx.tokenNodeById.get(id);
           if (!token) return null;
@@ -138,7 +143,7 @@
             bracketLevels,
           };
         },
-        selection(index){
+        selection(index) {
           const selection = state.selection;
           if (typeof index === 'number') return selection.regions[index] ?? null;
           return selection.regions.map((region) => ({
@@ -151,21 +156,21 @@
         },
       },
       simulate: {
-        click(id){
+        click(id) {
           if (!id) return false;
           const el = ctx.document.getElementById(id);
           if (!(el instanceof w.HTMLElement)) return false;
           ctx.handleClick(el, { simulated: true });
           return true;
         },
-        dblclick(id){
+        dblclick(id) {
           if (!id) return false;
           const el = ctx.document.getElementById(id);
           if (!(el instanceof w.HTMLElement)) return false;
           ctx.handleDblClick(el, { simulated: true });
           return true;
         },
-        drag(fromId, toId){
+        drag(fromId, toId) {
           if (!fromId) return false;
           const levels = ctx.buildLevels(fromId);
           if (!levels.length) return false;
@@ -185,14 +190,15 @@
     w.__icuDebug = api;
     return api;
   }
+
   play.addEventListener('load', () => {
     const w = play.contentWindow;
     const d = w?.document;
     if (!w || !d) {
-      $('icu_drag_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
-      $('icu_bh_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
-      $('icu_kb_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
-      $('icu_sel_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
+      setHTML('icu_drag_status', badge(false, 'FAIL (iframe not ready)'));
+      setHTML('icu_bh_status', badge(false, 'FAIL (iframe not ready)'));
+      setHTML('icu_kb_status', badge(false, 'FAIL (iframe not ready)'));
+      setHTML('icu_sel_status', badge(false, 'FAIL (iframe not ready)'));
       return;
     }
 
@@ -214,10 +220,10 @@
 
     const root = d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
     if (!root) {
-      $('icu_drag_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
-      $('icu_bh_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
-      $('icu_kb_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
-      $('icu_sel_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
+      setHTML('icu_drag_status', badge(false, 'FAIL (no KaTeX root)'));
+      setHTML('icu_bh_status', badge(false, 'FAIL (no KaTeX root)'));
+      setHTML('icu_kb_status', badge(false, 'FAIL (no KaTeX root)'));
+      setHTML('icu_sel_status', badge(false, 'FAIL (no KaTeX root)'));
       return;
     }
 
@@ -425,6 +431,7 @@
         }
       }
     }
+
     const navState = {
       focus: null,
       lastChildByParent: new Map(),
@@ -577,19 +584,13 @@
         const slotLabel = okRegion.slot ? okRegion.slot.toUpperCase() : okRegion.channel;
         msg = `OK (${slotLabel}: ${okRegion.tokenIds.length} ids)`;
       }
-      $('icu_sel_status')?.innerHTML = badge(okRegion ? true : null, msg);
+      setHTML('icu_sel_status', badge(okRegion ? true : null, msg));
     };
 
     const navMessage = (action, node) => `OK (${action} → ${describeNode(node)})`;
 
-    function setFocus(node, opts = {}){
-      const {
-        fromKeyboard = false,
-        message,
-        silentStatus = false,
-        commitSource,
-        extra,
-      } = opts;
+    function setFocus(node, opts = {}) {
+      const { fromKeyboard = false, message, silentStatus = false, commitSource, extra } = opts;
       if (!node) {
         removeChannelClasses('focus');
         channelState.delete('focus');
@@ -612,7 +613,7 @@
       return true;
     }
 
-    function clearKeyboardFocus(message){
+    function clearKeyboardFocus(message) {
       removeChannelClasses('focus');
       channelState.delete('focus');
       commitSelection('keyboard:clear-focus');
@@ -622,7 +623,7 @@
       w.__icu.kbReady = false;
     }
 
-    function focusTokenByIndex(index, action){
+    function focusTokenByIndex(index, action) {
       const node = tokenNodes[index];
       if (!node) return false;
       const msg = navMessage(action, node);
@@ -631,7 +632,7 @@
       return ok;
     }
 
-    function moveToParent(){
+    function moveToParent() {
       const focus = navState.focus;
       if (!focus || !focus.parent) return false;
       const parent = focus.parent;
@@ -642,7 +643,7 @@
       return ok;
     }
 
-    function moveToChild(){
+    function moveToChild() {
       const focus = navState.focus;
       if (!focus || focus.type !== 'group') return false;
       const stored = navState.lastChildByParent.get(focus);
@@ -654,7 +655,7 @@
       return ok;
     }
 
-    function moveSibling(delta){
+    function moveSibling(delta) {
       const focus = navState.focus;
       if (!focus || !focus.parent) return false;
       const siblings = focus.parent.children;
@@ -668,7 +669,7 @@
       return ok;
     }
 
-    function moveTokenBy(delta){
+    function moveTokenBy(delta) {
       if (!delta) return false;
       let baseIndex;
       const focus = navState.focus;
@@ -685,11 +686,11 @@
       } else {
         baseIndex = delta > 0 ? -1 : toks.length;
       }
-
       const targetIndex = baseIndex + delta;
       if (targetIndex < 0 || targetIndex >= toks.length) return false;
       return focusTokenByIndex(targetIndex, delta > 0 ? 'Tab' : 'Shift+Tab');
     }
+
     const formatSelectionExtra = (region, opts = {}) => ({
       channel: region,
       ...opts,
@@ -765,7 +766,7 @@
       const next = dragCtx.levels[levelIndex + 1] || [];
       setChannel('preview', next, { anchorId: dragCtx.anchorId, levelIndex: levelIndex + 1 });
       commitSelection('drag', formatSelectionExtra('primary', { anchorId: dragCtx.anchorId, levelIndex }));
-      $('icu_drag_status')?.innerHTML = badge(true, `OK (level ${levelIndex + 1}/${dragCtx.levels.length})`);
+      setHTML('icu_drag_status', badge(true, `OK (level ${levelIndex + 1}/${dragCtx.levels.length})`));
       debugState.dragContext = { anchorId: dragCtx.anchorId, levelCount: dragCtx.levels.length, current: levelIndex };
     };
 
@@ -784,7 +785,8 @@
     };
 
     const updateDrag = (clientX) => {
-      if (!dragCtx || dragCtx.startX == null) return;
+      if (!dragCtx) return;
+      if (dragCtx.startX == null) return;
       const dist = Math.abs((clientX || 0) - dragCtx.startX);
       const lvl = Math.min(Math.floor(dist / SNAP), dragCtx.levels.length - 1);
       if (lvl !== dragCtx.current) {
@@ -815,10 +817,10 @@
 
     const render = () => {
       const okBase = w.__icu.hoverReady && w.__icu.clickReady;
-      $('icu_status')?.innerHTML = badge(okBase ? true : null, okBase ? 'OK (hover+click baseline)' : 'PENDING (move & click)');
-      $('icu_brackets_status')?.innerHTML = badge(w.__icu.bracketsReady ? true : null, w.__icu.bracketsReady ? 'OK (pair highlighted)' : 'PENDING (click a bracket)');
-      $('icu_nav_status')?.innerHTML = badge(w.__icu.navReady ? true : null, w.__icu.navReady ? 'OK (dblclick promote)' : 'PENDING (double-click a token)');
-      $('icu_drag_status')?.innerHTML = badge(w.__icu.dragReady ? true : null, w.__icu.dragReady ? 'OK (ladder engaged)' : 'PENDING (drag from a token)');
+      setHTML('icu_status', badge(okBase ? true : null, okBase ? 'OK (hover+click baseline)' : 'PENDING (move & click)'));
+      setHTML('icu_brackets_status', badge(w.__icu.bracketsReady ? true : null, w.__icu.bracketsReady ? 'OK (pair highlighted)' : 'PENDING (click a bracket)'));
+      setHTML('icu_nav_status', badge(w.__icu.navReady ? true : null, w.__icu.navReady ? 'OK (dblclick promote)' : 'PENDING (double-click a token)'));
+      setHTML('icu_drag_status', badge(w.__icu.dragReady ? true : null, w.__icu.dragReady ? 'OK (ladder engaged)' : 'PENDING (drag from a token)'));
 
       let bhMsg = 'PENDING (hover token)';
       if (bhState.tokId) {
@@ -833,8 +835,8 @@
           bhMsg = `OK (L${idxVal}/${total})`;
         }
       }
-      $('icu_bh_status')?.innerHTML = badge(w.__icu.bhReady ? true : null, bhMsg);
-      $('icu_kb_status')?.innerHTML = badge(w.__icu.kbReady ? true : null, navState.statusMsg || 'PENDING (keyboard idle)');
+      setHTML('icu_bh_status', badge(w.__icu.bhReady ? true : null, bhMsg));
+      setHTML('icu_kb_status', badge(w.__icu.kbReady ? true : null, navState.statusMsg || 'PENDING (keyboard idle)'));
       updateSelectionStatus();
     };
 
@@ -946,6 +948,7 @@
     d.addEventListener('keydown', onKeydown, true);
     d.addEventListener('pointerdown', onPointerDown, true);
 
+    // Legacy flag used by older diag rows; keep it for compatibility.
     w.__gvClickReady = true;
 
     render();
