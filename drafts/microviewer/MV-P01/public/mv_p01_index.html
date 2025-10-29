@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MicroViewer P01</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-zNNi4SlP1rbZwf2q5XgYfi06VyUZy68VNB3pXu2YELpAo0P5PLf4KJIp4jOSAmUJ"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="./mv_p01_style.css" />
+  </head>
+  <body>
+    <main class="viewer-shell">
+      <header class="viewer-header">
+        <label class="input-block">
+          <span class="input-label">LaTeX expression</span>
+          <textarea id="latex-input" rows="3">(a+b)</textarea>
+        </label>
+        <button id="render-btn" type="button">Render</button>
+      </header>
+      <section class="inspector" id="inspector">
+        Tokens: <span id="tok-count">0</span> · Pairs:
+        <span id="pair-count">0</span> · Last target:
+        <span id="last-target">n/a</span>
+      </section>
+      <section class="viewer-stage">
+        <div id="render-target" class="render-target" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+      integrity="sha384-LzYCOUMIqFZ3VAb9Y/jGj33jjXNMTvEihQ/HUkNzxaz2QmiVjCw540lzA4d0T9do"
+      crossorigin="anonymous"
+    ></script>
+    <script defer src="./mv_p01_app.js"></script>
+  </body>
+</html>
