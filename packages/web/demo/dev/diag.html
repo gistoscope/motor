@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8"/>
 <title>Motor Dev Diag</title>
-<link rel="stylesheet" href="/demo/dev/icu.dev.css" />
+<link rel="stylesheet" href="/dev/icu.dev.css" />
 <style>
   body { font: 14px/1.4 system-ui, sans-serif; margin: 20px; }
   h1 { margin: 0 0 12px; }
@@ -160,14 +160,13 @@
 
           await waitFrame();
 
-          const selectedNodes = idNodes.filter((node) => node.classList.contains('math-token--selected'));
-          const selected = selectedNodes[0] ?? null;
-          const clickReady = selectedNodes.length > 0 && w.__gvClickReady === true;
+          const selected = root?.querySelector('.math-token--selected') ?? null;
+          const clickReady = Boolean(selected) && w.__gvClickReady === true;
           setLamp(clickReady);
           $('a_click').innerHTML = badge(
             clickReady,
             clickReady
-              ? `OK (${selected instanceof w.HTMLElement ? selected.textContent?.trim() || selected.id : 'selected'})`
+              ? `OK (${selected instanceof w.HTMLElement ? selected.textContent?.trim() || selected.id || 'selected' : 'selected'})`
               : w.__gvClickReady === true
                 ? 'FAIL (click did not trigger selection — inspect listeners)'
                 : 'FAIL (click handler not ready — wait & retry)'
@@ -211,4 +210,4 @@
     triggerProbe();
   });
 </script>
-<script type="module" src="/demo/dev/icu.hook.js"></script>
+<script type="module" src="/dev/icu.hook.js"></script>
