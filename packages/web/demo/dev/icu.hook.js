@@ -4,6 +4,7 @@
  * Includes ICU-05 dblclick promote, ICU-04 brackets, ICU-03 baseline.
  * ICU-07 adds bracket hierarchy explorer.
  * ICU-08 adds keyboard navigation (structure, siblings, tokens).
+ * ICU-09 introduces SelectionState + __icuDebug inspector/simulator.
  */
 (function(){
   const play = document.getElementById('play');
@@ -18,6 +19,15 @@
   const MATCH = { ')': '(', ']': '[', '}': '{' };
   const MAX_BH_CLASS = 4;
   const BH_CLASSES = Array.from({ length: MAX_BH_CLASS }, (_, i) => `icu-bh-lvl${i + 1}`);
+
+  const SELECTION_CHANNELS = {
+    primary: { className: 'icu-selected', role: 'primary', slot: 'a', label: 'Primary selection' },
+    alt: { className: 'icu-selected-alt1', role: 'alternate', slot: 'b', label: 'Alternate selection' },
+    bracket: { className: 'icu-bracket', role: 'bracket', slot: null, label: 'Bracket pair' },
+    preview: { className: 'icu-preview', role: 'preview', slot: null, label: 'Preview (drag next level)' },
+    focus: { className: 'icu-focus', role: 'focus', slot: null, label: 'Keyboard focus' },
+  };
+  const CHANNEL_ORDER = ['primary', 'alt', 'focus', 'bracket', 'preview'];
 
   function pickVisibleLeaf(el){
     if (!el) return null;
@@ -87,6 +97,78 @@
     btn.style.font = '600 12px/1.4 system-ui, sans-serif';
   }
 
+  function installDebugAPI(w, ctx){
+    const state = ctx.debugState;
+    const api = {
+      state,
+      inspect: {
+        token(id){
+          if (!id) return null;
+          const token = ctx.tokenNodeById.get(id);
+          if (!token) return null;
+          const text = tokText(token.el);
+          const bracketLevels = (ctx.levelsByTok.get(id) ?? []).map((pair) => ({
+            openId: pair.openId,
+            closeId: pair.closeId,
+            level: pair.level,
+            span: pair.span,
+          }));
+          return {
+            id,
+            index: token.index,
+            text,
+            type: token.type,
+            parentId: token.parent?.id ?? null,
+            bracketLevels,
+          };
+        },
+        selection(index){
+          const selection = state.selection;
+          if (typeof index === 'number') return selection.regions[index] ?? null;
+          return selection.regions.map((region) => ({
+            channel: region.channel,
+            slot: region.slot,
+            count: region.tokenIds.length,
+            sample: region.sample,
+            role: region.role,
+          }));
+        },
+      },
+      simulate: {
+        click(id){
+          if (!id) return false;
+          const el = ctx.document.getElementById(id);
+          if (!(el instanceof HTMLElement)) return false;
+          ctx.handleClick(el, { simulated: true });
+          return true;
+        },
+        dblclick(id){
+          if (!id) return false;
+          const el = ctx.document.getElementById(id);
+          if (!(el instanceof HTMLElement)) return false;
+          ctx.handleDblClick(el, { simulated: true });
+          return true;
+        },
+        drag(fromId, toId){
+          if (!fromId) return false;
+          const levels = ctx.buildLevels(fromId);
+          if (!levels.length) return false;
+          let levelIndex = 0;
+          if (toId) {
+            const idx = levels.findIndex((ids) => ids.includes(toId));
+            if (idx >= 0) levelIndex = idx;
+            else levelIndex = levels.length - 1;
+          }
+          ctx.beginDrag(fromId, { simulated: true });
+          ctx.applyDragLevel(levelIndex, { simulated: true });
+          ctx.finishDrag({ simulated: true });
+          return true;
+        },
+      },
+    };
+    w.__icuDebug = api;
+    return api;
+  }
   play.addEventListener('load', () => {
     const w = play.contentWindow;
     const d = w?.document;
@@ -94,6 +176,7 @@
       $('icu_drag_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
       $('icu_bh_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
       $('icu_kb_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
+      $('icu_sel_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
       return;
     }
 
@@ -118,6 +201,7 @@
       $('icu_drag_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
       $('icu_bh_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
       $('icu_kb_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
+      $('icu_sel_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
       return;
     }
 
@@ -325,7 +409,6 @@
         }
       }
     }
-
     const navState = {
       focus: null,
       lastChildByParent: new Map(),
@@ -346,19 +429,158 @@
       return openLabel ? `group starting ${openLabel}` : `group ${node.pair.openId}`;
     };
 
+    const channelState = new Map();
+    let selectionVersion = 0;
+    const debugState = {
+      selection: { regions: [], focusIndex: null, source: null, version: 0 },
+      hoverTokenId: null,
+      dragContext: null,
+      perf: { lastSelectionMs: 0 },
+    };
+
+    const slotClassFor = (slot) => (slot ? `icu-region-${slot}` : null);
+
+    const removeChannelClasses = (name) => {
+      const cfg = SELECTION_CHANNELS[name];
+      if (!cfg) return;
+      const rec = channelState.get(name);
+      if (!rec) return;
+      const slotCls = slotClassFor(cfg.slot);
+      rec.nodes?.forEach((node) => {
+        if (!(node instanceof HTMLElement)) return;
+        node.classList.remove(cfg.className);
+        if (slotCls) node.classList.remove(slotCls);
+      });
+    };
+
+    const setChannel = (name, tokenIds, meta = {}) => {
+      const cfg = SELECTION_CHANNELS[name];
+      if (!cfg) return;
+      removeChannelClasses(name);
+      if (!tokenIds || !tokenIds.length) {
+        channelState.delete(name);
+        return;
+      }
+      const nodes = tokenIds
+        .map((idVal) => d.getElementById(idVal))
+        .filter((node) => node instanceof HTMLElement);
+      const slotCls = slotClassFor(cfg.slot);
+      nodes.forEach((node) => {
+        node.classList.add(cfg.className);
+        if (slotCls) node.classList.add(slotCls);
+      });
+      const nextIds = nodes.map((node) => node.id);
+      channelState.set(name, { tokenIds: nextIds, meta, nodes });
+    };
+
+    const buildRegionSample = (ids) => {
+      if (!ids || !ids.length) return '';
+      const nodes = ids
+        .map((idVal) => d.getElementById(idVal))
+        .filter((node) => node instanceof HTMLElement);
+      const joined = nodes.map((node) => tokText(node)).join(' ').replace(/\s+/g, ' ').trim();
+      return joined.length > 48 ? `${joined.slice(0, 47)}…` : joined;
+    };
+
+    const commitSelection = (source, extra = {}) => {
+      const start = performance.now();
+      const regions = [];
+      for (const name of CHANNEL_ORDER) {
+        const cfg = SELECTION_CHANNELS[name];
+        const rec = channelState.get(name);
+        if (!cfg || !rec || !rec.tokenIds.length) continue;
+        regions.push({
+          channel: name,
+          role: cfg.role,
+          slot: cfg.slot,
+          className: cfg.className,
+          tokenIds: [...rec.tokenIds],
+          sample: buildRegionSample(rec.tokenIds),
+          label: cfg.label,
+          meta: { ...rec.meta },
+        });
+      }
+      const primaryIndex = regions.findIndex((region) => region.channel === 'primary');
+      const focusIndex = primaryIndex >= 0 ? primaryIndex : regions.length ? 0 : null;
+      selectionVersion += 1;
+      debugState.selection = {
+        version: selectionVersion,
+        timestamp: Date.now(),
+        source,
+        focusIndex,
+        regions,
+        extra,
+      };
+      w.__icu.selection = debugState.selection;
+      debugState.perf.lastSelectionMs = performance.now() - start;
+    };
+
+    const resetSelection = (source) => {
+      for (const name of Object.keys(SELECTION_CHANNELS)) {
+        setChannel(name, null);
+      }
+      commitSelection(source);
+    };
+
+    const debugCtx = {
+      document: d,
+      tokenNodeById,
+      levelsByTok,
+      debugState,
+      handleClick: null,
+      handleDblClick: null,
+      buildLevels: (anchorId) => {
+        const levels = [];
+        if (!anchorId) return levels;
+        levels.push([anchorId]);
+        const p = smallestEnclosingPair(anchorId);
+        if (p) levels.push(toks.slice(p.openIndex + 1, p.closeIndex).map((el) => el.id));
+        levels.push(toks.map((el) => el.id));
+        return levels;
+      },
+      beginDrag: null,
+      applyDragLevel: null,
+      finishDrag: null,
+    };
+
+    installDebugAPI(w, debugCtx);
+
+    const updateSelectionStatus = () => {
+      const regions = debugState.selection?.regions ?? [];
+      const primary = regions.find((region) => region.channel === 'primary');
+      const alt = regions.find((region) => region.channel === 'alt');
+      const okRegion = primary || alt;
+      let msg = 'PENDING (await selection)';
+      if (okRegion) {
+        const slotLabel = okRegion.slot ? okRegion.slot.toUpperCase() : okRegion.channel;
+        msg = `OK (${slotLabel}: ${okRegion.tokenIds.length} ids)`;
+      }
+      $('icu_sel_status')?.innerHTML = badge(okRegion ? true : null, msg);
+    };
+
     const navMessage = (action, node) => `OK (${action} → ${describeNode(node)})`;
 
     function setFocus(node, opts = {}){
-      const { fromKeyboard = false, message, silentStatus = false } = opts;
-      clear(d, 'icu-focus');
-      if (!node) return false;
+      const {
+        fromKeyboard = false,
+        message,
+        silentStatus = false,
+        commitSource,
+        extra,
+      } = opts;
+      if (!node) {
+        removeChannelClasses('focus');
+        channelState.delete('focus');
+        commitSelection(commitSource ?? (fromKeyboard ? 'keyboard:clear-focus' : 'focus:clear'), extra);
+        if (message) navState.statusMsg = message;
+        if (fromKeyboard) w.__icu.kbReady = false;
+        return false;
+      }
       navState.focus = node;
       if (node.parent) navState.lastChildByParent.set(node.parent, node);
       const ids = node.type === 'token' ? [node.id] : node.tokenIds;
-      const elements = ids
-        .map((idVal) => d.getElementById(idVal))
-        .filter((el) => el instanceof HTMLElement);
-      addMany(elements, 'icu-focus');
+      setChannel('focus', ids, { describe: describeNode(node) });
+      commitSelection(commitSource ?? (fromKeyboard ? 'keyboard:focus' : 'focus:update'), extra);
       if (fromKeyboard) {
         w.__icu.kbReady = true;
         if (!silentStatus) navState.statusMsg = message || navState.statusMsg;
@@ -369,7 +591,9 @@
     }
 
     function clearKeyboardFocus(message){
-      clear(d, 'icu-focus');
+      removeChannelClasses('focus');
+      channelState.delete('focus');
+      commitSelection('keyboard:clear-focus');
       navState.focus = null;
       navState.lastChildByParent.clear();
       if (message) navState.statusMsg = message;
@@ -444,8 +668,130 @@
       if (targetIndex < 0 || targetIndex >= toks.length) return false;
       return focusTokenByIndex(targetIndex, delta > 0 ? 'Tab' : 'Shift+Tab');
     }
+    const formatSelectionExtra = (region, opts = {}) => ({
+      channel: region,
+      ...opts,
+    });
 
-    function render(){
+    const handleClick = (tok, opts = {}) => {
+      const ch = tokText(tok)[0];
+      setChannel('primary', [tok.id], { via: opts.simulated ? 'simulate' : 'pointer' });
+      if (OPEN.has(ch) || CLOSE.has(ch)) {
+        const pair = pairById.get(tok.id);
+        if (pair) {
+          setChannel('bracket', [pair.openId, pair.closeId], { via: 'pair', pair });
+          w.__icu.bracketsReady = true;
+        } else {
+          setChannel('bracket', null);
+        }
+      } else {
+        setChannel('bracket', null);
+      }
+      const extra = formatSelectionExtra('primary', { anchorId: tok.id });
+      const tokenNode = tokenNodeById.get(tok.id);
+      if (tokenNode) {
+        const focused = setFocus(tokenNode, {
+          silentStatus: true,
+          commitSource: 'click',
+          extra,
+        });
+        if (!focused) commitSelection('click', extra);
+      } else {
+        commitSelection('click', extra);
+      }
+      w.__icu.clickReady = true;
+      render();
+    };
+
+    debugCtx.handleClick = handleClick;
+
+    const handleDblClick = (tok, opts = {}) => {
+      const p = smallestEnclosingPair(tok.id);
+      if (p) {
+        const inner = [];
+        for (let i = p.openIndex + 1; i < p.closeIndex; i++) inner.push(toks[i].id);
+        setChannel('alt', inner, { via: opts.simulated ? 'simulate' : 'pointer', anchorId: tok.id, pair: p });
+      } else {
+        setChannel('alt', [tok.id], { via: opts.simulated ? 'simulate' : 'pointer', anchorId: tok.id });
+      }
+      commitSelection('dblclick', formatSelectionExtra('alt', { anchorId: tok.id }));
+      w.__icu.navReady = true;
+      render();
+    };
+
+    debugCtx.handleDblClick = handleDblClick;
+
+    let dragCtx = null;
+    const SNAP = 24;
+
+    const buildLevels = (anchorTokId) => {
+      const levels = [];
+      levels.push([anchorTokId]);
+      const p = smallestEnclosingPair(anchorTokId);
+      if (p) levels.push(toks.slice(p.openIndex + 1, p.closeIndex).map((el) => el.id));
+      levels.push(toks.map((el) => el.id));
+      return levels;
+    };
+
+    debugCtx.buildLevels = buildLevels;
+
+    const applyDragSelection = (levelIndex, opts = {}) => {
+      if (!dragCtx) return;
+      dragCtx.current = levelIndex;
+      const ids = dragCtx.levels[levelIndex] || [];
+      setChannel('primary', ids, { via: opts.simulated ? 'simulate' : 'pointer', anchorId: dragCtx.anchorId, levelIndex });
+      const next = dragCtx.levels[levelIndex + 1] || [];
+      setChannel('preview', next, { anchorId: dragCtx.anchorId, levelIndex: levelIndex + 1 });
+      commitSelection('drag', formatSelectionExtra('primary', { anchorId: dragCtx.anchorId, levelIndex }));
+      $('icu_drag_status')?.innerHTML = badge(true, `OK (level ${levelIndex + 1}/${dragCtx.levels.length})`);
+      debugState.dragContext = { anchorId: dragCtx.anchorId, levelCount: dragCtx.levels.length, current: levelIndex };
+    };
+
+    const beginDrag = (anchorId, opts = {}) => {
+      dragCtx = {
+        anchorId,
+        levels: buildLevels(anchorId),
+        current: 0,
+        startX: null,
+        simulated: opts.simulated || false,
+      };
+      debugState.dragContext = { anchorId, levelCount: dragCtx.levels.length, current: 0 };
+      applyDragSelection(0, opts);
+      w.__icu.dragReady = true;
+      render();
+    };
+
+    const updateDrag = (clientX) => {
+      if (!dragCtx || dragCtx.startX == null) return;
+      const dist = Math.abs((clientX || 0) - dragCtx.startX);
+      const lvl = Math.min(Math.floor(dist / SNAP), dragCtx.levels.length - 1);
+      if (lvl !== dragCtx.current) {
+        applyDragSelection(lvl);
+        render();
+      }
+    };
+
+    const finishDrag = (opts = {}) => {
+      setChannel('preview', null);
+      commitSelection('drag:end', formatSelectionExtra('primary', { anchorId: dragCtx?.anchorId ?? null }));
+      dragCtx = null;
+      debugState.dragContext = null;
+      if (!opts.silent) render();
+    };
+
+    debugCtx.beginDrag = beginDrag;
+    debugCtx.applyDragLevel = (levelIndex, opts = {}) => {
+      if (!dragCtx) return false;
+      applyDragSelection(levelIndex, opts);
+      render();
+      return true;
+    };
+    debugCtx.finishDrag = (opts = {}) => {
+      finishDrag(opts);
+      return true;
+    };
+
+    const render = () => {
       const okBase = w.__icu.hoverReady && w.__icu.clickReady;
       $('icu_status')?.innerHTML = badge(okBase ? true : null, okBase ? 'OK (hover+click baseline)' : 'PENDING (move & click)');
       $('icu_brackets_status')?.innerHTML = badge(w.__icu.bracketsReady ? true : null, w.__icu.bracketsReady ? 'OK (pair highlighted)' : 'PENDING (click a bracket)');
@@ -467,9 +813,10 @@
       }
       $('icu_bh_status')?.innerHTML = badge(w.__icu.bhReady ? true : null, bhMsg);
       $('icu_kb_status')?.innerHTML = badge(w.__icu.kbReady ? true : null, navState.statusMsg || 'PENDING (keyboard idle)');
-    }
+      updateSelectionStatus();
+    };
 
-    function onPointerMove(ev){
+    const onPointerMove = (ev) => {
       const path = ev.composedPath?.() ?? [];
       const tok = path.find(isTok);
       updateBhPanel(tok && tok instanceof HTMLElement ? tok : null);
@@ -478,121 +825,61 @@
       clear(d, 'icu-hovered');
       if (leaf && leaf instanceof HTMLElement) leaf.classList.add('icu-hovered');
       w.__icu.hoverReady = true;
+      debugState.hoverTokenId = tok && tok instanceof HTMLElement ? tok.id : null;
       render();
-    }
+    };
 
-    function onClickCapture(ev){
+    const onClickCapture = (ev) => {
       const path = ev.composedPath?.() ?? [];
       const tok = path.find(isTok);
-      clear(d, 'icu-selected');
-      clear(d, 'icu-bracket');
-      clear(d, 'icu-selected-alt1');
-      clear(d, 'icu-preview');
       if (tok && tok instanceof HTMLElement) {
-        tok.classList.add('icu-selected');
-        const ch = tokText(tok)[0];
-        if (OPEN.has(ch) || CLOSE.has(ch)) {
-          const pair = pairById.get(tok.id);
-          if (pair) {
-            d.getElementById(pair.openId)?.classList.add('icu-bracket');
-            d.getElementById(pair.closeId)?.classList.add('icu-bracket');
-            w.__icu.bracketsReady = true;
-          }
-        }
-        const tokenNode = tokenNodeById.get(tok.id);
-        if (tokenNode) {
-          setFocus(tokenNode, { silentStatus: true });
-        }
+        handleClick(tok);
+      } else {
+        setChannel('primary', null);
+        setChannel('bracket', null);
+        commitSelection('click:clear');
+        render();
       }
-      w.__icu.clickReady = true;
-      render();
-    }
+    };
 
-    function onDblClick(ev){
+    const onDblClick = (ev) => {
       const path = ev.composedPath?.() ?? [];
       const tok = path.find(isTok);
       if (!tok || !(tok instanceof HTMLElement)) return;
-      const p = smallestEnclosingPair(tok.id);
-      clear(d, 'icu-selected-alt1');
-      if (p) {
-        for (let i = p.openIndex + 1; i < p.closeIndex; i++) toks[i].classList.add('icu-selected-alt1');
-        w.__icu.navReady = true;
-      } else {
-        tok.classList.add('icu-selected-alt1');
-        w.__icu.navReady = true;
-      }
-      render();
-    }
-
-    let dragCtx = null;
-    const SNAP = 24;
-
-    const buildLevels = (anchorTokId) => {
-      const levels = [];
-      levels.push([anchorTokId]);
-      const p = smallestEnclosingPair(anchorTokId);
-      if (p) levels.push(toks.slice(p.openIndex + 1, p.closeIndex).map((el) => el.id));
-      levels.push(toks.map((el) => el.id));
-      return levels;
+      handleDblClick(tok);
     };
 
-    function applyLevel(levelIndex){
-      clear(d, 'icu-selected');
-      clear(d, 'icu-preview');
-      const ids = dragCtx.levels[levelIndex] || [];
-      addMany(ids.map((idVal) => d.getElementById(idVal)).filter(Boolean), 'icu-selected');
-      const next = dragCtx.levels[levelIndex + 1] || null;
-      if (next) addMany(next.map((idVal) => d.getElementById(idVal)).filter(Boolean), 'icu-preview');
-      $('icu_drag_status')?.innerHTML = badge(true, `OK (level ${levelIndex + 1}/${dragCtx.levels.length})`);
-    }
-
-    function onPointerDown(ev){
+    const onPointerDown = (ev) => {
       const path = ev.composedPath?.() ?? [];
       const tok = path.find(isTok);
       if (!tok || !(tok instanceof HTMLElement)) return;
 
       const startX = ev.clientX;
-      dragCtx = {
-        anchorId: tok.id,
-        levels: buildLevels(tok.id),
-        current: 0,
-        startX,
-      };
-      applyLevel(0);
-      w.__icu.dragReady = true;
-      render();
-
+      beginDrag(tok.id);
+      dragCtx.startX = startX ?? null;
       d.addEventListener('pointermove', onPointerDrag, true);
       d.addEventListener('pointerup', onPointerUp, true);
       d.addEventListener('pointercancel', onPointerUp, true);
-    }
+    };
 
-    function onPointerDrag(ev){
+    const onPointerDrag = (ev) => {
       if (!dragCtx) return;
-      const dist = Math.abs((ev.clientX || 0) - dragCtx.startX);
-      const lvl = Math.min(Math.floor(dist / SNAP), dragCtx.levels.length - 1);
-      if (lvl !== dragCtx.current) {
-        dragCtx.current = lvl;
-        applyLevel(lvl);
-      }
-    }
+      updateDrag(ev.clientX ?? 0);
+    };
 
-    function onPointerUp(){
+    const onPointerUp = () => {
       d.removeEventListener('pointermove', onPointerDrag, true);
       d.removeEventListener('pointerup', onPointerUp, true);
       d.removeEventListener('pointercancel', onPointerUp, true);
-      clear(d, 'icu-preview');
-      dragCtx = null;
-      render();
-    }
+      if (!dragCtx) return;
+      finishDrag();
+    };
 
-    function onKeydown(ev){
+    const onKeydown = (ev) => {
       if (ev.key === 'Escape') {
-        clear(d, 'icu-selected');
+        resetSelection('keyboard:escape');
         clear(d, 'icu-hovered');
         clear(d, 'icu-bracket');
-        clear(d, 'icu-selected-alt1');
-        clear(d, 'icu-preview');
         clearBhHighlights();
         bhState.selectedIndex = null;
         w.__icu.bhReady = false;
@@ -622,7 +909,7 @@
         ev.preventDefault();
         ev.stopPropagation();
       }
-    }
+    };
 
     d.addEventListener('pointermove', onPointerMove, true);
     d.addEventListener('click', onClickCapture, true);
