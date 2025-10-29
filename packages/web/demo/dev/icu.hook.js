@@ -3,6 +3,7 @@
  * ICU-06: Drag ladder (token → bracket content → whole expr) with hysteresis & preview.
  * Includes ICU-05 dblclick promote, ICU-04 brackets, ICU-03 baseline.
  * ICU-07 adds bracket hierarchy explorer.
+ * ICU-08 adds keyboard navigation (structure, siblings, tokens).
  */
 (function(){
   const play = document.getElementById('play');
@@ -92,6 +93,7 @@
     if (!w || !d) {
       $('icu_drag_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
       $('icu_bh_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
+      $('icu_kb_status')?.innerHTML = badge(false, 'FAIL (iframe not ready)');
       return;
     }
 
@@ -109,11 +111,13 @@
     w.__icu.bhReady ??= false;
     w.__icu.bhSelectedLevel ??= null;
     w.__icu.bhLevelCount ??= 0;
+    w.__icu.kbReady ??= false;
 
     const root = d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
     if (!root) {
       $('icu_drag_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
       $('icu_bh_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
+      $('icu_kb_status')?.innerHTML = badge(false, 'FAIL (no KaTeX root)');
       return;
     }
 
@@ -269,6 +273,178 @@
     panel.handler = handleBhClick;
     panel.ui.addEventListener('click', handleBhClick);
 
+    const rootGroup = {
+      type: 'group',
+      id: 'group:root',
+      parent: null,
+      children: [],
+      tokenIds: toks.map((el) => el.id),
+      pair: null,
+    };
+    const groupStack = [rootGroup];
+    const tokenNodes = [];
+    const tokenNodeById = new Map();
+
+    for (let i = 0; i < toks.length; i++) {
+      const el = toks[i];
+      const ch = tokText(el)[0];
+      const topGroup = groupStack[groupStack.length - 1] || rootGroup;
+
+      if (CLOSE.has(ch)) {
+        const tokenNode = { type: 'token', id: el.id, index: i, el, parent: topGroup };
+        tokenNodes.push(tokenNode);
+        tokenNodeById.set(el.id, tokenNode);
+        topGroup.children.push(tokenNode);
+        const pair = pairById.get(el.id);
+        if (pair && topGroup && topGroup.pair === pair) {
+          groupStack.pop();
+        }
+        continue;
+      }
+
+      const tokenNode = { type: 'token', id: el.id, index: i, el, parent: topGroup };
+      tokenNodes.push(tokenNode);
+      tokenNodeById.set(el.id, tokenNode);
+      topGroup.children.push(tokenNode);
+
+      if (OPEN.has(ch)) {
+        const pair = pairById.get(el.id);
+        if (pair && pair.openId === el.id) {
+          topGroup.children.pop();
+          const groupNode = {
+            type: 'group',
+            id: `group:${pair.openId}:${pair.closeId}`,
+            parent: topGroup,
+            children: [tokenNode],
+            tokenIds: [...pair.contentIds],
+            pair,
+          };
+          tokenNode.parent = groupNode;
+          topGroup.children.push(groupNode);
+          groupStack.push(groupNode);
+        }
+      }
+    }
+
+    const navState = {
+      focus: null,
+      lastChildByParent: new Map(),
+      statusMsg: 'PENDING (select a token & use keyboard)',
+    };
+
+    const describeNode = (node) => {
+      if (!node) return '—';
+      if (node.type === 'token') {
+        const text = tokText(node.el);
+        return text ? `token "${text}"` : `token ${node.id}`;
+      }
+      if (!node.pair) return 'whole expression';
+      const text = formatDisplayText(node.pair.displayText);
+      if (text) return `group "${text}"`;
+      const openTok = d.getElementById(node.pair.openId);
+      const openLabel = tokText(openTok);
+      return openLabel ? `group starting ${openLabel}` : `group ${node.pair.openId}`;
+    };
+
+    const navMessage = (action, node) => `OK (${action} → ${describeNode(node)})`;
+
+    function setFocus(node, opts = {}){
+      const { fromKeyboard = false, message, silentStatus = false } = opts;
+      clear(d, 'icu-focus');
+      if (!node) return false;
+      navState.focus = node;
+      if (node.parent) navState.lastChildByParent.set(node.parent, node);
+      const ids = node.type === 'token' ? [node.id] : node.tokenIds;
+      const elements = ids
+        .map((idVal) => d.getElementById(idVal))
+        .filter((el) => el instanceof HTMLElement);
+      addMany(elements, 'icu-focus');
+      if (fromKeyboard) {
+        w.__icu.kbReady = true;
+        if (!silentStatus) navState.statusMsg = message || navState.statusMsg;
+      } else if (message && !silentStatus) {
+        navState.statusMsg = message;
+      }
+      return true;
+    }
+
+    function clearKeyboardFocus(message){
+      clear(d, 'icu-focus');
+      navState.focus = null;
+      navState.lastChildByParent.clear();
+      if (message) navState.statusMsg = message;
+      w.__icu.kbReady = false;
+    }
+
+    function focusTokenByIndex(index, action){
+      const node = tokenNodes[index];
+      if (!node) return false;
+      const msg = navMessage(action, node);
+      const ok = setFocus(node, { fromKeyboard: true, message: msg });
+      if (ok) render();
+      return ok;
+    }
+
+    function moveToParent(){
+      const focus = navState.focus;
+      if (!focus || !focus.parent) return false;
+      const parent = focus.parent;
+      navState.lastChildByParent.set(parent, focus);
+      const msg = navMessage('Ctrl+↑', parent);
+      const ok = setFocus(parent, { fromKeyboard: true, message: msg });
+      if (ok) render();
+      return ok;
+    }
+
+    function moveToChild(){
+      const focus = navState.focus;
+      if (!focus || focus.type !== 'group') return false;
+      const stored = navState.lastChildByParent.get(focus);
+      const target = stored && focus.children.includes(stored) ? stored : focus.children[0];
+      if (!target) return false;
+      const msg = navMessage('Ctrl+↓', target);
+      const ok = setFocus(target, { fromKeyboard: true, message: msg });
+      if (ok) render();
+      return ok;
+    }
+
+    function moveSibling(delta){
+      const focus = navState.focus;
+      if (!focus || !focus.parent) return false;
+      const siblings = focus.parent.children;
+      const idxVal = siblings.indexOf(focus);
+      if (idxVal < 0) return false;
+      const next = siblings[idxVal + delta];
+      if (!next) return false;
+      const msg = navMessage(delta < 0 ? 'Ctrl+←' : 'Ctrl+→', next);
+      const ok = setFocus(next, { fromKeyboard: true, message: msg });
+      if (ok) render();
+      return ok;
+    }
+
+    function moveTokenBy(delta){
+      if (!delta) return false;
+      let baseIndex;
+      const focus = navState.focus;
+      if (!focus) {
+        baseIndex = delta > 0 ? -1 : toks.length;
+      } else if (focus.type === 'token') {
+        baseIndex = focus.index;
+      } else if (focus.type === 'group') {
+        if (!focus.pair) {
+          baseIndex = delta > 0 ? -1 : toks.length;
+        } else {
+          baseIndex = delta > 0 ? focus.pair.closeIndex : focus.pair.openIndex;
+        }
+      } else {
+        baseIndex = delta > 0 ? -1 : toks.length;
+      }
+
+      const targetIndex = baseIndex + delta;
+      if (targetIndex < 0 || targetIndex >= toks.length) return false;
+      return focusTokenByIndex(targetIndex, delta > 0 ? 'Tab' : 'Shift+Tab');
+    }
+
     function render(){
       const okBase = w.__icu.hoverReady && w.__icu.clickReady;
       $('icu_status')?.innerHTML = badge(okBase ? true : null, okBase ? 'OK (hover+click baseline)' : 'PENDING (move & click)');
@@ -290,6 +466,7 @@
         }
       }
       $('icu_bh_status')?.innerHTML = badge(w.__icu.bhReady ? true : null, bhMsg);
+      $('icu_kb_status')?.innerHTML = badge(w.__icu.kbReady ? true : null, navState.statusMsg || 'PENDING (keyboard idle)');
     }
 
     function onPointerMove(ev){
@@ -321,6 +498,10 @@
             d.getElementById(pair.closeId)?.classList.add('icu-bracket');
             w.__icu.bracketsReady = true;
           }
+        }
+        const tokenNode = tokenNodeById.get(tok.id);
+        if (tokenNode) {
+          setFocus(tokenNode, { silentStatus: true });
         }
       }
       w.__icu.clickReady = true;
@@ -417,7 +598,29 @@
         w.__icu.bhReady = false;
         w.__icu.bhSelectedLevel = null;
         updateBhButtonStyles();
+        clearKeyboardFocus('PENDING (cleared)');
         render();
+        return;
+      }
+
+      if (ev.key === 'Tab') {
+        const handled = moveTokenBy(ev.shiftKey ? -1 : 1);
+        if (handled) {
+          ev.preventDefault();
+          ev.stopPropagation();
+        }
+        return;
+      }
+
+      if (!ev.ctrlKey || ev.altKey || ev.metaKey) return;
+      let handled = false;
+      if (ev.key === 'ArrowUp') handled = moveToParent();
+      else if (ev.key === 'ArrowDown') handled = moveToChild();
+      else if (ev.key === 'ArrowLeft') handled = moveSibling(-1);
+      else if (ev.key === 'ArrowRight') handled = moveSibling(1);
+      if (handled) {
+        ev.preventDefault();
+        ev.stopPropagation();
       }
     }
 
