@@ -2,6 +2,10 @@ export type Selected = { id: string } | null;
 
 let currentSelection: Selected = null;
 
+const findKatexRoot = (doc: Document): HTMLElement | null =>
+  doc.querySelector<HTMLElement>('.katex .katex-html') ??
+  doc.querySelector<HTMLElement>('.katex-html');
+
 const hasVisibleGlyph = (element: Element): boolean => {
   for (const node of Array.from(element.childNodes)) {
     if (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) {
@@ -65,7 +69,12 @@ export function selectByTokId(tokId: string, doc: Document): boolean {
     return false;
   }
 
-  const anchor = doc.getElementById(tokId);
+  const root = findKatexRoot(doc);
+  if (!root) {
+    return false;
+  }
+
+  const anchor = root.querySelector<HTMLElement>(`#${CSS.escape(tokId)}`);
   if (!anchor) {
     return false;
   }
@@ -76,8 +85,17 @@ export function selectByTokId(tokId: string, doc: Document): boolean {
   }
 
   clearSelection(doc);
-  leaf.classList.add('math-token--selected');
-  currentSelection = { id: leaf.id || tokId };
+  anchor.classList.add('math-token--selected');
+  if (leaf !== anchor) {
+    leaf.classList.add('math-token--selected');
+  }
+
+  const view = doc.defaultView as (Window & { __gvClickReady?: boolean }) | null;
+  if (view) {
+    view.__gvClickReady = true;
+  }
+
+  currentSelection = { id: anchor.id || leaf.id || tokId };
   return true;
 }
 

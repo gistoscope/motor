@@ -39,8 +39,8 @@ describe('playground display selection', () => {
     target.dispatchEvent(event);
   };
 
-  const selectedCount = (context: ParentNode): number =>
-    context.querySelectorAll('.math-token--selected').length;
+  const selectedNodes = (context: ParentNode): Element[] =>
+    Array.from(context.querySelectorAll('.math-token--selected'));
 
   it('highlights a single visible leaf and clears on escape', async () => {
     const display = createPlaygroundDisplay({
@@ -92,23 +92,30 @@ describe('playground display selection', () => {
     expect(firstLeaf).toBeTruthy();
     expect(plusToken).toBeTruthy();
     expect(plusLeaf).toBeTruthy();
+    const firstTokenEl = firstToken!;
+    const firstLeafEl = firstLeaf!;
+    const plusTokenEl = plusToken!;
+    const plusLeafEl = plusLeaf!;
 
-    dispatchClick(firstLeaf!, [firstLeaf!, firstLeaf!.parentElement!, firstToken!, katexRoot!]);
+    dispatchClick(firstLeafEl, [firstLeafEl, firstLeafEl.parentElement!, firstTokenEl, katexRoot!]);
 
-    expect(selectedCount(katexRoot!)).toBe(1);
-    expect(firstLeaf?.classList.contains('math-token--selected')).toBe(true);
-    expect(getSelection()).toEqual({ id: firstLeaf!.id || 'tok:first' });
+    const firstSelection = selectedNodes(katexRoot!);
+    expect(firstSelection).toHaveLength(2);
+    expect(firstSelection.some((node) => node === firstTokenEl)).toBe(true);
+    expect(firstSelection.some((node) => node === firstLeafEl)).toBe(true);
+    expect(getSelection()).toEqual({ id: firstLeafEl.id || 'tok:first' });
     expect((window as typeof window & { __gvClickReady?: boolean }).__gvClickReady).toBe(true);
 
     const escapeEvent = new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
     document.dispatchEvent(escapeEvent);
 
-    expect(selectedCount(katexRoot!)).toBe(0);
+    expect(selectedNodes(katexRoot!)).toHaveLength(0);
     expect(getSelection()).toBeNull();
 
-    dispatchClick(plusLeaf!, [plusLeaf!, plusLeaf!.parentElement!, plusToken!, katexRoot!]);
+    dispatchClick(plusLeafEl, [plusLeafEl, plusLeafEl.parentElement!, plusTokenEl, katexRoot!]);
 
-    expect(selectedCount(katexRoot!)).toBe(1);
+    const plusSelection = selectedNodes(katexRoot!);
+    expect(plusSelection).toHaveLength(2);
     const selectedNode = katexRoot!.querySelector<HTMLElement>('.math-token--selected');
     expect(selectedNode?.textContent?.trim()).toBe('+');
     expect((window as typeof window & { __gvClickReady?: boolean }).__gvClickReady).toBe(true);
