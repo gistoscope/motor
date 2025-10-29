@@ -48,8 +48,24 @@
     return (leaf?.textContent || tok.textContent || '').trim();
   };
 
-  const clear = (d, cls) => d.querySelectorAll('.' + cls).forEach((n) => n.classList.remove(cls));
-  const addMany = (els, cls) => els.forEach((el) => el.classList.add(cls));
+  const SELECTED_CLASS = 'math-token--selected';
+
+  const clear = (d, cls) =>
+    d
+      .querySelectorAll('.' + cls)
+      .forEach((n) => {
+        n.classList.remove(cls);
+        if (cls === 'icu-selected') {
+          n.classList.remove(SELECTED_CLASS);
+        }
+      });
+  const addMany = (els, cls) =>
+    els.forEach((el) => {
+      el.classList.add(cls);
+      if (cls === 'icu-selected') {
+        el.classList.add(SELECTED_CLASS);
+      }
+    });
 
   const ensureBhPanel = (() => {
     let cache = null;
@@ -449,6 +465,9 @@
       rec.nodes?.forEach((node) => {
         if (!(node instanceof w.HTMLElement)) return;
         node.classList.remove(cfg.className);
+        if (cfg.className === 'icu-selected') {
+          node.classList.remove(SELECTED_CLASS);
+        }
         if (slotCls) node.classList.remove(slotCls);
       });
     };
@@ -467,6 +486,9 @@
       const slotCls = slotClassFor(cfg.slot);
       nodes.forEach((node) => {
         node.classList.add(cfg.className);
+        if (cfg.className === 'icu-selected') {
+          node.classList.add(SELECTED_CLASS);
+        }
         if (slotCls) node.classList.add(slotCls);
       });
       const nextIds = nodes.map((node) => node.id);
