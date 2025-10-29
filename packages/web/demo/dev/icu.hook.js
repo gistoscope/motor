@@ -30,11 +30,11 @@
   const CHANNEL_ORDER = ['primary', 'alt', 'focus', 'bracket', 'preview'];
 
   function pickVisibleLeaf(el){
-    if (!el) return null;
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) return null;
     let node = el;
     while (node && node.firstElementChild) node = node.firstElementChild;
-    while (node && node instanceof HTMLElement) {
-      const r = node.getBoundingClientRect();
+    while (node && node.nodeType === Node.ELEMENT_NODE) {
+      const r = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null;
       if (r && r.width > 0 && r.height > 0) return node;
       node = node.parentElement;
     }
@@ -43,7 +43,7 @@
 
   const isTok = (n) => n && n.id && typeof n.id === 'string' && n.id.startsWith('tok:');
   const tokText = (tok) => {
-    if (!tok || !(tok instanceof HTMLElement)) return '';
+    if (!tok || tok.nodeType !== Node.ELEMENT_NODE) return '';
     const leaf = pickVisibleLeaf(tok);
     return (leaf?.textContent || tok.textContent || '').trim();
   };
@@ -138,14 +138,14 @@
         click(id){
           if (!id) return false;
           const el = ctx.document.getElementById(id);
-          if (!(el instanceof HTMLElement)) return false;
+          if (!(el instanceof w.HTMLElement)) return false;
           ctx.handleClick(el, { simulated: true });
           return true;
         },
         dblclick(id){
           if (!id) return false;
           const el = ctx.document.getElementById(id);
-          if (!(el instanceof HTMLElement)) return false;
+          if (!(el instanceof w.HTMLElement)) return false;
           ctx.handleDblClick(el, { simulated: true });
           return true;
         },
@@ -205,7 +205,7 @@
       return;
     }
 
-    const toks = [...root.querySelectorAll('[id^="tok:"]')].filter((el) => el instanceof HTMLElement);
+    const toks = [...root.querySelectorAll('[id]')].filter((el) => el instanceof w.HTMLElement);
     const stack = { '(': [], '[': [], '{': [] };
     const pairById = new Map();
     const levelsByTok = new Map();
@@ -447,7 +447,7 @@
       if (!rec) return;
       const slotCls = slotClassFor(cfg.slot);
       rec.nodes?.forEach((node) => {
-        if (!(node instanceof HTMLElement)) return;
+        if (!(node instanceof w.HTMLElement)) return;
         node.classList.remove(cfg.className);
         if (slotCls) node.classList.remove(slotCls);
       });
@@ -463,7 +463,7 @@
       }
       const nodes = tokenIds
         .map((idVal) => d.getElementById(idVal))
-        .filter((node) => node instanceof HTMLElement);
+        .filter((node) => node instanceof w.HTMLElement);
       const slotCls = slotClassFor(cfg.slot);
       nodes.forEach((node) => {
         node.classList.add(cfg.className);
@@ -477,7 +477,7 @@
       if (!ids || !ids.length) return '';
       const nodes = ids
         .map((idVal) => d.getElementById(idVal))
-        .filter((node) => node instanceof HTMLElement);
+        .filter((node) => node instanceof w.HTMLElement);
       const joined = nodes.map((node) => tokText(node)).join(' ').replace(/\s+/g, ' ').trim();
       return joined.length > 48 ? `${joined.slice(0, 47)}…` : joined;
     };
@@ -816,23 +816,30 @@
       updateSelectionStatus();
     };
 
+    const pickInteractiveNode = (path) => {
+      const tokNode = path.find(isTok);
+      if (tokNode && tokNode instanceof w.HTMLElement) return tokNode;
+      const fallback = path.find((node) => node instanceof w.HTMLElement && node.id);
+      return fallback && fallback instanceof w.HTMLElement ? fallback : null;
+    };
+
     const onPointerMove = (ev) => {
       const path = ev.composedPath?.() ?? [];
-      const tok = path.find(isTok);
-      updateBhPanel(tok && tok instanceof HTMLElement ? tok : null);
+      const tok = pickInteractiveNode(path);
+      updateBhPanel(tok);
       updateBhButtonStyles();
-      const leaf = pickVisibleLeaf(tok || path.find((n) => n instanceof HTMLElement));
+      const leaf = pickVisibleLeaf(tok || path.find((n) => n instanceof w.HTMLElement));
       clear(d, 'icu-hovered');
-      if (leaf && leaf instanceof HTMLElement) leaf.classList.add('icu-hovered');
+      if (leaf && leaf instanceof w.HTMLElement) leaf.classList.add('icu-hovered');
       w.__icu.hoverReady = true;
-      debugState.hoverTokenId = tok && tok instanceof HTMLElement ? tok.id : null;
+      debugState.hoverTokenId = tok && tok instanceof w.HTMLElement ? tok.id : null;
       render();
     };
 
     const onClickCapture = (ev) => {
       const path = ev.composedPath?.() ?? [];
-      const tok = path.find(isTok);
-      if (tok && tok instanceof HTMLElement) {
+      const tok = pickInteractiveNode(path);
+      if (tok && tok instanceof w.HTMLElement) {
         handleClick(tok);
       } else {
         setChannel('primary', null);
@@ -844,15 +851,15 @@
 
     const onDblClick = (ev) => {
       const path = ev.composedPath?.() ?? [];
-      const tok = path.find(isTok);
-      if (!tok || !(tok instanceof HTMLElement)) return;
+      const tok = pickInteractiveNode(path);
+      if (!tok || !(tok instanceof w.HTMLElement)) return;
       handleDblClick(tok);
     };
 
     const onPointerDown = (ev) => {
       const path = ev.composedPath?.() ?? [];
-      const tok = path.find(isTok);
-      if (!tok || !(tok instanceof HTMLElement)) return;
+      const tok = pickInteractiveNode(path);
+      if (!tok || !(tok instanceof w.HTMLElement)) return;
 
       const startX = ev.clientX;
       beginDrag(tok.id);
@@ -916,6 +923,8 @@
     d.addEventListener('dblclick', onDblClick, true);
     d.addEventListener('keydown', onKeydown, true);
     d.addEventListener('pointerdown', onPointerDown, true);
+
+    w.__gvClickReady = true;
 
     render();
   });

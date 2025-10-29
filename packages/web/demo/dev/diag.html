@@ -25,9 +25,12 @@
   <div>Anchors (KaTeX ids)</div><div id="a_anchors" class="mono">…</div>
   <div>Hover (.math-token--hovered)</div><div id="a_hover" class="mono">…</div>
   <div>Click (token select)</div>
-  <div>
+  <div class="diag-click">
     <div id="a_click" class="mono muted">PENDING (awaiting click)</div>
-    <div><span id="lamp_click" class="lamp" data-state="off">Click: OK</span></div>
+    <div class="diag-click-controls">
+      <button id="btn_retest_click" class="diag-button" type="button" title="Shift+R">Retest Click</button>
+      <span id="lamp_click" class="lamp" data-state="off">Click: OK</span>
+    </div>
   </div>
   <div>ICU</div>
   <div id="icu_status"><span class="badge warn">PENDING</span></div>
@@ -52,7 +55,7 @@
   const badge = (ok, msg) => `<span class="badge ${ok===true?'ok':ok===false?'err':'warn'}">${msg}</span>`;
 
   const play = document.getElementById('play');
-  play.addEventListener('load', async () => {
+  play.addEventListener('load', () => {
     const w = play.contentWindow;
     if (!w) {
       $('a_click').innerHTML = badge(false, 'FAIL (iframe not ready)');
@@ -60,8 +63,6 @@
     }
 
     const d = w.document;
-
-    w.__gvClickReady = false;
 
     const waitFrame = () => new Promise((resolve) => w.requestAnimationFrame(resolve));
     const findRoot = () => d.querySelector('.katex .katex-html') || d.querySelector('.katex-html');
@@ -71,10 +72,21 @@
       if (!lamp) return;
       lamp.dataset.state = ready ? 'on' : 'off';
     };
-    setLamp(false);
 
-    try {
-      // --- Wait for KaTeX render ---
+    const ensureDevStyle = () => {
+      if (d.getElementById('diag_dev_style')) return;
+      const style = d.createElement('style');
+      style.id = 'diag_dev_style';
+      style.textContent = `
+        .math-token--hovered { outline: 3px solid magenta !important; border-radius: 4px; outline-offset: 2px; }
+        .katex, .katex * { user-select: none !important; -webkit-user-select: none !important; }
+      `;
+      d.head.appendChild(style);
+    };
+
+    let cachedRoot = null;
+    const ensureRoot = async () => {
+      if (cachedRoot?.isConnected) return cachedRoot;
       let root = findRoot();
       let attempts = 0;
       while (!root && attempts < 120) { // ~2s @ 60fps
@@ -82,70 +94,121 @@
         root = findRoot();
         attempts += 1;
       }
+      cachedRoot = root;
+      return root;
+    };
 
-      if (!root) {
-        $('a_anchors').innerHTML = badge(false, 'FAIL (anchors not found yet — reload w/ cache disabled)');
-        $('a_hover').innerHTML = badge(false, 'FAIL (tokens unavailable — anchors missing)');
-        return;
-      }
+    let probeRunning = null;
+    const runProbe = async () => {
+      if (probeRunning) return probeRunning;
+      const job = (async () => {
+        setLamp(false);
+        $('a_click').innerHTML = badge(null, 'PENDING (probing click)');
+        try {
+          const root = await ensureRoot();
+          if (!root) {
+            $('a_anchors').innerHTML = badge(false, 'FAIL (anchors not found yet — reload w/ cache disabled)');
+            $('a_hover').innerHTML = badge(false, 'FAIL (tokens unavailable — anchors missing)');
+            $('a_click').innerHTML = badge(false, 'FAIL (iframe still rendering)');
+            return;
+          }
 
-      // Inject dev CSS for hover highlighting inside iframe
-      const style = d.createElement('style');
-      style.textContent = '.math-token--hovered { outline: 3px solid magenta !important; border-radius: 4px; outline-offset: 2px; }';
-      d.head.appendChild(style);
+          ensureDevStyle();
 
-      // --- Anchors test ---
-      const ids = [...root.querySelectorAll('[id]')];
-      const okAnchors = ids.length >= 3;
-      $('a_anchors').innerHTML = badge(okAnchors, okAnchors ? `OK (idCount=${ids.length})` : `FAIL (idCount=${ids.length} — need ≥3)`);
+          const idNodes = [...root.querySelectorAll('[id]')].filter((node) => node instanceof w.HTMLElement);
+          const tokNodes = idNodes.filter((node) => typeof node.id === 'string' && node.id.startsWith('tok:'));
+          const candidates = tokNodes.length ? tokNodes : idNodes;
 
-      // --- Hover test ---
-      const target = ids[1] || ids[0];
-      if (!target) {
-        $('a_hover').innerHTML = badge(false, 'FAIL (no tokens found — inspect KaTeX output)');
-        return;
-      }
+          const target = candidates[1] || candidates[0];
+          if (!target) {
+            $('a_anchors').innerHTML = badge(false, 'FAIL (no anchors found — inspect KaTeX output)');
+            $('a_hover').innerHTML = badge(false, 'FAIL (no hover target — inspect KaTeX output)');
+            $('a_click').innerHTML = badge(false, 'FAIL (no clickable targets found)');
+            return;
+          }
 
-      const rect = target.getBoundingClientRect();
-      const hoverEvent = new w.MouseEvent('mouseover', {
-        bubbles: true,
-        composed: true,
-        clientX: rect.left + rect.width / 2,
-        clientY: rect.top + rect.height / 2,
+          const okAnchors = idNodes.length >= 3;
+          $('a_anchors').innerHTML = badge(okAnchors, okAnchors ? `OK (idCount=${idNodes.length})` : `FAIL (idCount=${idNodes.length} — need ≥3)`);
+
+          const rect = target.getBoundingClientRect();
+          const hoverEvent = new w.MouseEvent('mouseover', {
+            bubbles: true,
+            composed: true,
+            clientX: rect.left + rect.width / 2,
+            clientY: rect.top + rect.height / 2,
+          });
+          target.dispatchEvent(hoverEvent);
+
+          await waitFrame();
+
+          const hovered = [...root.querySelectorAll('.math-token--hovered')];
+          const okHover = hovered.length >= 1;
+          $('a_hover').innerHTML = badge(okHover, okHover ? `OK (${hovered.map((n) => n.id).join(',')})` : 'FAIL (hover class not applied — check pointer listener)');
+
+          let attempts = 0;
+          while (w.__gvClickReady !== true && attempts < 60) {
+            await waitFrame();
+            attempts += 1;
+          }
+
+          const clickEvent = new w.MouseEvent('click', { bubbles: true, composed: true });
+          Object.defineProperty(clickEvent, 'composedPath', {
+            configurable: true,
+            value: () => [target, root],
+          });
+          target.dispatchEvent(clickEvent);
+
+          await waitFrame();
+
+          const selectedNodes = idNodes.filter((node) => node.classList.contains('math-token--selected'));
+          const selected = selectedNodes[0] ?? null;
+          const clickReady = selectedNodes.length > 0 && w.__gvClickReady === true;
+          setLamp(clickReady);
+          $('a_click').innerHTML = badge(
+            clickReady,
+            clickReady
+              ? `OK (${selected instanceof w.HTMLElement ? selected.textContent?.trim() || selected.id : 'selected'})`
+              : w.__gvClickReady === true
+                ? 'FAIL (click did not trigger selection — inspect listeners)'
+                : 'FAIL (click handler not ready — wait & retry)'
+          );
+        } catch (e) {
+          console.error('diag error:', e);
+          $('a_anchors').innerHTML = badge(false, 'ERROR (see console)');
+          $('a_hover').innerHTML = badge(false, 'ERROR (see console)');
+          $('a_click').innerHTML = badge(false, 'ERROR (see console)');
+          setLamp(false);
+        }
+      })();
+      probeRunning = job.finally(() => {
+        probeRunning = null;
       });
-      target.dispatchEvent(hoverEvent);
+      return probeRunning;
+    };
 
-      await waitFrame();
+    const triggerProbe = () => {
+      runProbe().catch((err) => console.error('diag probe error:', err));
+    };
 
-      const hovered = [...root.querySelectorAll('.math-token--hovered')];
-      const okHover = hovered.length >= 1;
-      $('a_hover').innerHTML = badge(okHover, okHover ? `OK (${hovered.map((n) => n.id).join(',')})` : 'FAIL (hover class not applied — check pointer listener)');
+    const retestButton = $('btn_retest_click');
+    retestButton?.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      triggerProbe();
+    });
 
-      const clickEvent = new w.MouseEvent('click', { bubbles: true, composed: true });
-      Object.defineProperty(clickEvent, 'composedPath', {
-        configurable: true,
-        value: () => [target, root],
-      });
-      target.dispatchEvent(clickEvent);
-
-      await waitFrame();
-
-      const selected = root.querySelector('.math-token--selected');
-      const clickReady = Boolean(selected && w.__gvClickReady);
-      setLamp(clickReady);
-      $('a_click').innerHTML = badge(
-        clickReady,
-        clickReady
-          ? `OK (${selected instanceof HTMLElement ? selected.textContent?.trim() || selected.id : 'selected'})`
-          : 'FAIL (click did not trigger selection — inspect listeners)',
-      );
-    } catch (e) {
-      console.error('diag error:', e);
-      $('a_anchors').innerHTML = badge(false, 'ERROR (see console)');
-      $('a_hover').innerHTML = badge(false, 'ERROR (see console)');
-      $('a_click').innerHTML = badge(false, 'ERROR (see console)');
-      setLamp(false);
+    play.__diagTriggerProbe = triggerProbe;
+    if (!play.__diagKeydownHandler) {
+      const keyListener = (ev) => {
+        if (ev.key === 'R' && ev.shiftKey && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
+          ev.preventDefault();
+          play.__diagTriggerProbe?.();
+        }
+      };
+      document.addEventListener('keydown', keyListener);
+      play.__diagKeydownHandler = keyListener;
     }
+
+    triggerProbe();
   });
 </script>
 <script type="module" src="/demo/dev/icu.hook.js"></script>
