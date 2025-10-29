@@ -3,3 +3,7 @@
 .icu-bracket { box-shadow: 0 0 0 2px rgba(0,128,255,0.35) inset; border-radius: 4px; }
 .icu-selected-alt1 { background: rgba(0,128,255,0.14) !important; border-radius: 4px; box-shadow: 0 0 0 2px rgba(0,128,255,0.20) inset; }
 .icu-preview { outline: 2px solid rgba(0,0,0,0.25) !important; outline-offset: 2px; border-radius: 4px; }
+.icu-bh-lvl1 { outline: 2px solid rgba(30, 64, 175, 0.45) !important; outline-offset: 2px; border-radius: 4px; }
+.icu-bh-lvl2 { outline: 2px solid rgba(16, 185, 129, 0.45) !important; outline-offset: 2px; border-radius: 4px; }
+.icu-bh-lvl3 { outline: 2px solid rgba(236, 72, 153, 0.4) !important; outline-offset: 2px; border-radius: 4px; }
+.icu-bh-lvl4 { outline: 2px solid rgba(234, 179, 8, 0.45) !important; outline-offset: 2px; border-radius: 4px; }
