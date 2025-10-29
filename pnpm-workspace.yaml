@@ -6,3 +6,4 @@ packages:
   - 'packages/tests'
   - 'packages/tsa'
   - 'packages/web'
+  - 'packages/micro-viewer'

@@ -1,0 +1,136 @@
+:root {
+  color-scheme: light dark;
+  --bg: #111827;
+  --fg: #f8fafc;
+  --accent: #38bdf8;
+  --border: rgba(148, 163, 184, 0.4);
+  --danger: #f97316;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  padding: 1.5rem 2rem 1rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+}
+
+main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+  gap: 2rem;
+  padding: 0 2rem 2rem;
+  align-items: start;
+}
+
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+
+textarea {
+  width: 100%;
+  min-height: 200px;
+  resize: vertical;
+  border-radius: 0.5rem;
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.5);
+  color: inherit;
+  padding: 0.75rem;
+  font-size: 1rem;
+  font-family: 'Fira Code', 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  line-height: 1.5;
+}
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+}
+
+button {
+  border: none;
+  border-radius: 9999px;
+  padding: 0.65rem 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  cursor: pointer;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  opacity: 0.9;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.viewer-panel {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+#output {
+  min-height: 220px;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  overflow-x: auto;
+}
+
+.katex-display {
+  width: 100%;
+}
+
+[data-bracket-id].is-hovered {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 0.25rem;
+  transition: background 0.15s ease-in;
+}
+
+#diagnostics-panel {
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0.5rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 1rem;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  overflow-x: auto;
+}
+
+@media (max-width: 900px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}

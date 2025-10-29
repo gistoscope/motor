@@ -1,0 +1,17 @@
+{
+  "name": "@motor/micro-viewer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "katex": "0.16.11"
+  },
+  "devDependencies": {
+    "happy-dom": "^19.0.2",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.x"
+  }
+}

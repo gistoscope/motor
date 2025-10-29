@@ -24,5 +24,15 @@
     "lint-staged": "^16.2.3",
     "typescript": "^5.5.4",
     "vitest": "^2.0.5"
-  }
+  },
+  "workspaces": [
+    "packages/cli",
+    "packages/core",
+    "packages/grasp",
+    "packages/parser",
+    "packages/tests",
+    "packages/tsa",
+    "packages/web",
+    "packages/micro-viewer"
+  ]
 }
