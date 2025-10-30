@@ -18,6 +18,7 @@ const alias = [
   { find: "@motor/parser/",replacement: r("../parser/src/") },
   { find: "@motor/tsa",    replacement: r("../tsa/src")    },
   { find: "@motor/tsa/",   replacement: r("../tsa/src/")   },
+  { find: "vitest/environments/jsdom", replacement: "vitest/environments/happy-dom" },
 ];
 
 /** @type {import('vitest/config').UserConfig} */

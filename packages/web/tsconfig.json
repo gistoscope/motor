@@ -10,6 +10,8 @@
     "paths": {
       "@motor/grasp": ["./src/stubs/motor-grasp"],
       "@motor/grasp/*": ["./src/stubs/motor-grasp"],
+      "@motor/micro-viewer": ["../micro-viewer/src"],
+      "@motor/micro-viewer/*": ["../micro-viewer/src/*"],
       "@motor/tsa": ["./src/stubs/motor-tsa"],
       "@motor/tsa/*": ["./src/stubs/motor-tsa"]
     }

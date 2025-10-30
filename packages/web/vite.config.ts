@@ -10,6 +10,8 @@ const workspaceRoot = r("..", "..");
 const alias = [
   { find: "@motor/core",   replacement: r("../core/src")   },
   { find: "@motor/core/",  replacement: r("../core/src/")  },
+  { find: "@motor/micro-viewer",   replacement: r("../micro-viewer/src")   },
+  { find: "@motor/micro-viewer/",  replacement: r("../micro-viewer/src/")  },
   { find: "@motor/parser", replacement: r("../parser/src") },
   { find: "@motor/parser/",replacement: r("../parser/src/") },
   { find: "@motor/tsa",    replacement: r("../tsa/src")    },

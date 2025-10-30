@@ -2,6 +2,7 @@ packages:
   - 'packages/cli'
   - 'packages/core'
   - 'packages/grasp'
+  - 'packages/micro-viewer'
   - 'packages/parser'
   - 'packages/tests'
   - 'packages/tsa'

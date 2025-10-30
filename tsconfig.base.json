@@ -17,6 +17,12 @@
       "@motor/grasp": [
         "packages/grasp/src/index.ts"
       ],
+      "@motor/micro-viewer": [
+        "packages/micro-viewer/src/index.ts"
+      ],
+      "@motor/micro-viewer/*": [
+        "packages/micro-viewer/src/*"
+      ],
       "@motor/parser": [
         "packages/parser/src/index.ts"
       ],
