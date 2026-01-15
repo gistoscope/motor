@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Motor • Micro Viewer</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"
+      integrity="sha384-TuK+az2YsmiFjCwXTlzAIXazhbugzuDUFcPRl1BDpRP70dNDO7xjoMnIKPQ4FIai"
+      crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Micro Viewer</h1>
+      <p>Render KaTeX expressions and inspect delimiter diagnostics.</p>
+    </header>
+    <main>
+      <section class="editor-panel" aria-label="Expression editor">
+        <label for="expression">Expression</label>
+        <textarea id="expression">
+\\left[\\frac{\\partial}{\\partial x} \\left( \\frac{\\sin(x)}{x^2+1} \\right) + \\Biggl( \\sum_{n=1}^{4} n^2 \\Biggr)\\right]
+        </textarea>
+        <div class="controls">
+          <button id="render-button" type="button">Render</button>
+          <button id="diagnostics-button" type="button">Diagnostics</button>
+        </div>
+      </section>
+      <section class="viewer-panel" aria-live="polite">
+        <div id="output" class="katex-display" role="img" aria-label="KaTeX output"></div>
+        <pre id="diagnostics-panel" hidden></pre>
+      </section>
+    </main>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"
+      integrity="sha384-1H4neCEi0aKBslZx2drXr/7EQo1gChX2NDSSSXqoQZnIcEqplLWYwWsEN0pK7nJo"
+      crossorigin="anonymous"
+    ></script>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
