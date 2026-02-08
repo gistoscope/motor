@@ -17,6 +17,8 @@ try {
 import { wireExecuteShortcuts } from '../../../til/shortcuts';
 import { wireAltClickExpand } from '../../../til/events.expand';
 import { makeExecutor } from '../../../til/executor';
+import { validateExpression } from '../../../til/validate';
+import type { Validation } from '../../../til/validate';
 import type { AST, NodeId } from '../../../til/opTokens';
 import { listActions, canApply, applyOne, RULE_MAP } from '../../../til/tsaAdapter';
 import '../../../til/highlight.no-select.css';
@@ -585,8 +587,13 @@ function isDevRouteEnabled(): boolean {
 }
 
 export default function StepDevRoute() {
-  const [expression, setExpression] = useState<string>(EXAMPLES[0]);
+  const initialExample = EXAMPLES[0];
+  const [source, setSource] = useState<string>(initialExample);
+  const [working, setWorking] = useState<string>(initialExample);
   const [outcome, setOutcome] = useState<StepOutcome>({ kind: 'idle' });
+  const [validation, setValidation] = useState<Validation>({ ok: true });
+  const isValid = validation.ok;
+  const invalidReason = validation.ok ? null : validation.reason;
 
   const enabled = isDevRouteEnabled();
 
@@ -639,11 +646,14 @@ export default function StepDevRoute() {
   }, []);
 
   const setSelection = useCallback((ids: NodeId[]) => {
+    const unique = Array.isArray(ids) ? Array.from(new Set(ids)) : [];
+    selectionRef.current = unique;
+
     const root = displayContainerRef.current;
     if (!root) {
+      selectedElementsRef.current = [];
       return;
     }
-    const unique = Array.isArray(ids) ? Array.from(new Set(ids)) : [];
     selectedElementsRef.current.forEach((element) => {
       element.classList.remove('t-selected');
     });
@@ -656,7 +666,21 @@ export default function StepDevRoute() {
       });
     });
     selectedElementsRef.current = next;
-    selectionRef.current = unique;
+    root.setAttribute('data-selection-size', String(unique.length));
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    selectionRef.current = [];
+    const root = displayContainerRef.current;
+    if (!root) {
+      selectedElementsRef.current = [];
+      return;
+    }
+    selectedElementsRef.current.forEach((element) => {
+      element.classList.remove('t-selected');
+    });
+    selectedElementsRef.current = [];
+    root.setAttribute('data-selection-size', '0');
   }, []);
 
   const emptyAst = useMemo<SyntheticAst>(() => ({
@@ -684,14 +708,14 @@ export default function StepDevRoute() {
   useEffect(() => {
     if (typeof tsa.parseStage2Expression === 'function') {
       try {
-        stageAstRef.current = tsa.parseStage2Expression(expression);
+        stageAstRef.current = tsa.parseStage2Expression(working);
       } catch {
         stageAstRef.current = null;
       }
     } else {
       stageAstRef.current = null;
     }
-  }, [expression]);
+  }, [working]);
 
   const exec = useMemo(() => {
     const executor = makeExecutor(getAstForEvents, {
@@ -717,7 +741,7 @@ export default function StepDevRoute() {
         const result = applyOne(stageAst, rule, focus);
         if (result.ok) {
           stageAstRef.current = result.ast;
-          setExpression((prev) => {
+          setWorking((prev) => {
             if (typeof tsa.formatStage2 === 'function') {
               try {
                 return tsa.formatStage2(result.ast);
@@ -735,7 +759,7 @@ export default function StepDevRoute() {
       opRuleMap: RULE_MAP
     });
     return (focus: NodeId[]) => executor(focus);
-  }, [getAstForEvents, setExpression]);
+  }, [getAstForEvents, setWorking]);
 
   useEffect(() => {
     const root = displayContainerRef.current;
@@ -746,6 +770,13 @@ export default function StepDevRoute() {
     if (!root.hasAttribute('tabindex')) {
       root.setAttribute('tabindex', '0');
     }
+
+    if (!isValid) {
+      applyHover([]);
+      clearSelection();
+      return;
+    }
+
     setTimeout(() => {
       try {
         root.focus();
@@ -803,26 +834,41 @@ export default function StepDevRoute() {
     };
   }, [
     applyHover,
+    clearSelection,
     getAstForEvents,
     getIdsForToken,
     getSelection,
     getSyntheticAst,
     setSelection,
-    exec
+    exec,
+    isValid
   ]);
 
   useEffect(() => {
     setSelection(selectionRef.current);
-  }, [expression, setSelection]);
+  }, [working, setSelection]);
 
   const handleApply = useCallback(() => {
-    setOutcome(evaluateTrace(expression));
-  }, [expression]);
+    setOutcome(evaluateTrace(working));
+  }, [working]);
 
   const handleClear = useCallback(() => {
-    setExpression('');
+    setSource('');
+    setWorking('');
+    setValidation({ ok: true });
+    clearSelection();
     setOutcome({ kind: 'idle' });
-  }, []);
+  }, [clearSelection]);
+
+  const handleLoadWorking = useCallback(() => {
+    const result = validateExpression(source);
+    setValidation(result);
+    if (!result.ok) {
+      return;
+    }
+    clearSelection();
+    setWorking(source);
+  }, [clearSelection, source]);
 
   const handleTextareaKey = useCallback(
     (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -852,7 +898,10 @@ export default function StepDevRoute() {
             type="button"
             className={styles.exampleButton}
             onClick={() => {
-              setExpression(item);
+              setSource(item);
+              setWorking(item);
+              setValidation({ ok: true });
+              clearSelection();
               setOutcome({ kind: 'idle' });
             }}
           >
@@ -867,7 +916,7 @@ export default function StepDevRoute() {
           ref={displayContainerRef}
         >
           <ExpressionDisplay
-            value={expression}
+            value={working}
             aria-label="Rendered expression"
             onPairMapChange={(map) => {
               pairMapRef.current = map;
@@ -877,6 +926,11 @@ export default function StepDevRoute() {
             }}
           />
         </div>
+        {!isValid && invalidReason && (
+          <div className={styles.invalidBanner} role="alert" data-testid="invalid-banner">
+            Invalid expression: {invalidReason}
+          </div>
+        )}
         {outcome.kind === 'trace' && (
           <div className={styles.resultPanel} data-testid="result-panel">
             <div className={styles.resultTitle}>Trace</div>
@@ -917,12 +971,20 @@ export default function StepDevRoute() {
             id="dev-step-input"
             className={styles.textarea}
             aria-label="Expression input (LaTeX/ASCII)"
-            value={expression}
-            onChange={(event) => setExpression(event.target.value)}
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
             onKeyDown={handleTextareaKey}
             style={{ resize: 'vertical' }}
           />
           <div className={styles.buttonRow}>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={handleLoadWorking}
+              data-testid="load-working-button"
+            >
+              Load Working
+            </button>
             <button
               type="button"
               className={styles.primaryButton}
