@@ -15,6 +15,7 @@ try {
 }
 
 import { wireExecuteShortcuts } from '../../../til/shortcuts';
+import { microApplyOne } from '../../../til/microExecute';
 import { wireAltClickExpand } from '../../../til/events.expand';
 import { makeExecutor } from '../../../til/executor';
 import type { AST, NodeId } from '../../../til/opTokens';
@@ -585,7 +586,9 @@ function isDevRouteEnabled(): boolean {
 }
 
 export default function StepDevRoute() {
-  const [expression, setExpression] = useState<string>(EXAMPLES[0]);
+  const [source, setSource] = useState<string>(EXAMPLES[0]);
+  const [working, setWorking] = useState<string>(EXAMPLES[0]);
+  const [history, setHistory] = useState<string[]>([]);
   const [outcome, setOutcome] = useState<StepOutcome>({ kind: 'idle' });
 
   const enabled = isDevRouteEnabled();
@@ -684,14 +687,14 @@ export default function StepDevRoute() {
   useEffect(() => {
     if (typeof tsa.parseStage2Expression === 'function') {
       try {
-        stageAstRef.current = tsa.parseStage2Expression(expression);
+        stageAstRef.current = tsa.parseStage2Expression(working);
       } catch {
         stageAstRef.current = null;
       }
     } else {
       stageAstRef.current = null;
     }
-  }, [expression]);
+  }, [working]);
 
   const exec = useMemo(() => {
     const executor = makeExecutor(getAstForEvents, {
@@ -710,14 +713,35 @@ export default function StepDevRoute() {
         return canApply(stageAst, rule, focus);
       },
       onExecute: ({ rule, focus }) => {
+        const syntheticAst = astRef.current;
+        if (syntheticAst) {
+          const local = microApplyOne(working, syntheticAst, focus);
+          if (local?.ok) {
+            setHistory((prev) => [...prev, working]);
+            setWorking(local.expr);
+            if (typeof tsa.parseStage2Expression === 'function') {
+              try {
+                stageAstRef.current = tsa.parseStage2Expression(local.expr);
+              } catch {
+                stageAstRef.current = null;
+              }
+            } else {
+              stageAstRef.current = null;
+            }
+            return;
+          }
+        }
+
         const stageAst = stageAstRef.current;
         if (!stageAst) {
           return;
         }
+
         const result = applyOne(stageAst, rule, focus);
         if (result.ok) {
           stageAstRef.current = result.ast;
-          setExpression((prev) => {
+          setHistory((prev) => [...prev, working]);
+          setWorking((prev) => {
             if (typeof tsa.formatStage2 === 'function') {
               try {
                 return tsa.formatStage2(result.ast);
@@ -735,7 +759,12 @@ export default function StepDevRoute() {
       opRuleMap: RULE_MAP
     });
     return (focus: NodeId[]) => executor(focus);
-  }, [getAstForEvents, setExpression]);
+  }, [
+    getAstForEvents,
+    setWorking,
+    working,
+    setHistory
+  ]);
 
   useEffect(() => {
     const root = displayContainerRef.current;
@@ -813,14 +842,51 @@ export default function StepDevRoute() {
 
   useEffect(() => {
     setSelection(selectionRef.current);
-  }, [expression, setSelection]);
+  }, [working, setSelection]);
+
+  useEffect(() => {
+    const handleUndo = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && key === 'z' && !event.shiftKey && !event.altKey) {
+        event.preventDefault();
+        setHistory((prev) => {
+          if (prev.length === 0) {
+            return prev;
+          }
+          const nextHistory = prev.slice(0, -1);
+          const previous = prev[prev.length - 1];
+          setWorking(previous);
+          stageAstRef.current = null;
+          return nextHistory;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleUndo);
+    return () => {
+      window.removeEventListener('keydown', handleUndo);
+    };
+  }, [setHistory, setWorking]);
 
   const handleApply = useCallback(() => {
-    setOutcome(evaluateTrace(expression));
-  }, [expression]);
+    setOutcome(evaluateTrace(working));
+  }, [working]);
+
+  const handleLoadWorking = useCallback(() => {
+    setHistory([]);
+    setWorking(source);
+    setOutcome({ kind: 'idle' });
+  }, [source]);
+
+  const handleResetWorking = useCallback(() => {
+    setHistory([]);
+    setWorking(source);
+  }, [source]);
 
   const handleClear = useCallback(() => {
-    setExpression('');
+    setSource('');
+    setWorking('');
+    setHistory([]);
     setOutcome({ kind: 'idle' });
   }, []);
 
@@ -852,7 +918,9 @@ export default function StepDevRoute() {
             type="button"
             className={styles.exampleButton}
             onClick={() => {
-              setExpression(item);
+              setSource(item);
+              setWorking(item);
+              setHistory([]);
               setOutcome({ kind: 'idle' });
             }}
           >
@@ -867,7 +935,7 @@ export default function StepDevRoute() {
           ref={displayContainerRef}
         >
           <ExpressionDisplay
-            value={expression}
+            value={working}
             aria-label="Rendered expression"
             onPairMapChange={(map) => {
               pairMapRef.current = map;
@@ -917,11 +985,29 @@ export default function StepDevRoute() {
             id="dev-step-input"
             className={styles.textarea}
             aria-label="Expression input (LaTeX/ASCII)"
-            value={expression}
-            onChange={(event) => setExpression(event.target.value)}
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
             onKeyDown={handleTextareaKey}
             style={{ resize: 'vertical' }}
           />
+          <div className={styles.buttonRow}>
+            <button
+              type="button"
+              className={styles.primaryButton}
+              onClick={handleLoadWorking}
+              data-testid="load-working-button"
+            >
+              Load ➜ Working
+            </button>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleResetWorking}
+              data-testid="reset-working-button"
+            >
+              Reset Working
+            </button>
+          </div>
           <div className={styles.buttonRow}>
             <button
               type="button"
@@ -939,6 +1025,30 @@ export default function StepDevRoute() {
             >
               Clear
             </button>
+          </div>
+          <div style={{ marginTop: '1rem' }}>
+            <div style={{ fontWeight: 600 }}>Working expression</div>
+            <pre
+              style={{
+                margin: '0.5rem 0',
+                padding: '0.5rem',
+                background: '#f3f4f6',
+                borderRadius: '4px',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {working || ' '}
+            </pre>
+            <div style={{ fontWeight: 600, marginTop: '0.5rem' }}>History</div>
+            {history.length === 0 ? (
+              <div style={{ fontStyle: 'italic' }}>No steps yet</div>
+            ) : (
+              <ol style={{ paddingLeft: '1.25rem', margin: '0.5rem 0' }}>
+                {history.map((item, index) => (
+                  <li key={`working-history-${index}`}>{item}</li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
       </div>

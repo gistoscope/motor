@@ -2,6 +2,13 @@
   position: relative;
 }
 
+[data-ast-id][data-ast-type="Operation"],
+[data-ast-id][data-ast-type="Fraction"],
+[data-ast-id][data-ast-type="Paren"] {
+  display: inline-block;
+  padding: 0 0.15em;
+}
+
 .t-hover {
   outline: 2px solid rgba(180, 213, 255, 0.9);
   outline-offset: 2px;

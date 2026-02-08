@@ -11,14 +11,14 @@ type Api = {
   exec: (focus: NodeId[]) => void;
 };
 
-function shouldClearSelection(
-  current: NodeId[] | undefined,
-  id: NodeId,
-  ownerId: NodeId | null,
-): boolean {
-  if (!current || current.length !== 1) return false;
-  const currentId = current[0];
-  return currentId === id || (!!ownerId && currentId === ownerId);
+type SelectionInfo = {
+  selectionId: NodeId | null;
+  tokenId: NodeId | null;
+  ownerId: NodeId | null;
+};
+
+function shouldClearSelection(current: NodeId[] | undefined, selectionId: NodeId | null): boolean {
+  return !!selectionId && Array.isArray(current) && current.length === 1 && current[0] === selectionId;
 }
 
 function getClosestAstElement(target: EventTarget | null): HTMLElement | null {
@@ -36,6 +36,65 @@ function getClosestAstElement(target: EventTarget | null): HTMLElement | null {
     return parent.closest<HTMLElement>('[data-ast-id]');
   }
   return null;
+}
+
+function isToken(ast: AST, id: NodeId | null): boolean {
+  if (!id) return false;
+  try {
+    const tokens = (ast as any)?.tokens;
+    return !!tokens && Object.prototype.hasOwnProperty.call(tokens, id);
+  } catch {
+    return false;
+  }
+}
+
+function getNodeType(ast: AST, id: NodeId | null): string | null {
+  if (!id) return null;
+  try {
+    const node = (ast as any)?.nodes?.[id];
+    return typeof node?.type === 'string' ? node.type : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveSelectionInfo(ast: AST, element: HTMLElement | null): SelectionInfo {
+  let current: HTMLElement | null = element;
+  while (current) {
+    const id = (current.getAttribute('data-ast-id') ?? null) as NodeId | null;
+    if (id) {
+      const role = current.getAttribute('data-ast-role');
+      const ownerId = getOwnerId(ast, id);
+
+      if (role === 'paren-open' || role === 'paren-close') {
+        if (ownerId) {
+          return { selectionId: ownerId, tokenId: id, ownerId };
+        }
+      }
+
+      if (isToken(ast, id)) {
+        const tokenText = getTokenText(ast, id);
+        if (isOperatorChar(tokenText) && ownerId) {
+          return { selectionId: ownerId, tokenId: id, ownerId };
+        }
+        return { selectionId: id, tokenId: id, ownerId: ownerId ?? null };
+      }
+
+      const type = getNodeType(ast, id);
+      if (type) {
+        if (type === 'Operation' || type === 'Fraction' || type === 'Paren') {
+          return { selectionId: id, tokenId: id, ownerId: id };
+        }
+        return { selectionId: id, tokenId: id, ownerId: ownerId ?? null };
+      }
+
+      if (ownerId) {
+        return { selectionId: ownerId, tokenId: id, ownerId };
+      }
+    }
+    current = current.parentElement;
+  }
+  return { selectionId: null, tokenId: null, ownerId: null };
 }
 
 function findOperatorInSpan(ast: AST, span: NodeId[] | undefined): NodeId | null {
@@ -114,7 +173,7 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
     const el = getClosestAstElement(event.target);
     if (!el) return;
 
-    const id = el.getAttribute('data-ast-id') as NodeId | null;
+    const id = (el.getAttribute('data-ast-id') ?? null) as NodeId | null;
     if (!id) return;
 
     const ast = api.getAst();
@@ -122,9 +181,7 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
     if (!isOperatorChar(token)) return;
 
     const ownerId = getOwnerId(ast, id);
-    const selectionId = ownerId ?? id;
-
-    api.setSelection([selectionId]);
+    api.setSelection(ownerId ? [ownerId] : [id]);
     api.exec([id]);
     flashExecute(root);
   };
@@ -132,9 +189,6 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
   const onClick = (event: MouseEvent) => {
     const el = getClosestAstElement(event.target);
     if (!el) return;
-
-    const id = el.getAttribute('data-ast-id') as NodeId | null;
-    if (!id) return;
 
     if (clickTimeout) {
       clearTimeout(clickTimeout);
@@ -144,17 +198,18 @@ export function wireExecuteShortcuts(root: HTMLElement, api: Api): () => void {
       clickTimeout = null;
 
       const ast = api.getAst();
-      const token = getTokenText(ast, id);
-      const ownerId = isOperatorChar(token) ? getOwnerId(ast, id) : null;
+      const info = resolveSelectionInfo(ast, el);
+      if (!info.selectionId) {
+        return;
+      }
 
       const current = api.getSelection();
-      if (shouldClearSelection(current, id, ownerId)) {
+      if (shouldClearSelection(current, info.selectionId)) {
         api.setSelection([]);
         return;
       }
 
-      const selectionId = ownerId ?? id;
-      api.setSelection([selectionId]);
+      api.setSelection([info.selectionId]);
     }, SINGLE_CLICK_DELAY);
   };
 
