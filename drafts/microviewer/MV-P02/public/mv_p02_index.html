@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MV-P02 · Microviewer</title>
+    <link rel="stylesheet" href="mv_p02_style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="mv-p02-header-content">
+        <div>
+          <h1>Microviewer · MV-P02</h1>
+          <p>Bracket pairing diagnostics with inline highlights.</p>
+        </div>
+        <nav>
+          <a href="mv_p02_dev-tests.html">Open self-tests</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <section class="mv-p02-panel">
+        <h2>Diagnostics</h2>
+        <div class="mv-p02-diagnostics-grid">
+          <div>
+            <span class="mv-p02-label">tokCount</span>
+            <span class="mv-p02-value" id="mv-p02-diag-tok">0</span>
+          </div>
+          <div>
+            <span class="mv-p02-label">pairCount</span>
+            <span class="mv-p02-value" id="mv-p02-diag-pairs">0</span>
+          </div>
+          <div>
+            <span class="mv-p02-label">lastTargetId</span>
+            <span class="mv-p02-value" id="mv-p02-diag-target">—</span>
+          </div>
+        </div>
+        <div class="mv-p02-quick-test">
+          <button type="button" id="mv-p02-quick-button">Run quick self-test</button>
+          <span class="mv-p02-quick-test-status" id="mv-p02-quick-status">Self-test has not been run.</span>
+        </div>
+      </section>
+
+      <section class="mv-p02-panel">
+        <h2>Expression viewer</h2>
+        <div class="mv-p02-expression-select">
+          <label for="mv-p02-expression-select">Expression</label>
+          <select id="mv-p02-expression-select"></select>
+        </div>
+        <div class="mv-p02-expression-display" id="mv-p02-expression-display"></div>
+      </section>
+    </main>
+
+    <script src="mv_p02_app.js"></script>
+    <script>
+      (function () {
+        const app = window.mvP02;
+        if (!app) {
+          console.error('mvP02 utilities are missing');
+          return;
+        }
+
+        const select = document.getElementById('mv-p02-expression-select');
+        const display = document.getElementById('mv-p02-expression-display');
+        const tokEl = document.getElementById('mv-p02-diag-tok');
+        const pairEl = document.getElementById('mv-p02-diag-pairs');
+        const targetEl = document.getElementById('mv-p02-diag-target');
+        const quickButton = document.getElementById('mv-p02-quick-button');
+        const quickStatus = document.getElementById('mv-p02-quick-status');
+
+        const diagState = {
+          tokCount: 0,
+          pairCount: 0,
+          lastTargetId: '—'
+        };
+
+        const updateDiagnostics = () => {
+          tokEl.textContent = diagState.tokCount;
+          pairEl.textContent = diagState.pairCount;
+          targetEl.textContent = diagState.lastTargetId || '—';
+        };
+
+
+        const loadExpression = (expressionId) => {
+          const expression = app.expressions.find((item) => item.id === expressionId);
+          if (!expression) {
+            return;
+          }
+          diagState.lastTargetId = '—';
+          const renderResult = app.renderInto(display, expression.text, {
+            prefix: expression.id,
+            onTokenClick: (token) => {
+              diagState.lastTargetId = token.id;
+              updateDiagnostics();
+            }
+          });
+          diagState.tokCount = renderResult.tokens.length;
+          diagState.pairCount = renderResult.pairs.length;
+          updateDiagnostics();
+        };
+
+        app.expressions.forEach((expression, index) => {
+          const option = document.createElement('option');
+          option.value = expression.id;
+          option.textContent = `${index + 1}. ${expression.label}`;
+          select.append(option);
+        });
+
+        select.addEventListener('change', (event) => {
+          loadExpression(event.target.value);
+        });
+
+        if (app.expressions.length > 0) {
+          select.value = app.expressions[0].id;
+          loadExpression(select.value);
+        }
+
+        quickButton.addEventListener('click', () => {
+          const result = app.runQuickSelfTest();
+          const pass = result.passed;
+          quickStatus.textContent = pass
+            ? `PASS · ${result.results.length} expressions checked.`
+            : 'FAIL · Check console for details.';
+          quickStatus.classList.remove('is-pass', 'is-fail');
+          quickStatus.classList.add(pass ? 'is-pass' : 'is-fail');
+          result.results.forEach((item) => {
+            if (!item.passed) {
+              console.warn('[MV-P02 quick self-test]', item.label, item);
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

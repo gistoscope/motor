@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MV-P02 · Self-tests</title>
+    <link rel="stylesheet" href="mv_p02_style.css" />
+  </head>
+  <body>
+    <header>
+      <div class="mv-p02-header-content">
+        <div>
+          <h1>Microviewer self-tests</h1>
+          <p>MV-P02 regression harness for bracket pairing.</p>
+        </div>
+        <nav>
+          <a href="mv_p02_index.html">Back to viewer</a>
+        </nav>
+      </div>
+    </header>
+    <main>
+      <section class="mv-p02-panel">
+        <h2>Summary</h2>
+        <p id="mv-p02-test-summary">Waiting for results…</p>
+        <ul class="mv-p02-test-results" id="mv-p02-test-results"></ul>
+      </section>
+
+      <section class="mv-p02-panel">
+        <h2>Rendered expressions</h2>
+        <p class="mv-p02-card-caption">Each expression is rendered with the production viewer for simulated clicks.</p>
+        <div class="mv-p02-test-grid" id="mv-p02-test-grid"></div>
+      </section>
+    </main>
+
+    <script src="mv_p02_app.js"></script>
+    <script src="mv_p02_tests.js"></script>
+  </body>
+</html>
