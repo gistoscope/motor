@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Micro Viewer — MV-P03 Canonical</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="mv-header">
+      <h1>Micro Viewer</h1>
+      <p class="mv-tagline">Inspect micrograph tiles with keyboard navigation.</p>
+    </header>
+
+    <main class="mv-main" role="main">
+      <section class="mv-stage" aria-label="Micrograph preview">
+        <img id="mv-stage-image" alt="Micrograph tile preview" />
+      </section>
+
+      <aside class="mv-sidebar" aria-label="Tile selector">
+        <h2>Tiles</h2>
+        <ul id="mv-tile-list" class="mv-tile-list" role="listbox"></ul>
+      </aside>
+    </main>
+
+    <footer class="mv-footer">
+      <span>MV-P03 canonical bundle</span>
+      <button id="mv-random-button" type="button">Random tile</button>
+    </footer>
+
+    <template id="mv-tile-item-template">
+      <li class="mv-tile-item" role="option">
+        <button type="button"></button>
+      </li>
+    </template>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
